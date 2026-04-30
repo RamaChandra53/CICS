@@ -22,6 +22,8 @@ export type Post = {
   year_tag: string | null;
   branch_tag: string | null;
   section_tag: string | null;
+  upvotes: number;
+  downvotes: number;
   created_at: string;
   profiles?: Profile;
   comment_count?: number;
