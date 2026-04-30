@@ -14,10 +14,11 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [mode, setMode] = useState<AuthMode>('choose');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [mode, setMode] = useState<AuthMode>('choose');
+ 
   // Verified login form fields
   const [fullName, setFullName] = useState('');
   const [rollNumber, setRollNumber] = useState('');
@@ -28,28 +29,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [idCardFile, setIdCardFile] = useState<File | null>(null);
 
+
   const handleAnonymous = async () => {
     setLoading(true);
     setError('');
+
     try {
       const username = generateAnonUsername();
-      const anonEmail = `${username.toLowerCase()}@anon.cics.local`;
-      const anonPassword = crypto.randomUUID();
 
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: anonEmail,
-        password: anonPassword,
-        options: {
-          data: { username, is_anonymous: true },
-        },
-      });
+      const { data, error } = await supabase.auth.signInAnonymously();
 
-      if (signUpError) throw signUpError;
-      if (!signUpData.user) throw new Error('Failed to create anonymous user');
+      if (error) throw error;
+      if (!data.user) throw new Error('Anonymous login failed');
 
-      // Upsert profile for anonymous user
       const { error: profileError } = await supabase.from('profiles').upsert({
-        id: signUpData.user.id,
+        id: data.user.id,
         username,
         is_anonymous: true,
         is_verified: false,
@@ -58,13 +52,23 @@ export default function LoginPage() {
       if (profileError) throw profileError;
 
       router.push('/feed');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setLoading(false);
     }
-  };
+  
 
+ return (
+  <div>
+    {error && <p style={{ color: 'red' }}>{error}</p>}
+
+    <button onClick={handleAnonymous} disabled={loading}>
+      {loading ? 'Loading...' : 'Continue Anonymously'}
+    </button>
+  </div>
+);
+}
   const handleVerifiedSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
