@@ -1,3 +1,5 @@
+import { Post } from '@/types';
+
 export function formatTimeAgo(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
@@ -26,4 +28,18 @@ export function generateAnonUsername(): string {
   const animal = animals[pickIndex(animals.length)];
   const num = pickIndex(100);
   return `${adj}${animal}_${num}`;
+}
+
+export type RawPostWithJoins = Post & {
+  comment_count: { count: number }[];
+  post_votes: { vote_type: string }[];
+};
+
+export function normalizePost(p: RawPostWithJoins): Post {
+  const { post_votes, comment_count, ...rest } = p;
+  return {
+    ...rest,
+    comment_count: comment_count?.[0]?.count ?? 0,
+    user_vote: (post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
+  };
 }
