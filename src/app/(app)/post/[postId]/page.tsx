@@ -8,6 +8,7 @@ import { Post, Comment, Profile, ROOMS } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import VoteButtons from '@/components/VoteButtons';
 
 function CommentItem({
   comment,
@@ -284,6 +285,15 @@ export default function PostPage() {
             className="mt-4 rounded-xl w-full object-cover max-h-96"
           />
         )}
+
+        {/* Votes */}
+        <div className="mt-4 pt-4 border-t border-gray-800/40">
+          <VoteButtons
+            postId={post.id}
+            initialUpvotes={post.upvotes ?? 0}
+            initialDownvotes={post.downvotes ?? 0}
+          />
+        </div>
       </div>
 
       {/* Comment count */}

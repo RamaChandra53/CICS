@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   full_name TEXT,
   roll_number TEXT,
   year TEXT CHECK (year IN ('1st', '2nd', '3rd', '4th')),
-  branch TEXT CHECK (branch IN ('CSE', 'ECE', 'MECH', 'CIVIL', 'EEE')),
+  branch TEXT CHECK (branch IN ('CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'AIDS', 'AIML', 'MBA', 'MCA')),
   section TEXT CHECK (section IN ('A', 'B', 'C')),
   is_verified BOOLEAN DEFAULT FALSE,
   is_anonymous BOOLEAN DEFAULT FALSE,
@@ -43,6 +43,52 @@ CREATE TABLE IF NOT EXISTS comments (
   is_anon_comment BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Vote columns on posts
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS upvotes INTEGER DEFAULT 0;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS downvotes INTEGER DEFAULT 0;
+
+-- Post votes table
+CREATE TABLE IF NOT EXISTS post_votes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
+  vote_type TEXT NOT NULL CHECK (vote_type IN ('up', 'down')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, post_id)
+);
+
+-- Trigger function to keep upvotes/downvotes counts in sync
+CREATE OR REPLACE FUNCTION update_post_vote_counts()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.vote_type = 'up' THEN
+      UPDATE posts SET upvotes = upvotes + 1 WHERE id = NEW.post_id;
+    ELSE
+      UPDATE posts SET downvotes = downvotes + 1 WHERE id = NEW.post_id;
+    END IF;
+  ELSIF TG_OP = 'DELETE' THEN
+    IF OLD.vote_type = 'up' THEN
+      UPDATE posts SET upvotes = GREATEST(0, upvotes - 1) WHERE id = OLD.post_id;
+    ELSE
+      UPDATE posts SET downvotes = GREATEST(0, downvotes - 1) WHERE id = OLD.post_id;
+    END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF OLD.vote_type = 'up' AND NEW.vote_type = 'down' THEN
+      UPDATE posts SET upvotes = GREATEST(0, upvotes - 1), downvotes = downvotes + 1 WHERE id = NEW.post_id;
+    ELSIF OLD.vote_type = 'down' AND NEW.vote_type = 'up' THEN
+      UPDATE posts SET downvotes = GREATEST(0, downvotes - 1), upvotes = upvotes + 1 WHERE id = NEW.post_id;
+    END IF;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS post_vote_counts_trigger ON post_votes;
+CREATE TRIGGER post_vote_counts_trigger
+AFTER INSERT OR UPDATE OR DELETE ON post_votes
+FOR EACH ROW EXECUTE FUNCTION update_post_vote_counts();
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS posts_room_idx ON posts(room);
@@ -91,6 +137,21 @@ CREATE POLICY "Users can update their own comments" ON comments
 
 CREATE POLICY "Users can delete their own comments" ON comments
   FOR DELETE USING (auth.uid() = author_id);
+
+-- Post votes policies
+ALTER TABLE post_votes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Post votes are viewable by authenticated users" ON post_votes
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert their own votes" ON post_votes
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated' AND auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own votes" ON post_votes
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own votes" ON post_votes
+  FOR DELETE USING (auth.uid() = user_id);
 
 -- Storage bucket for ID cards
 INSERT INTO storage.buckets (id, name, public) VALUES ('id-cards', 'id-cards', false) ON CONFLICT DO NOTHING;

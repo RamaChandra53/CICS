@@ -22,6 +22,8 @@ export type Post = {
   year_tag: string | null;
   branch_tag: string | null;
   section_tag: string | null;
+  upvotes: number;
+  downvotes: number;
   created_at: string;
   profiles?: Profile;
   comment_count?: number;
@@ -55,6 +57,6 @@ export const ROOMS: Room[] = [
   { id: 'random', label: 'Random', icon: '💬', description: 'Off-topic, memes, anything' },
 ];
 
-export const BRANCHES = ['CSE', 'ECE', 'MECH', 'CIVIL', 'EEE'];
+export const BRANCHES = ['CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'AIDS', 'AIML', 'MBA', 'MCA'];
 export const YEARS = ['1st', '2nd', '3rd', '4th'];
 export const SECTIONS = ['A', 'B', 'C'];
