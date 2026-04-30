@@ -15,32 +15,37 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (uid: string) => {
     const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userId)
+      .eq('id', uid)
       .single();
     return data as Profile | null;
   }, [supabase]);
 
-  const fetchPosts = useCallback(async () => {
+  const fetchPosts = useCallback(async (uid: string) => {
     const { data } = await supabase
       .from('posts')
       .select(`
         *,
         profiles (id, username, is_verified, is_anonymous),
-        comment_count:comments(count)
+        comment_count:comments(count),
+        post_votes!left(vote_type)
       `)
       .eq('room', 'college')
+      .eq('post_votes.user_id', uid)
       .order('created_at', { ascending: false })
       .limit(50);
 
     if (data) {
-      const normalized = data.map((p: Post & { comment_count: { count: number }[] }) => ({
+      const normalized = data.map((p: Post & { comment_count: { count: number }[]; post_votes: { vote_type: string }[] }) => ({
         ...p,
         comment_count: p.comment_count?.[0]?.count ?? 0,
+        user_vote: (p.post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
+        post_votes: undefined,
       }));
       setPosts(normalized);
     }
@@ -53,30 +58,40 @@ export default function FeedPage() {
         router.push('/');
         return;
       }
+      setUserId(user.id);
       const prof = await fetchProfile(user.id);
       setProfile(prof);
-      await fetchPosts();
+      await fetchPosts(user.id);
       setLoading(false);
     };
     init();
 
-    // Real-time subscription
+    // Real-time subscription — only listen for new/deleted posts, not UPDATE events
+    // (UPDATE events are triggered by vote count changes and would overwrite optimistic state)
+    const handleRealtimeInsertDelete = () => {
+      if (userId) fetchPosts(userId);
+    };
+
     const channel = supabase
       .channel('feed-posts')
       .on('postgres_changes', {
-        event: '*',
+        event: 'INSERT',
         schema: 'public',
         table: 'posts',
         filter: 'room=eq.college',
-      }, () => {
-        fetchPosts();
-      })
+      }, handleRealtimeInsertDelete)
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'posts',
+        filter: 'room=eq.college',
+      }, handleRealtimeInsertDelete)
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, router, fetchProfile, fetchPosts]);
+  }, [supabase, router, fetchProfile, fetchPosts, userId]);
 
   if (loading) {
     return (
@@ -110,7 +125,7 @@ export default function FeedPage() {
           <CreatePostForm
             profile={profile}
             defaultRoom="college"
-            onPostCreated={fetchPosts}
+            onPostCreated={() => { if (userId) fetchPosts(userId); }}
           />
         </div>
       )}

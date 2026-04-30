@@ -21,18 +21,22 @@ export default function RoomPage() {
   const profileRef = useRef<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const userIdRef = useRef<string | null>(null);
 
   const room = ROOMS.find(r => r.id === roomName);
 
-  const fetchPosts = useCallback(async (prof: Profile) => {
+  const fetchPosts = useCallback(async (prof: Profile, uid: string) => {
     let query = supabase
       .from('posts')
       .select(`
         *,
         profiles (id, username, is_verified, is_anonymous),
-        comment_count:comments(count)
+        comment_count:comments(count),
+        post_votes!left(vote_type)
       `)
       .eq('room', roomName)
+      .eq('post_votes.user_id', uid)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -51,9 +55,11 @@ export default function RoomPage() {
 
     const { data } = await query;
     if (data) {
-      const normalized = data.map((p: Post & { comment_count: { count: number }[] }) => ({
+      const normalized = data.map((p: Post & { comment_count: { count: number }[]; post_votes: { vote_type: string }[] }) => ({
         ...p,
         comment_count: p.comment_count?.[0]?.count ?? 0,
+        user_vote: (p.post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
+        post_votes: undefined,
       }));
       setPosts(normalized);
     }
@@ -66,6 +72,9 @@ export default function RoomPage() {
         router.push('/');
         return;
       }
+
+      userIdRef.current = user.id;
+      setUserId(user.id);
 
       const { data: prof } = await supabase
         .from('profiles')
@@ -90,23 +99,34 @@ export default function RoomPage() {
         return;
       }
 
-      await fetchPosts(typedProf);
+      await fetchPosts(typedProf, user.id);
       setLoading(false);
     };
 
     init();
 
-    // Real-time subscription — use ref so callback always has latest profile
+    // Real-time subscription — only listen for new/deleted posts, not UPDATE events
+    // (UPDATE events are triggered by vote count changes and would overwrite optimistic state)
+    const handleRealtimeInsertDelete = () => {
+      if (profileRef.current && userIdRef.current) {
+        fetchPosts(profileRef.current, userIdRef.current);
+      }
+    };
+
     const channel = supabase
       .channel(`room-${roomName}`)
       .on('postgres_changes', {
-        event: '*',
+        event: 'INSERT',
         schema: 'public',
         table: 'posts',
         filter: `room=eq.${roomName}`,
-      }, () => {
-        if (profileRef.current) fetchPosts(profileRef.current);
-      })
+      }, handleRealtimeInsertDelete)
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'posts',
+        filter: `room=eq.${roomName}`,
+      }, handleRealtimeInsertDelete)
       .subscribe();
 
     return () => {
@@ -177,7 +197,7 @@ export default function RoomPage() {
           <CreatePostForm
             profile={profile}
             defaultRoom={roomName}
-            onPostCreated={() => fetchPosts(profile)}
+            onPostCreated={() => { if (userId) fetchPosts(profile, userId); }}
           />
         </div>
       )}

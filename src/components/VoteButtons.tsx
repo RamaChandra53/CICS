@@ -7,13 +7,14 @@ interface VoteButtonsProps {
   postId: string;
   initialUpvotes: number;
   initialDownvotes: number;
+  initialUserVote?: 'up' | 'down' | null;
 }
 
-export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }: VoteButtonsProps) {
+export default function VoteButtons({ postId, initialUpvotes, initialDownvotes, initialUserVote }: VoteButtonsProps) {
   const supabase = createClient();
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [downvotes, setDownvotes] = useState(initialDownvotes);
-  const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+  const [userVote, setUserVote] = useState<'up' | 'down' | null>(initialUserVote ?? null);
   const [userId, setUserId] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
 
@@ -21,20 +22,35 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     setUserId(user.id);
-    const { data } = await supabase
-      .from('post_votes')
-      .select('vote_type')
-      .eq('post_id', postId)
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (data) {
-      setUserVote(data.vote_type as 'up' | 'down');
+    // Only fetch user vote from DB if it wasn't provided via props
+    if (initialUserVote === undefined) {
+      const { data } = await supabase
+        .from('post_votes')
+        .select('vote_type')
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (data) {
+        setUserVote(data.vote_type as 'up' | 'down');
+      }
     }
-  }, [postId, supabase]);
+  }, [postId, supabase, initialUserVote]);
 
   useEffect(() => {
     loadVote();
   }, [loadVote]);
+
+  const syncCounts = useCallback(async () => {
+    const { data } = await supabase
+      .from('posts')
+      .select('upvotes, downvotes')
+      .eq('id', postId)
+      .single();
+    if (data) {
+      setUpvotes(data.upvotes);
+      setDownvotes(data.downvotes);
+    }
+  }, [postId, supabase]);
 
   const handleVote = async (e: React.MouseEvent, type: 'up' | 'down') => {
     e.preventDefault();
@@ -89,6 +105,8 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
           .eq('user_id', userId);
         if (error) throw error;
       }
+      // Sync with actual DB values after the trigger has updated the counts
+      await syncCounts();
     } catch {
       // Roll back optimistic updates on failure
       setUserVote(prevUserVote);

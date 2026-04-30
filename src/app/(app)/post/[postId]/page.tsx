@@ -150,11 +150,21 @@ export default function PostPage() {
 
       const [{ data: prof }, { data: postData }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('posts').select('*, profiles (id, username, is_verified, is_anonymous)').eq('id', postId).single(),
+        supabase
+          .from('posts')
+          .select('*, profiles (id, username, is_verified, is_anonymous), post_votes!left(vote_type)')
+          .eq('id', postId)
+          .eq('post_votes.user_id', user.id)
+          .single(),
       ]);
 
       setProfile(prof as Profile);
-      setPost(postData as Post);
+      const rawPost = postData as Post & { post_votes: { vote_type: string }[] };
+      setPost({
+        ...rawPost,
+        user_vote: (rawPost?.post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
+        post_votes: undefined,
+      } as Post);
       await fetchComments();
       setLoading(false);
     };
@@ -292,6 +302,7 @@ export default function PostPage() {
             postId={post.id}
             initialUpvotes={post.upvotes ?? 0}
             initialDownvotes={post.downvotes ?? 0}
+            initialUserVote={post.user_vote}
           />
         </div>
       </div>

@@ -27,6 +27,7 @@ export type Post = {
   created_at: string;
   profiles?: Profile;
   comment_count?: number;
+  user_vote?: 'up' | 'down' | null;
 };
 
 export type Comment = {

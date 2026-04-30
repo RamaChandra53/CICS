@@ -76,6 +76,7 @@ export default function PostCard({ post, showRoom = false }: PostCardProps) {
           postId={post.id}
           initialUpvotes={post.upvotes ?? 0}
           initialDownvotes={post.downvotes ?? 0}
+          initialUserVote={post.user_vote}
         />
         <span className="text-gray-500 text-xs flex items-center gap-1">
           💬 {post.comment_count ?? 0} comment{post.comment_count !== 1 ? 's' : ''}
