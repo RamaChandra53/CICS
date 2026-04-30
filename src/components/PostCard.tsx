@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Post } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { ROOMS } from '@/types';
+import VoteButtons from './VoteButtons';
 
 interface PostCardProps {
   post: Post;
@@ -71,6 +72,11 @@ export default function PostCard({ post, showRoom = false }: PostCardProps) {
 
       {/* Footer */}
       <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-800/40">
+        <VoteButtons
+          postId={post.id}
+          initialUpvotes={post.upvotes ?? 0}
+          initialDownvotes={post.downvotes ?? 0}
+        />
         <span className="text-gray-500 text-xs flex items-center gap-1">
           💬 {post.comment_count ?? 0} comment{post.comment_count !== 1 ? 's' : ''}
         </span>
