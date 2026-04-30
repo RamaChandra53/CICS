@@ -108,11 +108,6 @@ export default function ProfilePage() {
                   Anonymous
                 </span>
               )}
-              {!profile.is_verified && !profile.is_anonymous && (
-                <span className="bg-yellow-900/40 text-yellow-500 text-xs px-2 py-0.5 rounded-full">
-                  ⏳ pending
-                </span>
-              )}
             </div>
 
             {profile.full_name && (
