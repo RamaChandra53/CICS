@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   full_name TEXT,
   roll_number TEXT,
   year TEXT CHECK (year IN ('1st', '2nd', '3rd', '4th')),
-  branch TEXT CHECK (branch IN ('CSE', 'ECE', 'MECH', 'CIVIL', 'EEE')),
+  branch TEXT CHECK (branch IN ('CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'AIDS', 'AIML', 'MBA', 'MCA')),
   section TEXT CHECK (section IN ('A', 'B', 'C')),
   is_verified BOOLEAN DEFAULT FALSE,
   is_anonymous BOOLEAN DEFAULT FALSE,

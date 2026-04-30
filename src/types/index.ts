@@ -55,6 +55,6 @@ export const ROOMS: Room[] = [
   { id: 'random', label: 'Random', icon: '💬', description: 'Off-topic, memes, anything' },
 ];
 
-export const BRANCHES = ['CSE', 'ECE', 'MECH', 'CIVIL', 'EEE'];
+export const BRANCHES = ['CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'AIDS', 'AIML', 'MBA', 'MCA'];
 export const YEARS = ['1st', '2nd', '3rd', '4th'];
 export const SECTIONS = ['A', 'B', 'C'];

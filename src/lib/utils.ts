@@ -17,8 +17,13 @@ export function formatTimeAgo(dateString: string): string {
 export function generateAnonUsername(): string {
   const adjectives = ['Red', 'Blue', 'Green', 'Purple', 'Gold', 'Silver', 'Dark', 'Bright', 'Swift', 'Bold'];
   const animals = ['Panda', 'Falcon', 'Tiger', 'Eagle', 'Wolf', 'Fox', 'Hawk', 'Bear', 'Lion', 'Shark'];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const animal = animals[Math.floor(Math.random() * animals.length)];
-  const num = Math.floor(Math.random() * 100);
+  const pickIndex = (max: number) => {
+    const buffer = new Uint32Array(1);
+    crypto.getRandomValues(buffer);
+    return buffer[0] % max;
+  };
+  const adj = adjectives[pickIndex(adjectives.length)];
+  const animal = animals[pickIndex(animals.length)];
+  const num = pickIndex(100);
   return `${adj}${animal}_${num}`;
 }
