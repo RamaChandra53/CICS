@@ -160,11 +160,13 @@ export default function PostPage() {
 
       setProfile(prof as Profile);
       const rawPost = postData as Post & { post_votes: { vote_type: string }[] };
-      setPost({
-        ...rawPost,
-        user_vote: (rawPost?.post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
-        post_votes: undefined,
-      } as Post);
+      if (rawPost) {
+        const { post_votes, ...restPost } = rawPost;
+        setPost({
+          ...restPost,
+          user_vote: (post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
+        } as Post);
+      }
       await fetchComments();
       setLoading(false);
     };

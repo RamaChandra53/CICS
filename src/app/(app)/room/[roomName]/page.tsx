@@ -55,12 +55,14 @@ export default function RoomPage() {
 
     const { data } = await query;
     if (data) {
-      const normalized = data.map((p: Post & { comment_count: { count: number }[]; post_votes: { vote_type: string }[] }) => ({
-        ...p,
-        comment_count: p.comment_count?.[0]?.count ?? 0,
-        user_vote: (p.post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
-        post_votes: undefined,
-      }));
+      const normalized = data.map((p: Post & { comment_count: { count: number }[]; post_votes: { vote_type: string }[] }) => {
+        const { post_votes, comment_count, ...rest } = p;
+        return {
+          ...rest,
+          comment_count: comment_count?.[0]?.count ?? 0,
+          user_vote: (post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
+        };
+      });
       setPosts(normalized);
     }
   }, [supabase, roomName]);

@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post, Profile } from '@/types';
 import PostCard from '@/components/PostCard';
@@ -16,6 +16,7 @@ export default function FeedPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const userIdRef = useRef<string | null>(null);
 
   const fetchProfile = useCallback(async (uid: string) => {
     const { data } = await supabase
@@ -41,12 +42,14 @@ export default function FeedPage() {
       .limit(50);
 
     if (data) {
-      const normalized = data.map((p: Post & { comment_count: { count: number }[]; post_votes: { vote_type: string }[] }) => ({
-        ...p,
-        comment_count: p.comment_count?.[0]?.count ?? 0,
-        user_vote: (p.post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
-        post_votes: undefined,
-      }));
+      const normalized = data.map((p: Post & { comment_count: { count: number }[]; post_votes: { vote_type: string }[] }) => {
+        const { post_votes, comment_count, ...rest } = p;
+        return {
+          ...rest,
+          comment_count: comment_count?.[0]?.count ?? 0,
+          user_vote: (post_votes?.[0]?.vote_type as 'up' | 'down') ?? null,
+        };
+      });
       setPosts(normalized);
     }
   }, [supabase]);
@@ -58,6 +61,7 @@ export default function FeedPage() {
         router.push('/');
         return;
       }
+      userIdRef.current = user.id;
       setUserId(user.id);
       const prof = await fetchProfile(user.id);
       setProfile(prof);
@@ -69,7 +73,7 @@ export default function FeedPage() {
     // Real-time subscription — only listen for new/deleted posts, not UPDATE events
     // (UPDATE events are triggered by vote count changes and would overwrite optimistic state)
     const handleRealtimeInsertDelete = () => {
-      if (userId) fetchPosts(userId);
+      if (userIdRef.current) fetchPosts(userIdRef.current);
     };
 
     const channel = supabase
@@ -91,7 +95,7 @@ export default function FeedPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, router, fetchProfile, fetchPosts, userId]);
+  }, [supabase, router, fetchProfile, fetchPosts]);
 
   if (loading) {
     return (
