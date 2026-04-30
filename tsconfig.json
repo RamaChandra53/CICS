@@ -32,12 +32,8 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-<<<<<<< HEAD
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-=======
-    ".next/types/**/*.ts"
->>>>>>> c1adbbcf6569d1c772428758d9dbb29b08ba0e9e
   ],
   "exclude": [
     "node_modules"

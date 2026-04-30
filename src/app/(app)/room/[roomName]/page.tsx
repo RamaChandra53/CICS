@@ -2,9 +2,9 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Profile, ROOMS } from '@/types';
+import { Post, Profile, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import CreatePostForm from '@/components/CreatePostForm';
 import { useRouter, useParams } from 'next/navigation';
@@ -18,13 +18,15 @@ export default function RoomPage() {
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const profileRef = useRef<Profile | null>(null);
+  const [community, setCommunity] = useState<Community | null>(null);
+  const [isMember, setIsMember] = useState(false);
+  const [joinLoading, setJoinLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [accessDenied, setAccessDenied] = useState(false);
+  const [error, setError] = useState('');
+  const postRoom = roomName;
+  const supportsPosting = true;
 
-  const room = ROOMS.find(r => r.id === roomName);
-
-  const fetchPosts = useCallback(async (prof: Profile) => {
+  const fetchPosts = useCallback(async () => {
     let query = supabase
       .from('posts')
       .select(`
@@ -32,21 +34,11 @@ export default function RoomPage() {
         profiles (id, username, is_verified, is_anonymous),
         comment_count:comments(count)
       `)
-      .eq('room', roomName)
       .order('created_at', { ascending: false })
       .limit(50);
 
-    // Filter by year/branch/section for targeted rooms
-    if (roomName === 'year' && prof.year) {
-      query = query.eq('year_tag', prof.year);
-    }
-    if (roomName === 'branch' && prof.branch) {
-      query = query.eq('branch_tag', prof.branch);
-    }
-    if (roomName === 'section') {
-      if (prof.year) query = query.eq('year_tag', prof.year);
-      if (prof.branch) query = query.eq('branch_tag', prof.branch);
-      if (prof.section) query = query.eq('section_tag', prof.section);
+    if (roomName !== 'campus') {
+      query = query.eq('room', postRoom);
     }
 
     const { data } = await query;
@@ -57,7 +49,7 @@ export default function RoomPage() {
       }));
       setPosts(normalized);
     }
-  }, [supabase, roomName]);
+  }, [supabase, roomName, postRoom]);
 
   useEffect(() => {
     const init = async () => {
@@ -79,34 +71,42 @@ export default function RoomPage() {
       }
 
       const typedProf = prof as Profile;
-      profileRef.current = typedProf;
       setProfile(typedProf);
 
-      // Check access
-      const restrictedToVerified = ['year', 'branch', 'section'];
-      if (typedProf.is_anonymous && restrictedToVerified.includes(roomName)) {
-        setAccessDenied(true);
+      const { data: communityData } = await supabase
+        .from('communities')
+        .select('*')
+        .eq('slug', roomName)
+        .maybeSingle();
+
+      if (!communityData) {
         setLoading(false);
         return;
       }
+      setCommunity(communityData as Community);
 
-      await fetchPosts(typedProf);
+      const { data: memberData } = await supabase
+        .from('community_members')
+        .select('user_id')
+        .eq('user_id', typedProf.id)
+        .eq('community_slug', roomName)
+        .maybeSingle();
+      setIsMember(Boolean(memberData));
+
+      await fetchPosts();
       setLoading(false);
     };
 
     init();
 
-    // Real-time subscription — use ref so callback always has latest profile
     const channel = supabase
       .channel(`room-${roomName}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'posts',
-        filter: `room=eq.${roomName}`,
-      }, () => {
-        if (profileRef.current) fetchPosts(profileRef.current);
-      })
+        filter: roomName === 'campus' ? undefined : `room=eq.${roomName}`,
+      }, fetchPosts)
       .subscribe();
 
     return () => {
@@ -114,25 +114,44 @@ export default function RoomPage() {
     };
   }, [supabase, router, roomName, fetchPosts]);
 
-  if (!room) {
+  const handleMembershipToggle = async () => {
+    if (!profile || !community || community.type !== 'open' || joinLoading) return;
+    setJoinLoading(true);
+    setError('');
+    try {
+      if (isMember) {
+        if (community.slug === 'campus') {
+          throw new Error('You cannot leave r/campus.');
+        }
+        const { error: leaveError } = await supabase
+          .from('community_members')
+          .delete()
+          .eq('user_id', profile.id)
+          .eq('community_slug', community.slug);
+        if (leaveError) throw leaveError;
+        setIsMember(false);
+        setCommunity(prev => prev ? { ...prev, member_count: Math.max(0, prev.member_count - 1) } : prev);
+      } else {
+        const { error: joinError } = await supabase
+          .from('community_members')
+          .insert({ user_id: profile.id, community_slug: community.slug });
+        if (joinError) throw joinError;
+        setIsMember(true);
+        setCommunity(prev => prev ? { ...prev, member_count: prev.member_count + 1 } : prev);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to update membership.');
+    } finally {
+      setJoinLoading(false);
+    }
+  };
+
+  if (!community && !loading) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 text-center">
         <div className="text-4xl mb-3">🚫</div>
-        <p className="text-gray-400">Room not found</p>
+        <p className="text-gray-400">Community not found</p>
         <Link href="/feed" className="text-indigo-400 text-sm mt-2 block hover:underline">← Back to Feed</Link>
-      </div>
-    );
-  }
-
-  if (accessDenied) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="text-5xl mb-4">🔒</div>
-        <h2 className="text-white font-bold text-xl mb-2">Verified Users Only</h2>
-        <p className="text-gray-400 text-sm mb-4">
-          This room is only available to students with verified accounts.
-        </p>
-        <Link href="/feed" className="text-indigo-400 text-sm hover:underline">← Back to Feed</Link>
       </div>
     );
   }
@@ -153,31 +172,44 @@ export default function RoomPage() {
     );
   }
 
-  const getRoomSubtitle = () => {
-    if (!profile) return room.description;
-    if (roomName === 'year') return `${profile.year} Year students`;
-    if (roomName === 'branch') return `${profile.branch} students`;
-    if (roomName === 'section') return `${profile.branch}-${profile.section} ${profile.year} Year`;
-    return room.description;
-  };
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          {room.icon} {room.label}
-        </h1>
-        <p className="text-gray-500 text-sm mt-1">{getRoomSubtitle()}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              {community?.icon ?? '💬'} r/{community?.slug}
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">{community?.description ?? 'Community feed'}</p>
+            <p className="text-gray-600 text-xs mt-1">
+              {community?.member_count ?? 0} member{(community?.member_count ?? 0) === 1 ? '' : 's'}
+            </p>
+          </div>
+          {community?.type === 'open' && profile && (
+            <button
+              onClick={handleMembershipToggle}
+              disabled={joinLoading || community.slug === 'campus'}
+              className="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {joinLoading ? '...' : community.slug === 'campus' ? 'Required' : isMember ? 'Leave' : 'Join'}
+            </button>
+          )}
+        </div>
+        {error && (
+          <p className="text-red-400 text-xs mt-3 bg-red-900/20 border border-red-800/40 rounded-lg p-2">
+            {error}
+          </p>
+        )}
       </div>
 
       {/* Create post */}
-      {profile && (
+      {profile && supportsPosting && (
         <div className="mb-6">
           <CreatePostForm
             profile={profile}
-            defaultRoom={roomName}
-            onPostCreated={() => fetchPosts(profile)}
+            defaultRoom={postRoom}
+            onPostCreated={fetchPosts}
           />
         </div>
       )}
@@ -186,7 +218,7 @@ export default function RoomPage() {
       {posts.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-4xl mb-3">💬</div>
-          <p className="text-gray-500">No posts yet in this room. Start the conversation!</p>
+          <p className="text-gray-500">No posts yet in this community. Start the conversation!</p>
         </div>
       ) : (
         <div className="space-y-3">

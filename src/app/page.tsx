@@ -2,275 +2,304 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { generateAnonUsername } from '@/lib/utils';
 import { BRANCHES, YEARS, SECTIONS } from '@/types';
+
+const DEFAULT_PASSWORD = 'cics@123';
+
+function toInternalEmail(rollNumber: string) {
+  return `${rollNumber.trim().toUpperCase()}@cics.local`;
+}
+
+function getReadableErrorMessage(err: unknown) {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null) {
+    const maybeMessage = (err as { message?: unknown }).message;
+    if (typeof maybeMessage === 'string' && maybeMessage.length > 0) {
+      return maybeMessage;
+    }
+  }
+  return 'Something went wrong. Please try again.';
+}
+
+function normalizeYearForSlug(year: string) {
+  const digits = year.replace(/\D/g, '');
+  return digits || year.trim().toLowerCase().replace(/\s+/g, '-');
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
-
-<<<<<<< HEAD
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-=======
-  const [anonLoading, setAnonLoading] = useState(false);
-  const [verifiedLoading, setVerifiedLoading] = useState(false);
-  const [anonError, setAnonError] = useState('');
-  const [verifiedError, setVerifiedError] = useState('');
->>>>>>> c1adbbcf6569d1c772428758d9dbb29b08ba0e9e
-
-  const [mode, setMode] = useState<AuthMode>('choose');
- 
-  // Verified login form fields
-  const [fullName, setFullName] = useState('');
   const [rollNumber, setRollNumber] = useState('');
+  const [password, setPassword] = useState('');
   const [year, setYear] = useState('');
   const [branch, setBranch] = useState('');
   const [section, setSection] = useState('');
 
+  const isFirstTimeAttempt = password === DEFAULT_PASSWORD;
 
-  const handleAnonymous = async () => {
-<<<<<<< HEAD
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_first_login')
+        .eq('id', user.id)
+        .single();
+      router.replace(profile?.is_first_login ? '/set-password' : '/feed');
+    };
+    checkSession();
+  }, [router, supabase]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     setError('');
 
-=======
-    setAnonLoading(true);
-    setAnonError('');
->>>>>>> c1adbbcf6569d1c772428758d9dbb29b08ba0e9e
     try {
-      const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously();
-      if (signInError) throw signInError;
-      if (!signInData.user) throw new Error('Failed to create anonymous session');
-
-      const username = generateAnonUsername();
-<<<<<<< HEAD
-
-      const { data, error } = await supabase.auth.signInAnonymously();
-
-      if (error) throw error;
-      if (!data.user) throw new Error('Anonymous login failed');
-=======
->>>>>>> c1adbbcf6569d1c772428758d9dbb29b08ba0e9e
-
-      const { error: profileError } = await supabase.from('profiles').upsert({
-<<<<<<< HEAD
-        id: data.user.id,
-=======
-        id: signInData.user.id,
->>>>>>> c1adbbcf6569d1c772428758d9dbb29b08ba0e9e
-        username,
-        is_anonymous: true,
-        is_verified: false,
-      });
-
-      if (profileError) throw profileError;
-
-      router.push('/feed');
-<<<<<<< HEAD
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
-=======
-    } catch (err: unknown) {
-      setAnonError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
->>>>>>> c1adbbcf6569d1c772428758d9dbb29b08ba0e9e
-    } finally {
-      setAnonLoading(false);
-    }
-  
-
- return (
-  <div>
-    {error && <p style={{ color: 'red' }}>{error}</p>}
-
-    <button onClick={handleAnonymous} disabled={loading}>
-      {loading ? 'Loading...' : 'Continue Anonymously'}
-    </button>
-  </div>
-);
-}
-  const handleVerifiedSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setVerifiedLoading(true);
-    setVerifiedError('');
-
-    try {
-      if (!fullName || !rollNumber || !year || !branch || !section) {
-        throw new Error('Please fill in all required fields.');
+      const normalizedRollNumber = rollNumber.trim().toUpperCase();
+      if (!normalizedRollNumber || !password) {
+        throw new Error('Please enter roll number and password.');
       }
-      const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously();
-      if (signInError) throw signInError;
-      if (!signInData.user) throw new Error('Failed to create account');
+      if (isFirstTimeAttempt && (!year || !branch || !section)) {
+        throw new Error('Year, branch, and section are required for first-time login.');
+      }
 
-      // Create profile
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        id: signInData.user.id,
-        username: rollNumber,
-        full_name: fullName,
-        roll_number: rollNumber,
-        year,
-        branch,
-        section,
-        is_verified: true,
-        is_anonymous: false,
+      const email = toInternalEmail(normalizedRollNumber);
+      let userId: string | null = null;
+
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (profileError) throw profileError;
+      if (signInError) {
+        if (!isFirstTimeAttempt) {
+          throw new Error('Invalid roll number or password.');
+        }
 
-      router.push('/feed');
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password: DEFAULT_PASSWORD,
+          options: {
+            data: {
+              roll_number: normalizedRollNumber,
+              is_first_login: true,
+              year,
+              branch,
+              section,
+            },
+          },
+        });
+        if (signUpError) {
+          throw new Error('Invalid roll number or password.');
+        }
+
+        if (!signUpData.session) {
+          const { data: fallbackSignIn, error: fallbackSignInError } = await supabase.auth.signInWithPassword({
+            email,
+            password: DEFAULT_PASSWORD,
+          });
+          if (fallbackSignInError || !fallbackSignIn.user) {
+            throw new Error('Unable to start your session. Please try again.');
+          }
+          userId = fallbackSignIn.user.id;
+        } else {
+          userId = signUpData.user?.id ?? null;
+        }
+      } else {
+        userId = signInData.user?.id ?? null;
+      }
+
+      if (!userId) {
+        throw new Error('Unable to complete sign in. Please try again.');
+      }
+
+      const profilePayload: Record<string, string | boolean> = {
+        id: userId,
+        username: normalizedRollNumber,
+        roll_number: normalizedRollNumber,
+        is_anonymous: false,
+        is_first_login: isFirstTimeAttempt,
+      };
+      if (isFirstTimeAttempt) {
+        profilePayload.year = year;
+        profilePayload.branch = branch;
+        profilePayload.section = section;
+      }
+
+      const { error: profileError } = await supabase.from('profiles').upsert(profilePayload);
+      if (profileError) {
+        if (profileError.message?.includes('is_first_login')) {
+          throw new Error(
+            'Database schema is missing is_first_login. Run the latest Supabase SQL migration and try again.'
+          );
+        }
+        throw profileError;
+      }
+
+      if (isFirstTimeAttempt) {
+        const normalizedBranch = branch.trim().toLowerCase();
+        const normalizedSection = section.trim().toLowerCase();
+        const normalizedYear = normalizeYearForSlug(year);
+
+        const communityRows = [
+          {
+            name: `Year ${normalizedYear.toUpperCase()}`,
+            slug: `year-${normalizedYear}`,
+            description: 'Students in your year',
+            icon: '📅',
+            type: 'auto',
+          },
+          {
+            name: normalizedBranch.toUpperCase(),
+            slug: normalizedBranch,
+            description: 'Students in your branch',
+            icon: '🎓',
+            type: 'auto',
+          },
+          {
+            name: `${normalizedBranch.toUpperCase()}-${normalizedSection.toUpperCase()}-${normalizedYear.toUpperCase()}`,
+            slug: `${normalizedBranch}-${normalizedSection}-${normalizedYear}`,
+            description: 'Your class section',
+            icon: '👥',
+            type: 'auto',
+          },
+        ];
+
+        await supabase.from('communities').upsert(communityRows, { onConflict: 'slug' });
+        await supabase.from('community_members').upsert(
+          [
+            { user_id: userId, community_slug: 'campus' },
+            { user_id: userId, community_slug: `year-${normalizedYear}` },
+            { user_id: userId, community_slug: normalizedBranch },
+            { user_id: userId, community_slug: `${normalizedBranch}-${normalizedSection}-${normalizedYear}` },
+          ],
+          { onConflict: 'user_id,community_slug' }
+        );
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_first_login')
+        .eq('id', userId)
+        .single();
+      router.push(profile?.is_first_login ? '/set-password' : '/feed');
     } catch (err: unknown) {
-      setVerifiedError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setError(getReadableErrorMessage(err));
     } finally {
-      setVerifiedLoading(false);
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4 py-12">
-      <div className="max-w-5xl w-full">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <h1 className="text-5xl sm:text-6xl font-bold text-white">CICS</h1>
-          <p className="text-gray-400 mt-3 text-sm sm:text-base">
-            Your college. Your space. Talk freely.
-          </p>
+      <div className="max-w-md w-full bg-[#141414] border border-gray-800 rounded-2xl p-6 sm:p-7">
+        <div className="text-center mb-6">
+          <h1 className="text-4xl sm:text-5xl font-bold text-white">CICS</h1>
+          <p className="text-gray-400 mt-2 text-sm">Login with your roll number</p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="bg-[#141414] border border-gray-800 rounded-2xl p-6">
-            <div className="mb-6">
-              <h2 className="text-white font-semibold text-xl">Join with your details</h2>
-              <p className="text-gray-500 text-sm">Instant access with a verified badge.</p>
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-gray-400 text-xs mb-1.5">Roll Number</label>
+            <input
+              type="text"
+              value={rollNumber}
+              onChange={e => setRollNumber(e.target.value)}
+              placeholder="e.g. 21CSE042"
+              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
+              required
+            />
+          </div>
 
-            <form onSubmit={handleVerifiedSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4">
+          <div>
+            <label className="block text-gray-400 text-xs mb-1.5">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
+              required
+            />
+          </div>
+
+          {isFirstTimeAttempt && (
+            <div className="space-y-3 rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3.5">
+              <p className="text-xs text-indigo-300">
+                First-time login detected. Fill these details to continue.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-gray-400 text-xs mb-1.5">Name *</label>
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={e => setFullName(e.target.value)}
-                    placeholder="e.g. Ramesh Kumar"
-                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                    required
-                  />
+                  <label className="block text-gray-400 text-xs mb-1.5">Year</label>
+                  <select
+                    value={year}
+                    onChange={e => setYear(e.target.value)}
+                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
+                    required={isFirstTimeAttempt}
+                  >
+                    <option value="">Year</option>
+                    {YEARS.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
                 </div>
-
                 <div>
-                  <label className="block text-gray-400 text-xs mb-1.5">Roll Number *</label>
-                  <input
-                    type="text"
-                    value={rollNumber}
-                    onChange={e => setRollNumber(e.target.value)}
-                    placeholder="e.g. 21CSE042"
-                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                    required
-                  />
+                  <label className="block text-gray-400 text-xs mb-1.5">Branch</label>
+                  <select
+                    value={branch}
+                    onChange={e => setBranch(e.target.value)}
+                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
+                    required={isFirstTimeAttempt}
+                  >
+                    <option value="">Branch</option>
+                    {BRANCHES.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-gray-400 text-xs mb-1.5">Year *</label>
-                    <select
-                      value={year}
-                      onChange={e => setYear(e.target.value)}
-                      className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                      required
-                    >
-                      <option value="">Year</option>
-                      {YEARS.map(y => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-400 text-xs mb-1.5">Branch *</label>
-                    <select
-                      value={branch}
-                      onChange={e => setBranch(e.target.value)}
-                      className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                      required
-                    >
-                      <option value="">Branch</option>
-                      {BRANCHES.map(b => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-400 text-xs mb-1.5">Section *</label>
-                    <select
-                      value={section}
-                      onChange={e => setSection(e.target.value)}
-                      className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                      required
-                    >
-                      <option value="">Section</option>
-                      {SECTIONS.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-gray-400 text-xs mb-1.5">Section</label>
+                  <select
+                    value={section}
+                    onChange={e => setSection(e.target.value)}
+                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
+                    required={isFirstTimeAttempt}
+                  >
+                    <option value="">Section</option>
+                    {SECTIONS.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
-
-              {verifiedError && (
-                <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
-                  {verifiedError}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={verifiedLoading}
-                className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {verifiedLoading ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                    </svg>
-                    Creating account...
-                  </>
-                ) : 'Join Now'}
-              </button>
-            </form>
-          </div>
-
-          <div className="bg-[#141414] border border-gray-800 rounded-2xl p-6 flex flex-col">
-            <div className="mb-6">
-              <h2 className="text-white font-semibold text-xl">Stay Anonymous</h2>
-              <p className="text-gray-500 text-sm">Random username, zero personal details.</p>
             </div>
+          )}
 
-            <button
-              onClick={handleAnonymous}
-              disabled={anonLoading}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {anonLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                  </svg>
-                  Creating session...
-                </span>
-              ) : 'Continue Anonymously'}
-            </button>
+          {error && (
+            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
+              {error}
+            </p>
+          )}
 
-            {anonError && (
-              <p className="mt-4 text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
-                {anonError}
-              </p>
-            )}
-          </div>
-        </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Signing in...' : 'Continue'}
+          </button>
+        </form>
+
+        <p className="text-[11px] text-gray-500 text-center mt-4">
+          First-time password: <span className="text-gray-300">{DEFAULT_PASSWORD}</span>
+        </p>
       </div>
     </div>
   );

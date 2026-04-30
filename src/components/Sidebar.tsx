@@ -1,14 +1,85 @@
 'use client';
 
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ROOMS } from '@/types';
+import { Community } from '@/types';
 import { createClient } from '@/lib/supabase';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const [joinedCommunities, setJoinedCommunities] = useState<Community[]>([]);
+
+  const fetchJoinedCommunities = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_anonymous')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const { data: membershipData } = await supabase
+      .from('community_members')
+      .select(`
+        communities (
+          id,
+          name,
+          slug,
+          description,
+          icon,
+          type,
+          member_count,
+          created_at
+        )
+      `)
+      .eq('user_id', user.id);
+
+    let communities = (membershipData ?? [])
+      .flatMap((item: { communities: Community[] | null }) => item.communities ?? [])
+      .sort((a, b) => b.member_count - a.member_count);
+
+    // Existing users may not have been backfilled into community_members.
+    // Bootstrap them into campus so the sidebar is never empty.
+    if (communities.length === 0) {
+      await supabase
+        .from('community_members')
+        .upsert({ user_id: user.id, community_slug: 'campus' }, { onConflict: 'user_id,community_slug' });
+
+      const { data: bootstrappedData } = await supabase
+        .from('community_members')
+        .select(`
+          communities (
+            id,
+            name,
+            slug,
+            description,
+            icon,
+            type,
+            member_count,
+            created_at
+          )
+        `)
+        .eq('user_id', user.id);
+
+      communities = (bootstrappedData ?? [])
+        .flatMap((item: { communities: Community[] | null }) => item.communities ?? [])
+        .sort((a, b) => b.member_count - a.member_count);
+    }
+
+    const filtered = profile?.is_anonymous
+      ? communities.filter(c => ['campus', 'confessions', 'rants'].includes(c.slug))
+      : communities;
+
+    setJoinedCommunities(filtered);
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchJoinedCommunities();
+  }, [fetchJoinedCommunities]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -30,22 +101,27 @@ export default function Sidebar() {
 
       {/* Rooms */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">Rooms</p>
-        {ROOMS.map(room => {
-          const href = room.id === 'college' ? '/feed' : `/room/${room.id}`;
-          const isActive = pathname === href || (room.id !== 'college' && pathname.startsWith(`/room/${room.id}`));
+        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">Communities</p>
+        {joinedCommunities.map(community => {
+          const href = `/room/${community.slug}`;
+          const isActive = pathname === href || pathname.startsWith(`/room/${community.slug}`);
           return (
             <Link
-              key={room.id}
+              key={community.id}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+              className={`flex items-start gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
                 isActive
                   ? 'bg-indigo-600/20 text-indigo-400 font-medium'
                   : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
               }`}
             >
-              <span className="text-base">{room.icon}</span>
-              <span>{room.label}</span>
+              <span className="text-base">{community.icon ?? '💬'}</span>
+              <span className="min-w-0">
+                <span className="block truncate">r/{community.slug}</span>
+                <span className="block text-[10px] text-gray-500">
+                  {community.member_count} member{community.member_count === 1 ? '' : 's'}
+                </span>
+              </span>
             </Link>
           );
         })}

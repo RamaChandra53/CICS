@@ -16,21 +16,69 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const getErrorMessage = (err: unknown) => {
+    if (err instanceof Error) return err.message;
+    if (typeof err === 'object' && err !== null) {
+      const message = (err as { message?: unknown }).message;
+      if (typeof message === 'string' && message.trim().length > 0) return message;
+    }
+    return 'Failed to record vote. Please try again.';
+  };
+
+  useEffect(() => {
+    setUpvotes(initialUpvotes);
+    setDownvotes(initialDownvotes);
+  }, [initialUpvotes, initialDownvotes]);
+
+  const syncVoteState = useCallback(async (currentUserId: string | null) => {
+    const [upvoteQuery, downvoteQuery, voteQuery] = await Promise.all([
+      supabase
+        .from('post_votes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId)
+        .eq('vote_type', 'up'),
+      supabase
+        .from('post_votes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId)
+        .eq('vote_type', 'down'),
+      currentUserId
+        ? supabase
+            .from('post_votes')
+            .select('vote_type')
+            .eq('post_id', postId)
+            .eq('user_id', currentUserId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    if (upvoteQuery.error) throw upvoteQuery.error;
+    if (downvoteQuery.error) throw downvoteQuery.error;
+    if (voteQuery?.error) throw voteQuery.error;
+
+    setUpvotes(upvoteQuery.count ?? 0);
+    setDownvotes(downvoteQuery.count ?? 0);
+    setUserVote((voteQuery?.data?.vote_type as 'up' | 'down' | undefined) ?? null);
+  }, [postId, supabase]);
 
   const loadVote = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setUserId(user.id);
-    const { data } = await supabase
-      .from('post_votes')
-      .select('vote_type')
-      .eq('post_id', postId)
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (data) {
-      setUserVote(data.vote_type as 'up' | 'down');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setUserId(null);
+        setUserVote(null);
+        await syncVoteState(null);
+        return;
+      }
+      setUserId(user.id);
+      await syncVoteState(user.id);
+      setErrorMessage('');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err));
     }
-  }, [postId, supabase]);
+  }, [supabase, syncVoteState]);
 
   useEffect(() => {
     loadVote();
@@ -49,6 +97,7 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
     const prevDownvotes = downvotes;
 
     try {
+      setErrorMessage('');
       if (userVote === type) {
         // Toggle off: remove vote — optimistic update first
         setUserVote(null);
@@ -61,6 +110,7 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
           .eq('post_id', postId)
           .eq('user_id', userId);
         if (error) throw error;
+        await syncVoteState(userId);
       } else if (userVote === null) {
         // New vote — optimistic update first
         setUserVote(type);
@@ -71,6 +121,7 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
           .from('post_votes')
           .insert({ post_id: postId, user_id: userId, vote_type: type });
         if (error) throw error;
+        await syncVoteState(userId);
       } else {
         // Switch vote — optimistic update first
         setUserVote(type);
@@ -88,12 +139,14 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
           .eq('post_id', postId)
           .eq('user_id', userId);
         if (error) throw error;
+        await syncVoteState(userId);
       }
-    } catch {
+    } catch (err: unknown) {
       // Roll back optimistic updates on failure
       setUserVote(prevUserVote);
       setUpvotes(prevUpvotes);
       setDownvotes(prevDownvotes);
+      setErrorMessage(getErrorMessage(err));
     } finally {
       setVoting(false);
     }
@@ -127,6 +180,11 @@ export default function VoteButtons({ postId, initialUpvotes, initialDownvotes }
       >
         ▼
       </button>
+      {errorMessage && (
+        <span className="ml-2 text-[10px] text-red-400 whitespace-nowrap">
+          {errorMessage}
+        </span>
+      )}
     </div>
   );
 }

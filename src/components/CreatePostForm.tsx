@@ -22,8 +22,9 @@ export default function CreatePostForm({ profile, defaultRoom = 'college', onPos
 
   // Rooms accessible to this user
   const accessibleRooms = profile.is_anonymous
-    ? ROOMS.filter(r => ['college', 'confessions', 'random'].includes(r.id))
+    ? ROOMS.filter(r => ['college', 'confessions', 'random', 'rants'].includes(r.id))
     : ROOMS;
+  const canSelectFromPresetRooms = accessibleRooms.some(r => r.id === room);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,15 +123,21 @@ export default function CreatePostForm({ profile, defaultRoom = 'college', onPos
       <div className="flex items-center justify-between border-t border-gray-800/40 pt-3">
         <div className="flex items-center gap-2">
           {/* Room selector */}
-          <select
-            value={room}
-            onChange={e => setRoom(e.target.value)}
-            className="bg-gray-800 text-gray-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none border border-gray-700"
-          >
-            {accessibleRooms.map(r => (
-              <option key={r.id} value={r.id}>{r.icon} {r.label}</option>
-            ))}
-          </select>
+          {canSelectFromPresetRooms ? (
+            <select
+              value={room}
+              onChange={e => setRoom(e.target.value)}
+              className="bg-gray-800 text-gray-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none border border-gray-700"
+            >
+              {accessibleRooms.map(r => (
+                <option key={r.id} value={r.id}>{r.icon} {r.label}</option>
+              ))}
+            </select>
+          ) : (
+            <span className="bg-gray-800 text-gray-300 text-xs rounded-lg px-2 py-1.5 border border-gray-700">
+              r/{room}
+            </span>
+          )}
 
           {/* Image upload */}
           <label className="cursor-pointer text-gray-500 hover:text-gray-300 transition-colors p-1.5 rounded-lg hover:bg-gray-800">

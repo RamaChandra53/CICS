@@ -3,6 +3,7 @@
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Profiles table
 CREATE TABLE IF NOT EXISTS profiles (
@@ -13,11 +14,14 @@ CREATE TABLE IF NOT EXISTS profiles (
   year TEXT CHECK (year IN ('1st', '2nd', '3rd', '4th')),
   branch TEXT CHECK (branch IN ('CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'AIDS', 'AIML', 'MBA', 'MCA')),
   section TEXT CHECK (section IN ('A', 'B', 'C')),
+  is_first_login BOOLEAN DEFAULT TRUE,
   is_verified BOOLEAN DEFAULT FALSE,
   is_anonymous BOOLEAN DEFAULT FALSE,
   id_card_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_first_login BOOLEAN DEFAULT TRUE;
 
 -- Posts table
 CREATE TABLE IF NOT EXISTS posts (
@@ -33,6 +37,8 @@ CREATE TABLE IF NOT EXISTS posts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_room_check;
+
 -- Comments table
 CREATE TABLE IF NOT EXISTS comments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -43,6 +49,39 @@ CREATE TABLE IF NOT EXISTS comments (
   is_anon_comment BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Communities
+CREATE TABLE IF NOT EXISTS communities (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  description TEXT,
+  icon TEXT,
+  type TEXT DEFAULT 'open',
+  member_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS community_members (
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  community_slug TEXT REFERENCES communities(slug) ON DELETE CASCADE,
+  joined_at TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (user_id, community_slug)
+);
+
+INSERT INTO communities (name, slug, description, icon, type) VALUES
+('Campus', 'campus', 'College-wide feed for everyone', '🏫', 'auto'),
+('Confessions', 'confessions', 'Anonymous only. No identity shown.', '🎭', 'open'),
+('Rants', 'rants', 'Vent freely', '😤', 'open'),
+('Placements', 'placements', 'Internships, PPOs, interview experiences', '💼', 'open'),
+('Exams', 'exams', 'PYQs, study material, timetables', '📝', 'open'),
+('Hostel Life', 'hostellife', 'Hostel students only', '🏠', 'open'),
+('Lost & Found', 'lostfound', 'Lost something? Found something?', '🔍', 'open'),
+('Rent a Thing', 'rentathing', 'Borrow/rent from classmates', '🤝', 'open'),
+('Notes', 'notes', 'Share notes and study material', '📚', 'open'),
+('College Changes', 'collegechanges', 'Complaints and suggestions', '📢', 'open'),
+('Clubs', 'clubs', 'College clubs and events', '🎯', 'open')
+ON CONFLICT (slug) DO NOTHING;
 
 -- Vote columns on posts
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS upvotes INTEGER DEFAULT 0;
@@ -101,6 +140,8 @@ CREATE INDEX IF NOT EXISTS comments_parent_comment_id_idx ON comments(parent_com
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE community_members ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles
@@ -137,6 +178,19 @@ CREATE POLICY "Users can update their own comments" ON comments
 
 CREATE POLICY "Users can delete their own comments" ON comments
   FOR DELETE USING (auth.uid() = author_id);
+
+-- Communities policies
+CREATE POLICY "Communities are viewable by authenticated users" ON communities
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Community members are viewable by authenticated users" ON community_members
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Users can join communities themselves" ON community_members
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can leave communities themselves" ON community_members
+  FOR DELETE USING (auth.uid() = user_id);
 
 -- Post votes policies
 ALTER TABLE post_votes ENABLE ROW LEVEL SECURITY;
@@ -190,16 +244,122 @@ CREATE POLICY "Post images are publicly accessible" ON storage.objects
 -- Function to automatically create a profile on user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  normalized_branch TEXT;
+  normalized_year TEXT;
+  normalized_section TEXT;
+  is_anon BOOLEAN;
+  year_slug TEXT;
+  branch_slug TEXT;
+  section_slug TEXT;
 BEGIN
-  INSERT INTO public.profiles (id, username, is_anonymous)
+  INSERT INTO public.profiles (id, username, roll_number, is_anonymous, is_first_login)
   VALUES (
     NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'username', 'user_' || substr(NEW.id::text, 1, 8)),
-    COALESCE((NEW.raw_user_meta_data->>'is_anonymous')::boolean, false)
+    COALESCE(
+      NEW.raw_user_meta_data->>'roll_number',
+      NEW.raw_user_meta_data->>'username',
+      split_part(NEW.email, '@', 1),
+      'user_' || substr(NEW.id::text, 1, 8)
+    ),
+    COALESCE(NEW.raw_user_meta_data->>'roll_number', split_part(NEW.email, '@', 1)),
+    COALESCE((NEW.raw_user_meta_data->>'is_anonymous')::boolean, false),
+    COALESCE((NEW.raw_user_meta_data->>'is_first_login')::boolean, true)
   );
+
+  is_anon := COALESCE((NEW.raw_user_meta_data->>'is_anonymous')::boolean, false);
+  normalized_branch := LOWER(COALESCE(NEW.raw_user_meta_data->>'branch', ''));
+  normalized_year := regexp_replace(LOWER(REPLACE(COALESCE(NEW.raw_user_meta_data->>'year', ''), ' ', '')), '[^0-9]', '', 'g');
+  IF normalized_year = '' THEN
+    normalized_year := LOWER(REPLACE(COALESCE(NEW.raw_user_meta_data->>'year', ''), ' ', ''));
+  END IF;
+  normalized_section := LOWER(COALESCE(NEW.raw_user_meta_data->>'section', ''));
+
+  year_slug := CASE WHEN normalized_year = '' THEN NULL ELSE 'year-' || normalized_year END;
+  branch_slug := CASE WHEN normalized_branch = '' THEN NULL ELSE normalized_branch END;
+  section_slug := CASE
+    WHEN normalized_branch = '' OR normalized_section = '' OR normalized_year = '' THEN NULL
+    ELSE normalized_branch || '-' || normalized_section || '-' || normalized_year
+  END;
+
+  INSERT INTO public.communities (name, slug, description, icon, type)
+  VALUES ('Campus', 'campus', 'College-wide feed for everyone', '🏫', 'auto')
+  ON CONFLICT (slug) DO NOTHING;
+
+  IF year_slug IS NOT NULL THEN
+    INSERT INTO public.communities (name, slug, description, icon, type)
+    VALUES ('Year ' || UPPER(normalized_year), year_slug, 'Students in your year', '📅', 'auto')
+    ON CONFLICT (slug) DO NOTHING;
+  END IF;
+
+  IF branch_slug IS NOT NULL THEN
+    INSERT INTO public.communities (name, slug, description, icon, type)
+    VALUES (UPPER(normalized_branch), branch_slug, 'Students in your branch', '🎓', 'auto')
+    ON CONFLICT (slug) DO NOTHING;
+  END IF;
+
+  IF section_slug IS NOT NULL THEN
+    INSERT INTO public.communities (name, slug, description, icon, type)
+    VALUES (UPPER(normalized_branch) || '-' || UPPER(normalized_section) || '-' || UPPER(normalized_year), section_slug, 'Your class section', '👥', 'auto')
+    ON CONFLICT (slug) DO NOTHING;
+  END IF;
+
+  INSERT INTO public.community_members (user_id, community_slug)
+  VALUES (NEW.id, 'campus')
+  ON CONFLICT (user_id, community_slug) DO NOTHING;
+
+  IF is_anon THEN
+    INSERT INTO public.community_members (user_id, community_slug)
+    VALUES (NEW.id, 'confessions')
+    ON CONFLICT (user_id, community_slug) DO NOTHING;
+
+    INSERT INTO public.community_members (user_id, community_slug)
+    VALUES (NEW.id, 'rants')
+    ON CONFLICT (user_id, community_slug) DO NOTHING;
+  END IF;
+
+  IF year_slug IS NOT NULL THEN
+    INSERT INTO public.community_members (user_id, community_slug)
+    VALUES (NEW.id, year_slug)
+    ON CONFLICT (user_id, community_slug) DO NOTHING;
+  END IF;
+
+  IF branch_slug IS NOT NULL THEN
+    INSERT INTO public.community_members (user_id, community_slug)
+    VALUES (NEW.id, branch_slug)
+    ON CONFLICT (user_id, community_slug) DO NOTHING;
+  END IF;
+
+  IF section_slug IS NOT NULL THEN
+    INSERT INTO public.community_members (user_id, community_slug)
+    VALUES (NEW.id, section_slug)
+    ON CONFLICT (user_id, community_slug) DO NOTHING;
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION update_community_member_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE communities
+    SET member_count = member_count + 1
+    WHERE slug = NEW.community_slug;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE communities
+    SET member_count = GREATEST(0, member_count - 1)
+    WHERE slug = OLD.community_slug;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS community_member_count_trigger ON community_members;
+CREATE TRIGGER community_member_count_trigger
+AFTER INSERT OR DELETE ON community_members
+FOR EACH ROW EXECUTE FUNCTION update_community_member_count();
 
 -- Trigger for auto profile creation
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;

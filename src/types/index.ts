@@ -6,6 +6,7 @@ export type Profile = {
   year: string | null;
   branch: string | null;
   section: string | null;
+  is_first_login: boolean;
   is_verified: boolean;
   is_anonymous: boolean;
   id_card_url: string | null;
@@ -46,6 +47,17 @@ export type Room = {
   label: string;
   icon: string;
   description: string;
+};
+
+export type Community = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  icon: string | null;
+  type: string;
+  member_count: number;
+  created_at: string;
 };
 
 export const ROOMS: Room[] = [
