@@ -24,7 +24,7 @@ export default function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const postRoom = roomName;
-  const supportsPosting = true;
+  const supportsPosting = isMember;
 
   const fetchPosts = useCallback(async () => {
     let query = supabase
@@ -37,9 +37,7 @@ export default function RoomPage() {
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (roomName !== 'campus') {
-      query = query.eq('room', postRoom);
-    }
+    query = query.eq('room', postRoom);
 
     const { data } = await query;
     if (data) {
@@ -49,7 +47,7 @@ export default function RoomPage() {
       }));
       setPosts(normalized);
     }
-  }, [supabase, roomName, postRoom]);
+  }, [supabase, postRoom]);
 
   useEffect(() => {
     const init = async () => {

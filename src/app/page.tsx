@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { BRANCHES, YEARS, SECTIONS } from '@/types';
+import { INVALID_ROLL_MESSAGE, parseRollNumber } from '@/lib/parseRoll';
 
 const DEFAULT_PASSWORD = 'cics@123';
 
@@ -24,9 +24,58 @@ function getReadableErrorMessage(err: unknown) {
   return 'Something went wrong. Please try again.';
 }
 
-function normalizeYearForSlug(year: string) {
-  const digits = year.replace(/\D/g, '');
-  return digits || year.trim().toLowerCase().replace(/\s+/g, '-');
+function isMissingTableError(err: { message?: string | null; code?: string | null }, tableName: string) {
+  const message = (err.message ?? '').toLowerCase();
+  return (
+    err.code === 'PGRST205' ||
+    message.includes(`could not find the table 'public.${tableName}'`) ||
+    message.includes(`relation "public.${tableName}" does not exist`) ||
+    message.includes(`relation "${tableName}" does not exist`)
+  );
+}
+
+async function autoJoinCommunities(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  year: string,
+  branch: string,
+  section: string
+) {
+  // Join communities based on user's roll number: campus + year + branch + section (if multi-section)
+  const slugs = ['campus', `year-${year}`, branch.toLowerCase()];
+  
+  // Only add section community for branches that have multiple sections
+  const multiSectionBranches = ['CSE', 'ECE'];
+  if (multiSectionBranches.includes(branch)) {
+    slugs.push(`${branch.toLowerCase()}-${section}`);
+  }
+  
+  const { data: existingCommunities, error: existingCommunitiesError } = await supabase
+    .from('communities')
+    .select('slug')
+    .in('slug', slugs);
+  if (existingCommunitiesError) {
+    if (isMissingTableError(existingCommunitiesError, 'communities')) {
+      // Allow login to continue on instances where communities migration is not yet applied.
+      return;
+    }
+    throw existingCommunitiesError;
+  }
+
+  const existingSlugSet = new Set((existingCommunities ?? []).map(c => c.slug));
+
+  for (const slug of slugs) {
+    if (!existingSlugSet.has(slug)) continue;
+    const { error: memberError } = await supabase
+      .from('community_members')
+      .upsert({ user_id: userId, community_slug: slug }, { onConflict: 'user_id,community_slug' });
+    if (memberError) {
+      if (isMissingTableError(memberError, 'community_members')) {
+        return;
+      }
+      throw memberError;
+    }
+  }
 }
 
 export default function LoginPage() {
@@ -36,11 +85,10 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [password, setPassword] = useState('');
-  const [year, setYear] = useState('');
-  const [branch, setBranch] = useState('');
-  const [section, setSection] = useState('');
-
   const isFirstTimeAttempt = password === DEFAULT_PASSWORD;
+  const parsedRoll = parseRollNumber(rollNumber);
+  const showInvalidRollMessage = isFirstTimeAttempt && rollNumber.trim().length > 0 && !parsedRoll;
+  const isSubmitDisabled = loading || (isFirstTimeAttempt && !parsedRoll);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -66,9 +114,10 @@ export default function LoginPage() {
       if (!normalizedRollNumber || !password) {
         throw new Error('Please enter roll number and password.');
       }
-      if (isFirstTimeAttempt && (!year || !branch || !section)) {
-        throw new Error('Year, branch, and section are required for first-time login.');
+      if (isFirstTimeAttempt && !parsedRoll) {
+        throw new Error(INVALID_ROLL_MESSAGE);
       }
+      const parsedRollForSignup = parsedRoll;
 
       const email = toInternalEmail(normalizedRollNumber);
       let userId: string | null = null;
@@ -83,6 +132,16 @@ export default function LoginPage() {
           throw new Error('Invalid roll number or password.');
         }
 
+        const { data: existingRollProfile, error: existingRollError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('roll_number', normalizedRollNumber)
+          .maybeSingle();
+        if (existingRollError) throw existingRollError;
+        if (existingRollProfile) {
+          throw new Error('This roll number is already registered. Try logging in instead.');
+        }
+
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password: DEFAULT_PASSWORD,
@@ -90,9 +149,9 @@ export default function LoginPage() {
             data: {
               roll_number: normalizedRollNumber,
               is_first_login: true,
-              year,
-              branch,
-              section,
+              year: parsedRollForSignup!.year,
+              branch: parsedRollForSignup!.branch,
+              section: parsedRollForSignup!.section,
             },
           },
         });
@@ -128,9 +187,9 @@ export default function LoginPage() {
         is_first_login: isFirstTimeAttempt,
       };
       if (isFirstTimeAttempt) {
-        profilePayload.year = year;
-        profilePayload.branch = branch;
-        profilePayload.section = section;
+        profilePayload.year = parsedRollForSignup!.year;
+        profilePayload.branch = parsedRollForSignup!.branch;
+        profilePayload.section = parsedRollForSignup!.section;
       }
 
       const { error: profileError } = await supabase.from('profiles').upsert(profilePayload);
@@ -144,43 +203,15 @@ export default function LoginPage() {
       }
 
       if (isFirstTimeAttempt) {
-        const normalizedBranch = branch.trim().toLowerCase();
-        const normalizedSection = section.trim().toLowerCase();
-        const normalizedYear = normalizeYearForSlug(year);
-
-        const communityRows = [
-          {
-            name: `Year ${normalizedYear.toUpperCase()}`,
-            slug: `year-${normalizedYear}`,
-            description: 'Students in your year',
-            icon: '📅',
-            type: 'auto',
-          },
-          {
-            name: normalizedBranch.toUpperCase(),
-            slug: normalizedBranch,
-            description: 'Students in your branch',
-            icon: '🎓',
-            type: 'auto',
-          },
-          {
-            name: `${normalizedBranch.toUpperCase()}-${normalizedSection.toUpperCase()}-${normalizedYear.toUpperCase()}`,
-            slug: `${normalizedBranch}-${normalizedSection}-${normalizedYear}`,
-            description: 'Your class section',
-            icon: '👥',
-            type: 'auto',
-          },
-        ];
-
-        await supabase.from('communities').upsert(communityRows, { onConflict: 'slug' });
-        await supabase.from('community_members').upsert(
-          [
-            { user_id: userId, community_slug: 'campus' },
-            { user_id: userId, community_slug: `year-${normalizedYear}` },
-            { user_id: userId, community_slug: normalizedBranch },
-            { user_id: userId, community_slug: `${normalizedBranch}-${normalizedSection}-${normalizedYear}` },
-          ],
-          { onConflict: 'user_id,community_slug' }
+        const normalizedBranch = parsedRollForSignup!.branch.trim().toLowerCase();
+        const normalizedSection = parsedRollForSignup!.section.trim().toLowerCase();
+        const normalizedYear = parsedRollForSignup!.yearNumber;
+        await autoJoinCommunities(
+          supabase,
+          userId,
+          normalizedYear,
+          normalizedBranch,
+          normalizedSection
         );
       }
 
@@ -211,10 +242,14 @@ export default function LoginPage() {
             <input
               type="text"
               value={rollNumber}
-              onChange={e => setRollNumber(e.target.value)}
-              placeholder="e.g. 21CSE042"
+              onChange={e => {
+                setRollNumber(e.target.value.toUpperCase());
+                if (error) setError('');
+              }}
+              placeholder="e.g. 25261A0512"
               className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
               required
+              maxLength={10}
             />
           </div>
 
@@ -233,53 +268,26 @@ export default function LoginPage() {
           {isFirstTimeAttempt && (
             <div className="space-y-3 rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3.5">
               <p className="text-xs text-indigo-300">
-                First-time login detected. Fill these details to continue.
+                First-time login detected. Year, branch, and section are auto-detected from roll number.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-gray-400 text-xs mb-1.5">Year</label>
-                  <select
-                    value={year}
-                    onChange={e => setYear(e.target.value)}
-                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                    required={isFirstTimeAttempt}
-                  >
-                    <option value="">Year</option>
-                    {YEARS.map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-gray-400 text-xs mb-1.5">Branch</label>
-                  <select
-                    value={branch}
-                    onChange={e => setBranch(e.target.value)}
-                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                    required={isFirstTimeAttempt}
-                  >
-                    <option value="">Branch</option>
-                    {BRANCHES.map(b => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-gray-400 text-xs mb-1.5">Section</label>
-                  <select
-                    value={section}
-                    onChange={e => setSection(e.target.value)}
-                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-                    required={isFirstTimeAttempt}
-                  >
-                    <option value="">Section</option>
-                    {SECTIONS.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-1.5 text-sm">
+                <p className="text-gray-300">
+                  Year: <span className="text-white font-medium">{parsedRoll ? `${parsedRoll.year} Year` : '-'}</span>
+                </p>
+                <p className="text-gray-300">
+                  Branch: <span className="text-white font-medium">{parsedRoll?.branch ?? '-'}</span>
+                </p>
+                <p className="text-gray-300">
+                  Section: <span className="text-white font-medium">{parsedRoll?.section ?? '-'}</span>
+                </p>
               </div>
             </div>
+          )}
+
+          {showInvalidRollMessage && (
+            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
+              {INVALID_ROLL_MESSAGE}
+            </p>
           )}
 
           {error && (
@@ -290,7 +298,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={isSubmitDisabled}
             className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Signing in...' : 'Continue'}

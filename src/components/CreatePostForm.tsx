@@ -33,6 +33,7 @@ export default function CreatePostForm({ profile, defaultRoom = 'college', onPos
     setError('');
 
     try {
+      const normalizedRoom = room === 'college' ? 'campus' : room;
       let imageUrl: string | null = null;
 
       if (imageFile) {
@@ -48,16 +49,16 @@ export default function CreatePostForm({ profile, defaultRoom = 'college', onPos
 
       const postData: Record<string, unknown> = {
         author_id: profile.id,
-        room,
+        room: normalizedRoom,
         content: content.trim(),
-        is_anon_post: isAnon || room === 'confessions',
+        is_anon_post: isAnon || normalizedRoom === 'confessions',
         image_url: imageUrl,
       };
 
       // Add filter tags for filtered rooms
-      if (room === 'year' || room === 'section') postData.year_tag = profile.year;
-      if (room === 'branch' || room === 'section') postData.branch_tag = profile.branch;
-      if (room === 'section') postData.section_tag = profile.section;
+      if (normalizedRoom === 'year' || normalizedRoom === 'section') postData.year_tag = profile.year;
+      if (normalizedRoom === 'branch' || normalizedRoom === 'section') postData.branch_tag = profile.branch;
+      if (normalizedRoom === 'section') postData.section_tag = profile.section;
 
       const { error: insertError } = await supabase.from('posts').insert(postData);
       if (insertError) throw insertError;

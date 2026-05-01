@@ -33,7 +33,7 @@ export default function FeedPage() {
         profiles (id, username, is_verified, is_anonymous),
         comment_count:comments(count)
       `)
-      .eq('room', 'college')
+      .eq('room', 'campus')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -67,7 +67,7 @@ export default function FeedPage() {
         event: '*',
         schema: 'public',
         table: 'posts',
-        filter: 'room=eq.college',
+        filter: 'room=eq.campus',
       }, () => {
         fetchPosts();
       })
@@ -109,7 +109,7 @@ export default function FeedPage() {
         <div className="mb-6">
           <CreatePostForm
             profile={profile}
-            defaultRoom="college"
+            defaultRoom="campus"
             onPostCreated={fetchPosts}
           />
         </div>

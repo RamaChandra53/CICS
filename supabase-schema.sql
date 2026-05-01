@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   full_name TEXT,
   roll_number TEXT,
   year TEXT CHECK (year IN ('1st', '2nd', '3rd', '4th')),
-  branch TEXT CHECK (branch IN ('CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'AIDS', 'AIML', 'MBA', 'MCA')),
-  section TEXT CHECK (section IN ('A', 'B', 'C')),
+  branch TEXT CHECK (branch IN ('CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'MCT', 'MME', 'CSB', 'CSM', 'CSD')),
+  section TEXT CHECK (section IN ('1', '2', '3', '4', '5')),
   is_first_login BOOLEAN DEFAULT TRUE,
   is_verified BOOLEAN DEFAULT FALSE,
   is_anonymous BOOLEAN DEFAULT FALSE,
@@ -144,6 +144,7 @@ ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE community_members ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
+
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles
   FOR SELECT USING (true);
 
@@ -278,8 +279,8 @@ BEGIN
   year_slug := CASE WHEN normalized_year = '' THEN NULL ELSE 'year-' || normalized_year END;
   branch_slug := CASE WHEN normalized_branch = '' THEN NULL ELSE normalized_branch END;
   section_slug := CASE
-    WHEN normalized_branch = '' OR normalized_section = '' OR normalized_year = '' THEN NULL
-    ELSE normalized_branch || '-' || normalized_section || '-' || normalized_year
+    WHEN normalized_branch = '' OR normalized_section = '' THEN NULL
+    ELSE normalized_branch || '-' || normalized_section
   END;
 
   INSERT INTO public.communities (name, slug, description, icon, type)
@@ -300,7 +301,7 @@ BEGIN
 
   IF section_slug IS NOT NULL THEN
     INSERT INTO public.communities (name, slug, description, icon, type)
-    VALUES (UPPER(normalized_branch) || '-' || UPPER(normalized_section) || '-' || UPPER(normalized_year), section_slug, 'Your class section', '👥', 'auto')
+    VALUES (UPPER(normalized_branch) || '-' || UPPER(normalized_section), section_slug, 'Your class section', '👥', 'auto')
     ON CONFLICT (slug) DO NOTHING;
   END IF;
 
