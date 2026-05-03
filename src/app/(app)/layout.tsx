@@ -1,42 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
-import { createClient } from '@/lib/supabase';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const supabase = createClient();
-  const [checking, setChecking] = useState(true);
+  const { user, profile, loading } = useAuth();
 
   useEffect(() => {
-    const guardRoutes = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+    if (!loading) {
       if (!user) {
         router.replace('/');
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_first_login')
-        .eq('id', user.id)
-        .single();
-
       if (profile?.is_first_login) {
         router.replace('/set-password');
         return;
       }
+    }
+  }, [user, profile, loading, router]);
 
-      setChecking(false);
-    };
-
-    guardRoutes();
-  }, [router, supabase]);
-
-  if (checking) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center">
         <div className="text-gray-400 text-sm">Loading...</div>
@@ -52,5 +40,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
       <BottomNav />
     </div>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <AppLayoutContent>{children}</AppLayoutContent>
+    </AuthProvider>
   );
 }

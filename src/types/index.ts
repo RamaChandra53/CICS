@@ -10,6 +10,8 @@ export type Profile = {
   is_verified: boolean;
   is_anonymous: boolean;
   id_card_url: string | null;
+  email: string | null;
+  is_email_verified: boolean;
   created_at: string;
 };
 
@@ -20,6 +22,7 @@ export type Post = {
   content: string;
   image_url: string | null;
   is_anon_post: boolean;
+  display_mode: 'full' | 'partial' | 'anonymous';
   year_tag: string | null;
   branch_tag: string | null;
   section_tag: string | null;
@@ -37,6 +40,7 @@ export type Comment = {
   parent_comment_id: string | null;
   content: string;
   is_anon_comment: boolean;
+  display_mode: 'full' | 'partial' | 'anonymous';
   created_at: string;
   profiles?: Profile;
   replies?: Comment[];

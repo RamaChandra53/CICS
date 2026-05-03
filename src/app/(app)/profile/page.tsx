@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post, Profile } from '@/types';
 import PostCard from '@/components/PostCard';
+import EmailVerificationModal from '@/components/EmailVerificationModal';
 import { useRouter } from 'next/navigation';
 
 export default function ProfilePage() {
@@ -14,6 +15,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   const fetchUserPosts = useCallback(async (userId: string) => {
     const { data } = await supabase
@@ -52,6 +54,11 @@ export default function ProfilePage() {
     };
     init();
   }, [supabase, router, fetchUserPosts]);
+
+  const handleVerificationSuccess = () => {
+    // Update the profile state with verification status
+    setProfile(prev => prev ? { ...prev, is_email_verified: true } : null);
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -108,11 +115,39 @@ export default function ProfilePage() {
                   Anonymous
                 </span>
               )}
+              {profile.is_email_verified && (
+                <span className="bg-green-600 text-white text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                  ✉️ Email Verified
+                </span>
+              )}
             </div>
 
             {profile.full_name && (
               <p className="text-gray-400 text-sm mb-1">{profile.full_name}</p>
             )}
+
+            {/* Email Verification Status */}
+            <div className="mt-2 mb-3">
+              {profile.is_email_verified ? (
+                <div className="bg-green-900/20 border border-green-800/40 rounded-lg p-2">
+                  <p className="text-green-400 text-xs flex items-center gap-1">
+                    ✅ Your MGIT email is verified - you can post anonymously!
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-2">
+                  <p className="text-yellow-400 text-xs mb-2">
+                    ⚠️ Verify your MGIT email to unlock anonymous posting
+                  </p>
+                  <button
+                    onClick={() => setShowVerificationModal(true)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Verify Email Now
+                  </button>
+                </div>
+              )}
+            </div>
 
             {!profile.is_anonymous && (
               <div className="flex flex-wrap gap-2 mt-2">
@@ -168,6 +203,13 @@ export default function ProfilePage() {
           ))}
         </div>
       )}
+
+      {/* Email Verification Modal */}
+      <EmailVerificationModal
+        isOpen={showVerificationModal}
+        onClose={() => setShowVerificationModal(false)}
+        onSuccess={handleVerificationSuccess}
+      />
     </div>
   );
 }

@@ -8,12 +8,17 @@ import { Post, Profile } from '@/types';
 import PostCard from '@/components/PostCard';
 import CreatePostForm from '@/components/CreatePostForm';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import RedditNavbar from '@/components/RedditNavbar';
+import RedditSidebar from '@/components/RedditSidebar';
+import RedditRightPanel from '@/components/RedditRightPanel';
+import RedditMobileNav from '@/components/RedditMobileNav';
 
 export default function FeedPage() {
   const supabase = createClient();
   const router = useRouter();
+  const { user, profile: authProfile, loading: authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async (userId: string) => {
@@ -33,7 +38,7 @@ export default function FeedPage() {
         profiles (id, username, is_verified, is_anonymous),
         comment_count:comments(count)
       `)
-      .eq('room', 'campus')
+      .eq('room', 'college')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -48,13 +53,13 @@ export default function FeedPage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      if (authLoading) return;
+      
       if (!user) {
         router.push('/');
         return;
       }
-      const prof = await fetchProfile(user.id);
-      setProfile(prof);
+      
       await fetchPosts();
       setLoading(false);
     };
@@ -67,7 +72,7 @@ export default function FeedPage() {
         event: '*',
         schema: 'public',
         table: 'posts',
-        filter: 'room=eq.campus',
+        filter: 'room=eq.college',
       }, () => {
         fetchPosts();
       })
@@ -76,58 +81,79 @@ export default function FeedPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, router, fetchProfile, fetchPosts]);
+  }, [supabase, router, authLoading, user, fetchPosts]);
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-4 animate-pulse">
-              <div className="h-4 bg-gray-700 rounded w-1/3 mb-3"/>
-              <div className="h-3 bg-gray-700 rounded w-full mb-2"/>
-              <div className="h-3 bg-gray-700 rounded w-3/4"/>
+      <div className="min-h-screen bg-[#0b1416]">
+        <RedditNavbar />
+        <div className="flex pt-12">
+          <RedditSidebar />
+          <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+            <div className="space-y-2.5">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] flex animate-pulse">
+                  <div className="w-10 bg-[#161617]"></div>
+                  <div className="flex-1 p-2">
+                    <div className="h-4 bg-gray-700 rounded w-1/3 mb-2"/>
+                    <div className="h-3 bg-gray-700 rounded w-full mb-1"/>
+                    <div className="h-3 bg-gray-700 rounded w-3/4"/>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </main>
+          <div className="hidden xl:block w-80 p-4">
+            <RedditRightPanel />
+          </div>
         </div>
+        <RedditMobileNav />
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          🏠 College Feed
-        </h1>
-        <p className="text-gray-500 text-sm mt-1">Everything from everyone in the college</p>
+    <div className="min-h-screen bg-[#0b1416]">
+      <RedditNavbar />
+      <div className="flex pt-12">
+        <RedditSidebar />
+        
+        {/* Main Content */}
+        <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+          {/* Create Post Box */}
+          {authProfile && (
+            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-2 mb-4">
+              <CreatePostForm
+                profile={authProfile}
+                defaultRoom="college"
+                onPostCreated={fetchPosts}
+              />
+            </div>
+          )}
+
+          {/* Posts */}
+          {posts.length === 0 ? (
+            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
+              <div className="text-4xl mb-3">👀</div>
+              <p className="text-[#d7dadc]">No posts yet. Be the first to post!</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {posts.map(post => (
+                <PostCard key={post.id} post={post} />
+              ))}
+            </div>
+          )}
+        </main>
+
+        {/* Right Sidebar */}
+        <div className="hidden xl:block w-80 p-4">
+          <RedditRightPanel currentRoom="campus" />
+        </div>
       </div>
-
-      {/* Create post */}
-      {profile && (
-        <div className="mb-6">
-          <CreatePostForm
-            profile={profile}
-            defaultRoom="campus"
-            onPostCreated={fetchPosts}
-          />
-        </div>
-      )}
-
-      {/* Posts */}
-      {posts.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="text-4xl mb-3">👀</div>
-          <p className="text-gray-500">No posts yet. Be the first to post!</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {posts.map(post => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </div>
-      )}
+      
+      {/* Mobile Navigation */}
+      <RedditMobileNav />
     </div>
   );
 }

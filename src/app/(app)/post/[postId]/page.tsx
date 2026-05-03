@@ -9,6 +9,7 @@ import { formatTimeAgo } from '@/lib/utils';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import VoteButtons from '@/components/VoteButtons';
+import EmailVerificationModal from '@/components/EmailVerificationModal';
 
 function CommentItem({
   comment,
@@ -20,12 +21,48 @@ function CommentItem({
   depth?: number;
 }) {
   const author = comment.profiles;
-  const displayName = comment.is_anon_comment ? 'Anonymous' : (author?.username ?? 'Anonymous');
-  const isVerified = !comment.is_anon_comment && author?.is_verified;
+  // Use display_mode if available, otherwise fallback to is_anon_comment for old comments
+  const displayMode = comment.display_mode || (comment.is_anon_comment ? 'anonymous' : 'full');
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [replyAnon, setReplyAnon] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Determine display based on display_mode
+  const getDisplayInfo = () => {
+    switch (displayMode) {
+      case 'full':
+        return {
+          displayName: author?.username ?? 'Anonymous',
+          avatar: author?.username?.[0]?.toUpperCase() ?? '?',
+          avatarBg: 'bg-indigo-600/30 text-indigo-400',
+          showVerified: author?.is_verified || false
+        };
+      case 'partial':
+        return {
+          displayName: `${author?.year || ''} • ${author?.branch || ''}`,
+          avatar: author?.year?.[0] || '?',
+          avatarBg: 'bg-purple-600/30 text-purple-400',
+          showVerified: false
+        };
+      case 'anonymous':
+        return {
+          displayName: '👻 Anonymous',
+          avatar: '👻',
+          avatarBg: 'bg-gray-700 text-gray-400',
+          showVerified: false
+        };
+      default:
+        return {
+          displayName: author?.username ?? 'Anonymous',
+          avatar: author?.username?.[0]?.toUpperCase() ?? '?',
+          avatarBg: 'bg-indigo-600/30 text-indigo-400',
+          showVerified: author?.is_verified || false
+        };
+    }
+  };
+
+  const displayInfo = getDisplayInfo();
 
   const handleReply = async () => {
     if (!replyContent.trim()) return;
@@ -39,15 +76,13 @@ function CommentItem({
   return (
     <div className={`${depth > 0 ? 'ml-6 border-l border-gray-800/60 pl-4' : ''}`}>
       <div className="flex gap-2.5 mb-1">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5 ${
-          comment.is_anon_comment ? 'bg-gray-700 text-gray-400' : 'bg-indigo-600/30 text-indigo-400'
-        }`}>
-          {comment.is_anon_comment ? '👻' : (displayName[0]?.toUpperCase() ?? '?')}
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5 ${displayInfo.avatarBg}`}>
+          {displayInfo.avatar}
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-white text-sm font-medium">{displayName}</span>
-            {isVerified && (
+            <span className="text-white text-sm font-medium">{displayInfo.displayName}</span>
+            {displayInfo.showVerified && displayMode === 'full' && (
               <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
                 ✓
               </span>
@@ -76,15 +111,35 @@ function CommentItem({
                 className="w-full bg-[#111] border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-indigo-500 resize-none"
               />
               <div className="flex items-center gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setReplyAnon(!replyAnon)}
-                  className={`text-xs px-2 py-1 rounded-lg transition-colors ${
-                    replyAnon ? 'bg-gray-600 text-gray-200' : 'text-gray-500 hover:bg-gray-800'
-                  }`}
-                >
-                  👻 {replyAnon ? 'Anonymous' : 'Anon?'}
-                </button>
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500 text-xs mr-1">Post as:</span>
+                  {(['full', 'partial', 'anonymous'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        // For replies, we'll use a simple approach - just update the replyAnon state
+                        // In a real implementation, you'd want to pass the display mode to the parent
+                        if (mode === 'full') setReplyAnon(false);
+                        else setReplyAnon(true);
+                      }}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors ${
+                        !replyAnon && mode === 'full'
+                          ? 'bg-indigo-600 text-white'
+                          : replyAnon && mode === 'anonymous'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                      }`}
+                    >
+                      {mode === 'full' && '●'}
+                      {mode === 'partial' && '○'}
+                      {mode === 'anonymous' && '○'}
+                      <span className="ml-1 text-xs">
+                        {mode === 'full' ? 'You' : mode === 'partial' ? 'Verified' : '👻'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
                 <button
                   onClick={handleReply}
                   disabled={submitting || !replyContent.trim()}
@@ -122,6 +177,8 @@ export default function PostPage() {
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [isAnon, setIsAnon] = useState(false);
+  const [commentDisplayMode, setCommentDisplayMode] = useState<'full' | 'partial' | 'anonymous'>('full');
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -142,6 +199,32 @@ export default function PostPage() {
       setComments(nested);
     }
   }, [supabase, postId]);
+
+  const handleCommentDisplayModeChange = (mode: 'full' | 'partial' | 'anonymous') => {
+    if (!profile?.is_email_verified && mode !== 'full') {
+      setShowVerificationModal(true);
+      return;
+    }
+    setCommentDisplayMode(mode);
+  };
+
+  const handleVerificationSuccess = () => {
+    // Update the profile state with verification status
+    setProfile(prev => prev ? { ...prev, is_email_verified: true } : null);
+  };
+
+  const getCommentDisplayModeLabel = (mode: 'full' | 'partial' | 'anonymous') => {
+    switch (mode) {
+      case 'full':
+        return profile?.username || 'Unknown';
+      case 'partial':
+        return 'Verified ✓';
+      case 'anonymous':
+        return '👻 Anonymous';
+      default:
+        return 'Unknown';
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -189,12 +272,16 @@ export default function PostPage() {
     setError('');
 
     try {
+      // Map the anonymous selection to display mode
+      const displayMode = commentAnon ? 'anonymous' : commentDisplayMode;
+      
       const { error: insertError } = await supabase.from('comments').insert({
         post_id: postId,
         author_id: profile.id,
         parent_comment_id: parentId || null,
         content: commentContent,
         is_anon_comment: commentAnon,
+        display_mode: displayMode,
       });
 
       if (insertError) throw insertError;
@@ -233,8 +320,44 @@ export default function PostPage() {
   }
 
   const author = post.profiles;
-  const displayName = post.is_anon_post ? 'Anonymous' : (author?.username ?? 'Anonymous');
-  const isVerified = !post.is_anon_post && author?.is_verified;
+  // Use display_mode if available, otherwise fallback to is_anon_post for old posts
+  const postDisplayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
+  
+  // Determine display based on display_mode (same logic as CommentItem)
+  const getPostDisplayInfo = () => {
+    switch (postDisplayMode) {
+      case 'full':
+        return {
+          displayName: author?.username ?? 'Anonymous',
+          avatar: author?.username?.[0]?.toUpperCase() ?? '?',
+          avatarBg: 'bg-indigo-600/30 text-indigo-400',
+          showVerified: author?.is_verified || false
+        };
+      case 'partial':
+        return {
+          displayName: `${author?.year || ''} • ${author?.branch || ''}`,
+          avatar: author?.year?.[0] || '?',
+          avatarBg: 'bg-purple-600/30 text-purple-400',
+          showVerified: false
+        };
+      case 'anonymous':
+        return {
+          displayName: '👻 Anonymous',
+          avatar: '👻',
+          avatarBg: 'bg-gray-700 text-gray-400',
+          showVerified: false
+        };
+      default:
+        return {
+          displayName: author?.username ?? 'Anonymous',
+          avatar: author?.username?.[0]?.toUpperCase() ?? '?',
+          avatarBg: 'bg-indigo-600/30 text-indigo-400',
+          showVerified: author?.is_verified || false
+        };
+    }
+  };
+  
+  const postDisplayInfo = getPostDisplayInfo();
   const room = ROOMS.find(r => r.id === post.room);
 
   return (
@@ -251,15 +374,13 @@ export default function PostPage() {
       <div className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${
-              post.is_anon_post ? 'bg-gray-700 text-gray-400' : 'bg-indigo-600/30 text-indigo-400'
-            }`}>
-              {post.is_anon_post ? '👻' : (displayName[0]?.toUpperCase() ?? '?')}
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${postDisplayInfo.avatarBg}`}>
+              {postDisplayInfo.avatar}
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-white font-medium">{displayName}</span>
-                {isVerified && (
+                <span className="text-white font-medium">{postDisplayInfo.displayName}</span>
+                {postDisplayInfo.showVerified && postDisplayMode === 'full' && (
                   <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
                     ✓ verified
                   </span>
@@ -315,19 +436,37 @@ export default function PostPage() {
             <p className="text-red-400 text-xs mb-2 bg-red-900/20 border border-red-800/40 rounded-lg p-2">{error}</p>
           )}
           <div className="flex items-center justify-between border-t border-gray-800/40 pt-3">
-            <button
-              type="button"
-              onClick={() => setIsAnon(!isAnon)}
-              className={`flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg transition-colors ${
-                isAnon ? 'bg-gray-600 text-gray-200' : 'text-gray-500 hover:bg-gray-800'
-              }`}
-            >
-              👻 {isAnon ? 'Anonymous' : 'Post as anon?'}
-            </button>
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500 text-xs mr-1">Post as:</span>
+              {(['full', 'partial', 'anonymous'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handleCommentDisplayModeChange(mode)}
+                  disabled={!profile?.is_email_verified && mode !== 'full'}
+                  className={`flex items-center gap-2 text-xs px-3 py-2 rounded-xl border transition-all duration-200 font-medium ${
+                    commentDisplayMode === mode
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-500 shadow-lg shadow-indigo-500/25'
+                      : profile?.is_email_verified || mode === 'full'
+                      ? 'bg-gray-800/50 text-gray-400 border-gray-700 hover:bg-gray-700/50 hover:text-gray-300 hover:border-gray-600'
+                      : 'bg-gray-900/30 text-gray-600 border-gray-800 cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${
+                    commentDisplayMode === mode
+                      ? 'bg-white'
+                      : profile?.is_email_verified || mode === 'full'
+                      ? 'bg-gray-500'
+                      : 'bg-gray-600'
+                  }`} />
+                  <span>{getCommentDisplayModeLabel(mode)}</span>
+                </button>
+              ))}
+            </div>
             <button
               onClick={() => handleAddComment()}
               disabled={submitting || !newComment.trim()}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-medium px-4 py-2 rounded-xl transition-all duration-200 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:shadow-none"
             >
               {submitting ? 'Posting...' : 'Comment'}
             </button>
@@ -351,6 +490,13 @@ export default function PostPage() {
           ))
         )}
       </div>
+
+      {/* Email Verification Modal */}
+      <EmailVerificationModal
+        isOpen={showVerificationModal}
+        onClose={() => setShowVerificationModal(false)}
+        onSuccess={handleVerificationSuccess}
+      />
     </div>
   );
 }

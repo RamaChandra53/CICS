@@ -308,6 +308,15 @@ export default function LoginPage() {
         <p className="text-[11px] text-gray-500 text-center mt-4">
           First-time password: <span className="text-gray-300">{DEFAULT_PASSWORD}</span>
         </p>
+
+        <div className="text-center mt-4">
+          <button
+            onClick={() => router.push('/forgot-password')}
+            className="text-[#6366f1] hover:text-[#4f46e5] text-sm transition-colors"
+          >
+            Forgot password?
+          </button>
+        </div>
       </div>
     </div>
   );
