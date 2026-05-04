@@ -56,35 +56,32 @@ export default function PostCard({ post, showRoom = false }: PostCardProps) {
     <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] flex">
       {/* Vote Column */}
       <div className="w-10 bg-[#161617] flex flex-col items-center py-2">
-        <button className="text-gray-400 hover:text-orange-500 transition-colors">
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 3l2 7h7l-5.5 4 2 7L10 14l-5.5 7 2-7L1 10h7z"/>
-          </svg>
-        </button>
-        <div className="text-white font-bold text-sm my-1">
-          {post.upvotes - post.downvotes}
-        </div>
-        <button className="text-gray-400 hover:text-blue-500 transition-colors">
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 17l-2-7H1l5.5-4-2-7L10 6l5.5-7-2 7L19 10h-7z"/>
-          </svg>
-        </button>
+        <VoteButtons 
+          postId={post.id} 
+          initialUpvotes={post.upvotes} 
+          initialDownvotes={post.downvotes} 
+        />
       </div>
 
       {/* Content Column */}
       <div className="flex-1 p-2">
         {/* Community and Meta */}
         <div className="flex items-center text-xs text-gray-400 mb-1">
-          <span className="font-bold text-[#0079d3]">r/{room?.label || 'campus'}</span>
+          <span className="font-bold text-[#0079d3] hover:underline cursor-pointer">
+            r/{room?.label || 'campus'}
+          </span>
           <span className="mx-1">•</span>
           <span>Posted by {displayInfo.displayName}</span>
           <span className="mx-1">•</span>
           <span>{formatTimeAgo(post.created_at)}</span>
+          {displayInfo.showVerified && (
+            <span className="text-orange-500 ml-1">✓</span>
+          )}
         </div>
 
         {/* Post Title */}
         <Link href={`/post/${post.id}`} className="block">
-          <h3 className="text-white text-lg font-medium mb-1 hover:underline">
+          <h3 className="text-[#d7dadc] text-lg font-medium mb-1 hover:underline">
             {post.content.split('\n')[0].substring(0, 100)}...
           </h3>
         </Link>
@@ -99,27 +96,24 @@ export default function PostCard({ post, showRoom = false }: PostCardProps) {
         {/* Post Image */}
         {post.image_url && (
           <div className="mb-2">
-            <img
-              src={post.image_url}
-              alt="Post image"
-              className="rounded max-h-32 object-cover"
+            <img 
+              src={post.image_url} 
+              alt="Post image" 
+              className="max-w-full rounded-lg"
             />
           </div>
         )}
 
-        {/* Action Bar */}
-        <div className="flex items-center gap-4 text-xs text-gray-400">
-          <button className="flex items-center gap-1 hover:bg-[#343536] px-2 py-1 rounded transition-colors">
-            <span>💬</span>
-            <span>{post.comment_count || 0} Comments</span>
+        {/* Actions */}
+        <div className="flex items-center gap-2 text-xs text-gray-400 mt-2">
+          <button className="hover:text-[#d7dadc] transition-colors">
+            💬 Comments
           </button>
-          <button className="flex items-center gap-1 hover:bg-[#343536] px-2 py-1 rounded transition-colors">
-            <span>↗</span>
-            <span>Share</span>
+          <button className="hover:text-[#d7dadc] transition-colors">
+            ↗ Share
           </button>
-          <button className="flex items-center gap-1 hover:bg-[#343536] px-2 py-1 rounded transition-colors">
-            <span>🚩</span>
-            <span>Report</span>
+          <button className="hover:text-[#d7dadc] transition-colors">
+            🚩 Report
           </button>
         </div>
       </div>

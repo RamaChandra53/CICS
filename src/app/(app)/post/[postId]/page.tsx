@@ -179,8 +179,9 @@ export default function PostPage() {
   const [isAnon, setIsAnon] = useState(false);
   const [commentDisplayMode, setCommentDisplayMode] = useState<'full' | 'partial' | 'anonymous'>('full');
   const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchComments = useCallback(async () => {
     const { data } = await supabase
@@ -190,14 +191,11 @@ export default function PostPage() {
       .order('created_at', { ascending: true });
 
     if (data) {
-      // Build nested structure
-      const topLevel = data.filter((c: Comment) => !c.parent_comment_id);
-      const nested = topLevel.map((c: Comment) => ({
-        ...c,
-        replies: data.filter((r: Comment) => r.parent_comment_id === c.id),
-      }));
-      setComments(nested);
+      setComments(data);
+    } else {
+      setComments([]);
     }
+    setCommentsLoading(false);
   }, [supabase, postId]);
 
   const handleCommentDisplayModeChange = (mode: 'full' | 'partial' | 'anonymous') => {
@@ -403,8 +401,8 @@ export default function PostPage() {
           <img
             src={post.image_url}
             alt="Post image"
-            className="mt-4 rounded-xl w-full object-cover max-h-96"
-          />
+            className="mt-4 rounded-xl w-full object-cover max-h-96" />
+        )}
         )}
 
         {/* Votes */}
@@ -471,14 +469,13 @@ export default function PostPage() {
               {submitting ? 'Posting...' : 'Comment'}
             </button>
           </div>
-        </div>
-      )}
 
       {/* Comments list */}
       <div className="space-y-4">
-        {comments.length === 0 ? (
+        {commentsLoading ? (
           <div className="text-center py-8">
-            <p className="text-gray-500 text-sm">No comments yet. Be the first!</p>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300"></div>
+            <p className="text-gray-400 text-sm mt-2">Loading comments...</p>
           </div>
         ) : (
           comments.map(comment => (
@@ -486,8 +483,14 @@ export default function PostPage() {
               key={comment.id}
               comment={comment}
               onReply={handleAddComment}
+              depth={depth + 1}
             />
           ))
+        )}
+        {comments.length === 0 && !commentsLoading && (
+          <div className="text-center py-8">
+            <p className="text-gray-400 text-sm">No comments yet. Be the first!</p>
+          </div>
         )}
       </div>
 
