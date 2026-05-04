@@ -14,6 +14,7 @@ import RedditNavbar from '@/components/RedditNavbar';
 import RedditSidebar from '@/components/RedditSidebar';
 import RedditRightPanel from '@/components/RedditRightPanel';
 import RedditMobileNav from '@/components/RedditMobileNav';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export default function RoomPage() {
   const supabase = createClient();
@@ -32,29 +33,39 @@ export default function RoomPage() {
   const supportsPosting = isMember;
 
   const fetchPosts = useCallback(async () => {
-    let query = supabase
-      .from('posts')
-      .select(`
-        *,
-        profiles (id, username, is_verified, is_anonymous),
-        comment_count:comments(count)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    try {
+      let query = supabase
+        .from('posts')
+        .select(`
+          *,
+          profiles (id, username, is_verified, is_anonymous),
+          comment_count:comments(count)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-    // Map community slugs to room values
-    let roomFilter = postRoom;
-    if (postRoom === 'campus') roomFilter = 'college';
-    
-    query = query.eq('room', roomFilter);
+      // Map community slugs to room values
+      let roomFilter = postRoom;
+      if (postRoom === 'campus') roomFilter = 'college';
+      
+      query = query.eq('room', roomFilter);
 
-    const { data } = await query;
-    if (data) {
-      const normalized = data.map((p: Post & { comment_count: { count: number }[] }) => ({
-        ...p,
-        comment_count: p.comment_count?.[0]?.count ?? 0,
-      }));
-      setPosts(normalized);
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching posts:', error);
+        return;
+      }
+      
+      if (data) {
+        const normalized = data.map((p: Post & { comment_count: { count: number }[] }) => ({
+          ...p,
+          comment_count: p.comment_count?.[0]?.count ?? 0,
+        }));
+        setPosts(normalized);
+      }
+    } catch (error) {
+      console.error('Unexpected error fetching posts:', error);
     }
   }, [supabase, postRoom]);
 
@@ -73,37 +84,68 @@ export default function RoomPage() {
       }
 
       try {
-        const { data: communityData, error: communityError } = await supabase
-          .from('communities')
-          .select('*')
-          .eq('slug', roomName)
-          .maybeSingle();
+        // Add timeout to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Room initialization timeout')), 10000)
+        );
 
-        if (communityError) {
-          console.error('Community fetch error:', communityError);
-          setLoading(false);
-          return;
-        }
+        const initPromise = async () => {
+          // First try to find community by slug
+          const { data: communityData, error: communityError } = await supabase
+            .from('communities')
+            .select('*')
+            .eq('slug', roomName)
+            .maybeSingle();
 
-        if (!communityData) {
-          console.log('Community not found:', roomName);
-          setLoading(false);
-          return;
-        }
-        
-        setCommunity(communityData as Community);
+          if (communityError) {
+            console.error('Community fetch error:', communityError);
+            throw communityError;
+          }
 
-        const { data: memberData } = await supabase
-          .from('community_members')
-          .select('user_id')
-          .eq('user_id', authProfile.id)
-          .eq('community_slug', roomName)
-          .maybeSingle();
-        setIsMember(Boolean(memberData));
+          // If no community found, check if it's a special room that allows viewing
+          if (!communityData) {
+            // Allow viewing confessions and rants without membership
+            const allowedRooms = ['confessions', 'rants'];
+            if (allowedRooms.includes(roomName)) {
+              // Create a virtual community for display purposes
+              const virtualCommunity: Community = {
+                id: roomName,
+                name: roomName.charAt(0).toUpperCase() + roomName.slice(1),
+                slug: roomName,
+                description: `Share your ${roomName} anonymously`,
+                icon: roomName === 'confessions' ? '🤫' : '😤',
+                member_count: 0,
+                type: 'open',
+                created_at: new Date().toISOString()
+              };
+              setCommunity(virtualCommunity);
+              setIsMember(false); // Non-members can view but not post
+            } else {
+              console.log('Community not found:', roomName);
+              return;
+            }
+          } else {
+            setCommunity(communityData as Community);
 
-        await fetchPosts();
+            // Check membership for real communities
+            const { data: memberData } = await supabase
+              .from('community_members')
+              .select('user_id')
+              .eq('user_id', authProfile.id)
+              .eq('community_slug', roomName)
+              .maybeSingle();
+            setIsMember(Boolean(memberData));
+          }
+
+          await fetchPosts();
+        };
+
+        await Promise.race([initPromise(), timeoutPromise]);
       } catch (error) {
         console.error('Room initialization error:', error);
+        if (error instanceof Error && error.message === 'Room initialization timeout') {
+          console.error('Room page initialization timed out');
+        }
       } finally {
         setLoading(false);
       }
@@ -163,134 +205,140 @@ export default function RoomPage() {
 
   if (!community && !loading) {
     return (
-      <div className="min-h-screen bg-[#0b1416]">
-        <RedditNavbar />
-        <div className="flex pt-12">
-          <RedditSidebar />
-          <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
-            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
-              <div className="text-4xl mb-3">🚫</div>
-              <h2 className="text-[#d7dadc] text-lg font-bold mb-2">Community not found</h2>
-              <p className="text-gray-400 text-sm">You&apos;re viewing community posts. {roomName} doesn&apos;t exist yet.</p>
-              <Link href="/feed" className="text-[#0079d3] hover:underline text-sm">
-                ← Back to Feed
-              </Link>
+      <ErrorBoundary>
+        <div className="min-h-screen bg-[#0b1416]">
+          <RedditNavbar />
+          <div className="flex pt-12">
+            <RedditSidebar />
+            <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+              <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
+                <div className="text-4xl mb-3">🚫</div>
+                <h2 className="text-[#d7dadc] text-lg font-bold mb-2">Community not found</h2>
+                <p className="text-gray-400 text-sm">You&apos;re viewing community posts. {roomName} doesn&apos;t exist yet.</p>
+                <Link href="/feed" className="text-[#0079d3] hover:underline text-sm">
+                  ← Back to Feed
+                </Link>
+              </div>
+            </main>
+            <div className="hidden xl:block w-80 p-4">
+              <RedditRightPanel />
             </div>
-          </main>
-          <div className="hidden xl:block w-80 p-4">
-            <RedditRightPanel />
           </div>
+          <RedditMobileNav />
         </div>
-        <RedditMobileNav />
-      </div>
+      </ErrorBoundary>
     );
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0b1416]">
-        <RedditNavbar />
-        <div className="flex pt-12">
-          <RedditSidebar />
-          <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
-            <div className="space-y-2.5">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] flex animate-pulse">
-                  <div className="w-10 bg-[#161617]"></div>
-                  <div className="flex-1 p-2">
-                    <div className="h-4 bg-gray-700 rounded w-1/3 mb-2"/>
-                    <div className="h-3 bg-gray-700 rounded w-full mb-1"/>
-                    <div className="h-3 bg-gray-700 rounded w-3/4"/>
+      <ErrorBoundary>
+        <div className="min-h-screen bg-[#0b1416]">
+          <RedditNavbar />
+          <div className="flex pt-12">
+            <RedditSidebar />
+            <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+              <div className="space-y-2.5">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] flex animate-pulse">
+                    <div className="w-10 bg-[#161617]"></div>
+                    <div className="flex-1 p-2">
+                      <div className="h-4 bg-gray-700 rounded w-1/3 mb-2"/>
+                      <div className="h-3 bg-gray-700 rounded w-full mb-1"/>
+                      <div className="h-3 bg-gray-700 rounded w-3/4"/>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </main>
+            <div className="hidden xl:block w-80 p-4">
+              <RedditRightPanel />
             </div>
-          </main>
-          <div className="hidden xl:block w-80 p-4">
-            <RedditRightPanel />
           </div>
+          <RedditMobileNav />
         </div>
-        <RedditMobileNav />
-      </div>
+      </ErrorBoundary>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0b1416]">
-      <RedditNavbar />
-      <div className="flex pt-12">
-        <RedditSidebar />
-        
-        {/* Main Content */}
-        <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
-          {/* Community Header */}
-          <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-4 mb-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-[#343536] rounded-full flex items-center justify-center text-2xl">
-                  {community?.icon ?? '💬'}
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#0b1416]">
+        <RedditNavbar />
+        <div className="flex pt-12">
+          <RedditSidebar />
+          
+          {/* Main Content */}
+          <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+            {/* Community Header */}
+            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-4 mb-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 bg-[#343536] rounded-full flex items-center justify-center text-2xl">
+                    {community?.icon ?? '💬'}
+                  </div>
+                  <div>
+                    <h1 className="text-[16px] font-bold text-[#d7dadc] flex items-center gap-2">
+                      r/{community?.slug}
+                    </h1>
+                    <p className="text-[#818384] text-[12px] mt-1">{community?.description ?? 'Community feed'}</p>
+                    <p className="text-[#818384] text-[12px] mt-1">
+                      {community?.member_count ?? 0} member{(community?.member_count ?? 0) === 1 ? '' : 's'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-[16px] font-bold text-[#d7dadc] flex items-center gap-2">
-                    r/{community?.slug}
-                  </h1>
-                  <p className="text-[#818384] text-[12px] mt-1">{community?.description ?? 'Community feed'}</p>
-                  <p className="text-[#818384] text-[12px] mt-1">
-                    {community?.member_count ?? 0} member{(community?.member_count ?? 0) === 1 ? '' : 's'}
-                  </p>
-                </div>
+                {community?.type === 'open' && authProfile && (
+                  <button
+                    onClick={handleMembershipToggle}
+                    disabled={joinLoading || community.slug === 'campus'}
+                    className="bg-[#0079d3] hover:bg-[#1a76d3] text-white text-xs px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {joinLoading ? '...' : community.slug === 'campus' ? 'Required' : isMember ? 'Joined' : 'Join'}
+                  </button>
+                )}
               </div>
-              {community?.type === 'open' && authProfile && (
-                <button
-                  onClick={handleMembershipToggle}
-                  disabled={joinLoading || community.slug === 'campus'}
-                  className="bg-[#0079d3] hover:bg-[#1a76d3] text-white text-xs px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {joinLoading ? '...' : community.slug === 'campus' ? 'Required' : isMember ? 'Joined' : 'Join'}
-                </button>
+              {error && (
+                <p className="text-[#ff4500] text-xs mt-3 bg-red-900/20 border border-red-800/40 rounded-lg p-2">
+                  {error}
+                </p>
               )}
             </div>
-            {error && (
-              <p className="text-[#ff4500] text-xs mt-3 bg-red-900/20 border border-red-800/40 rounded-lg p-2">
-                {error}
-              </p>
+
+            {/* Create Post */}
+            {authProfile && supportsPosting && (
+              <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-2 mb-4">
+                <CreatePostForm
+                  profile={authProfile}
+                  defaultRoom={postRoom === 'campus' ? 'college' : postRoom}
+                  onPostCreated={fetchPosts}
+                />
+              </div>
             )}
+
+            {/* Posts */}
+            {posts.length === 0 ? (
+              <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
+                <div className="text-4xl mb-3">💬</div>
+                <p className="text-[#d7dadc]">No posts yet in r/{roomName}. Start the conversation!</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {posts.map(post => (
+                  <PostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
+          </main>
+
+          {/* Right Sidebar */}
+          <div className="hidden xl:block w-80 p-4">
+            <RedditRightPanel currentRoom={roomName} />
           </div>
-
-          {/* Create Post */}
-          {authProfile && supportsPosting && (
-            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-2 mb-4">
-              <CreatePostForm
-                profile={authProfile}
-                defaultRoom={postRoom === 'campus' ? 'college' : postRoom}
-                onPostCreated={fetchPosts}
-              />
-            </div>
-          )}
-
-          {/* Posts */}
-          {posts.length === 0 ? (
-            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
-              <div className="text-4xl mb-3">💬</div>
-              <p className="text-[#d7dadc]">No posts yet in r/{roomName}. Start the conversation!</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {posts.map(post => (
-                <PostCard key={post.id} post={post} />
-              ))}
-            </div>
-          )}
-        </main>
-
-        {/* Right Sidebar */}
-        <div className="hidden xl:block w-80 p-4">
-          <RedditRightPanel currentRoom={roomName} />
         </div>
+        
+        {/* Mobile Navigation */}
+        <RedditMobileNav />
       </div>
-      
-      {/* Mobile Navigation */}
-      <RedditMobileNav />
-    </div>
+    </ErrorBoundary>
   );
 }

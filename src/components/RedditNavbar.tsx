@@ -1,12 +1,38 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 export default function RedditNavbar() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const supabase = createClient();
+  const { user, profile, signOut } = useAuth();
+  const router = useRouter();
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/');
+    setShowProfileDropdown(false);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowProfileDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-12 bg-[#1a1a1b] border-b border-[#343536] z-50">
@@ -45,9 +71,45 @@ export default function RedditNavbar() {
             </svg>
           </button>
 
-          {/* Profile Avatar */}
-          <div className="w-8 h-8 bg-[#0079d3] rounded-full flex items-center justify-center text-white text-sm font-bold">
-            U
+          {/* Profile Avatar with Dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+              className="w-8 h-8 bg-[#0079d3] rounded-full flex items-center justify-center text-white text-sm font-bold hover:bg-[#1a76d3] transition-colors"
+            >
+              {profile?.username?.[0]?.toUpperCase() ?? 'U'}
+            </button>
+            
+            {showProfileDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-[#1a1a1b] border border-[#343536] rounded-lg shadow-lg z-50">
+                <div className="py-1">
+                  <Link
+                    href="/profile"
+                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-[#2d2d2e] hover:text-white transition-colors"
+                    onClick={() => setShowProfileDropdown(false)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      My Profile
+                    </div>
+                  </Link>
+                  
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full block px-4 py-2 text-sm text-red-400 hover:bg-[#2d2d2e] hover:text-red-300 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Sign Out
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
