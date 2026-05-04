@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
 
 interface AuthContextType {
-  user: any;
+  user: { id: string } | null;
   profile: Profile | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -15,7 +15,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = createClient();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 

@@ -171,7 +171,7 @@ export default function RoomPage() {
             <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
               <div className="text-4xl mb-3">🚫</div>
               <h2 className="text-[#d7dadc] text-lg font-bold mb-2">Community not found</h2>
-              <p className="text-[#818384] mb-4">The community r/{roomName} doesn't exist yet.</p>
+              <p className="text-gray-400 text-sm">You&apos;re viewing community posts. {roomName} doesn&apos;t exist yet.</p>
               <Link href="/feed" className="text-[#0079d3] hover:underline text-sm">
                 ← Back to Feed
               </Link>

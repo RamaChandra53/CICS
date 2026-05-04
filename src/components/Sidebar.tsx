@@ -97,7 +97,7 @@ export default function Sidebar() {
         ? `${profile.branch.toLowerCase()}-${profile.section.toLowerCase()}`
         : null;
       
-      let autoSlugs = ['campus', yearSlug, branchSlug].filter(Boolean) as string[];
+      const autoSlugs = ['campus', yearSlug, branchSlug].filter(Boolean) as string[];
       
       // Only add section community for branches that have multiple sections
       const multiSectionBranches = ['CSE', 'ECE'];

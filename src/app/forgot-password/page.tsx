@@ -294,9 +294,7 @@ export default function ForgotPasswordPage() {
         {step === 'otp' && (
           <form onSubmit={handleVerifyOTP} className="space-y-4">
             <div className="text-center mb-4">
-              <p className="text-gray-400 text-sm">
-                We've sent a 6-digit OTP to {tempEmail}
-              </p>
+              <p className="text-gray-400 text-sm mb-4">Don&apos;t worry, it happens to the best of us. Enter your email and we&apos;ll send you a reset link.</p>
             </div>
 
             <div>
