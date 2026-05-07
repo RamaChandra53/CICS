@@ -35,26 +35,30 @@ export default function RedditNavbar() {
   }, []);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-12 bg-[#1a1a1b] border-b border-[#343536] z-50">
-      <div className="flex items-center justify-between h-full px-4">
+    <nav className="fixed top-0 left-0 right-0 h-14 glass border-b border-border-primary z-50 backdrop-blur-xl">
+      <div className="flex items-center justify-between h-full px-6">
         {/* Left: Logo */}
         <div className="flex items-center">
-          <Link href="/feed" className="text-white font-bold text-lg">
-            CICS
+          <Link href="/feed" className="flex items-center gap-2 group">
+            <div className="w-8 h-8 bg-gradient-accent rounded-lg flex items-center justify-center transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+              <span className="text-white font-bold text-sm neon-text">C</span>
+            </div>
+            <span className="text-text-primary font-bold text-lg neon-text">CICS</span>
           </Link>
         </div>
 
         {/* Center: Search Bar */}
-        <div className="flex-1 max-w-2xl mx-4">
-          <div className="relative">
+        <div className="flex-1 max-w-2xl mx-8">
+          <div className="relative group">
+            <div className="absolute inset-0 bg-accent-primary/20 rounded-full blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search CICS"
-              className="w-full bg-[#272729] text-white placeholder-gray-500 rounded-full py-2 px-4 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-[#0079d3]"
+              placeholder="Search campus network..."
+              className="relative w-full bg-bg-secondary/80 border border-border-primary rounded-full py-2.5 px-4 pr-12 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-primary focus:bg-bg-secondary transition-all duration-300 backdrop-blur-sm"
             />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-muted group-hover:text-accent-primary transition-colors duration-300">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -63,49 +67,53 @@ export default function RedditNavbar() {
         </div>
 
         {/* Right: Notifications and Profile */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {/* Notifications Bell */}
-          <button className="text-gray-400 hover:text-white transition-colors">
+          <button className="relative text-text-muted hover:text-accent-primary transition-all duration-300 transform hover:scale-110">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
+            <div className="absolute -top-1 -right-1 w-2 h-2 bg-accent-primary rounded-full animate-pulse"></div>
           </button>
 
           {/* Profile Avatar with Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-              className="w-8 h-8 bg-[#0079d3] rounded-full flex items-center justify-center text-white text-sm font-bold hover:bg-[#1a76d3] transition-colors"
+              className="w-9 h-9 bg-gradient-accent rounded-full flex items-center justify-center text-white text-sm font-bold hover:shadow-neon transform transition-all duration-300 hover:scale-110"
             >
               {profile?.username?.[0]?.toUpperCase() ?? 'U'}
             </button>
             
             {showProfileDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-[#1a1a1b] border border-[#343536] rounded-lg shadow-lg z-50">
-                <div className="py-1">
+              <div className="absolute right-0 mt-3 w-56 glass rounded-xl border border-border-primary shadow-neon z-50 animate-float">
+                <div className="py-2">
+                  <div className="px-4 py-3 border-b border-border-primary">
+                    <p className="text-sm font-medium text-text-primary">{profile?.username || 'User'}</p>
+                    <p className="text-xs text-text-muted">Campus Network</p>
+                  </div>
+                  
                   <Link
                     href="/profile"
-                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-[#2d2d2e] hover:text-white transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 text-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-all duration-300"
                     onClick={() => setShowProfileDropdown(false)}
                   >
-                    <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      My Profile
-                    </div>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span>My Profile</span>
                   </Link>
+                  
+                  <div className="border-t border-border-primary my-1"></div>
                   
                   <button
                     onClick={handleSignOut}
-                    className="w-full block px-4 py-2 text-sm text-red-400 hover:bg-[#2d2d2e] hover:text-red-300 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-bg-hover transition-all duration-300 text-left"
                   >
-                    <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                      </svg>
-                      Sign Out
-                    </div>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span>Sign Out</span>
                   </button>
                 </div>
               </div>

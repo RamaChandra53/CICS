@@ -15,12 +15,25 @@ export type Profile = {
   created_at: string;
 };
 
+export type PostType = 'text' | 'image' | 'video' | 'poll' | 'link';
+
 export type Post = {
   id: string;
   author_id: string;
   room: string;
   content: string;
+  post_type: PostType;
+  headline: string | null;
+  description: string | null;
+  tags: string[] | null;
+  community_slug: string | null;
+  is_draft: boolean;
   image_url: string | null;
+  video_url: string | null;
+  link_url: string | null;
+  link_metadata: any | null;
+  poll_options: string[] | null;
+  poll_expires_at: string | null;
   is_anon_post: boolean;
   display_mode: 'full' | 'partial' | 'anonymous';
   year_tag: string | null;
@@ -29,6 +42,7 @@ export type Post = {
   upvotes: number;
   downvotes: number;
   created_at: string;
+  updated_at: string;
   profiles?: Profile;
   comment_count?: number;
 };

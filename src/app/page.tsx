@@ -229,16 +229,31 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4 py-12">
-      <div className="max-w-md w-full bg-[#141414] border border-gray-800 rounded-2xl p-6 sm:p-7">
-        <div className="text-center mb-6">
-          <h1 className="text-4xl sm:text-5xl font-bold text-white">CICS</h1>
-          <p className="text-gray-400 mt-2 text-sm">Login with your roll number</p>
-        </div>
+    <div className="min-h-screen bg-bg-primary relative overflow-hidden">
+      {/* Atmospheric background elements */}
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-accent-primary/10 rounded-full blur-3xl animate-float"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-secondary/10 rounded-full blur-3xl animate-float" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-accent-muted/10 rounded-full blur-3xl animate-float" style={{animationDelay: '2s'}}></div>
+      </div>
+      
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-bg-primary via-bg-secondary to-bg-primary/80"></div>
+      
+      {/* Main content */}
+      <div className="relative min-h-screen flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full glass rounded-3xl p-8 sm:p-10 neon-glow animate-glow">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-accent rounded-2xl mb-6 animate-float">
+              <h1 className="text-3xl font-bold text-white neon-text">CICS</h1>
+            </div>
+            <h2 className="text-2xl font-semibold text-text-primary mb-2">Welcome Back</h2>
+            <p className="text-text-secondary text-sm">Enter your roll number to access the campus network</p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-gray-400 text-xs mb-1.5">Roll Number</label>
+            <label className="block text-text-secondary text-xs font-medium mb-2">Roll Number</label>
             <input
               type="text"
               value={rollNumber}
@@ -247,76 +262,101 @@ export default function LoginPage() {
                 if (error) setError('');
               }}
               placeholder="e.g. 25261A0512"
-              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
+              className="input-field font-mono text-sm"
               required
               maxLength={10}
             />
           </div>
 
           <div>
-            <label className="block text-gray-400 text-xs mb-1.5">Password</label>
+            <label className="block text-text-secondary text-xs font-medium mb-2">Password</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Enter your password"
-              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
+              className="input-field text-sm"
               required
             />
           </div>
 
           {isFirstTimeAttempt && (
-            <div className="space-y-3 rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3.5">
-              <p className="text-xs text-indigo-300">
-                First-time login detected. Year, branch, and section are auto-detected from roll number.
+            <div className="glass rounded-xl border border-accent-primary/30 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-accent-primary">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <p className="text-xs font-medium">First-time login detected</p>
+              </div>
+              <p className="text-xs text-text-secondary">
+                Your year, branch, and section are auto-detected from your roll number.
               </p>
-              <div className="space-y-1.5 text-sm">
-                <p className="text-gray-300">
-                  Year: <span className="text-white font-medium">{parsedRoll ? `${parsedRoll.year} Year` : '-'}</span>
-                </p>
-                <p className="text-gray-300">
-                  Branch: <span className="text-white font-medium">{parsedRoll?.branch ?? '-'}</span>
-                </p>
-                <p className="text-gray-300">
-                  Section: <span className="text-white font-medium">{parsedRoll?.section ?? '-'}</span>
-                </p>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-bg-secondary/50 rounded-lg p-2">
+                  <p className="text-xs text-text-muted">Year</p>
+                  <p className="text-sm font-semibold text-text-primary">{parsedRoll ? parsedRoll.year : '-'}</p>
+                </div>
+                <div className="bg-bg-secondary/50 rounded-lg p-2">
+                  <p className="text-xs text-text-muted">Branch</p>
+                  <p className="text-sm font-semibold text-text-primary">{parsedRoll?.branch ?? '-'}</p>
+                </div>
+                <div className="bg-bg-secondary/50 rounded-lg p-2">
+                  <p className="text-xs text-text-muted">Section</p>
+                  <p className="text-sm font-semibold text-text-primary">{parsedRoll?.section ?? '-'}</p>
+                </div>
               </div>
             </div>
           )}
 
           {showInvalidRollMessage && (
-            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
-              {INVALID_ROLL_MESSAGE}
-            </p>
+            <div className="glass rounded-xl border border-error/30 p-3">
+              <p className="text-error text-sm">{INVALID_ROLL_MESSAGE}</p>
+            </div>
           )}
 
           {error && (
-            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
-              {error}
-            </p>
+            <div className="glass rounded-xl border border-error/30 p-3">
+              <p className="text-error text-sm">{error}</p>
+            </div>
           )}
 
           <button
             type="submit"
             disabled={isSubmitDisabled}
-            className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary w-full font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
-            {loading ? 'Signing in...' : 'Continue'}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Signing in...
+              </span>
+            ) : 'Access Campus Network'}
           </button>
         </form>
 
-        <p className="text-[11px] text-gray-500 text-center mt-4">
-          First-time password: <span className="text-gray-300">{DEFAULT_PASSWORD}</span>
-        </p>
-
-        <div className="text-center mt-4">
-          <button
-            onClick={() => router.push('/forgot-password')}
-            className="text-[#6366f1] hover:text-[#4f46e5] text-sm transition-colors"
-          >
-            Forgot password?
-          </button>
+        <div className="mt-6 pt-6 border-t border-border-primary space-y-3">
+          <div className="text-center">
+            <p className="text-xs text-text-muted">
+              Default password: <span className="font-mono text-accent-primary bg-bg-secondary/30 px-2 py-1 rounded">{DEFAULT_PASSWORD}</span>
+            </p>
+          </div>
+          
+          <div className="text-center">
+            <button
+              onClick={() => router.push('/forgot-password')}
+              className="text-accent-primary hover:text-accent-secondary text-sm font-medium transition-colors inline-flex items-center gap-1"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Forgot password?
+            </button>
+          </div>
         </div>
+      </div>
       </div>
     </div>
   );

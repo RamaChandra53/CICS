@@ -33,8 +33,8 @@ export default function RedditSidebar() {
     <div className="fixed left-0 top-12 bottom-0 w-60 bg-[#1a1a1b] border-r border-[#343536] overflow-y-auto">
       <div className="p-2">
         {/* MY COMMUNITIES Section */}
-        <div className="mb-4">
-          <div className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 px-2">
+        <div className="mb-2">
+          <div className="text-gray-500 text-[10px] font-semibold uppercase tracking-wide mb-1 px-1">
             MY COMMUNITIES
           </div>
           
@@ -42,13 +42,13 @@ export default function RedditSidebar() {
             <Link
               key={room.id}
               href={`/room/${room.id}`}
-              className={`flex items-center gap-2 px-2 py-1 rounded text-sm transition-colors ${
+              className={`flex items-center gap-1 px-1 py-0.5 rounded-xs text-xs transition-colors ${
                 pathname === `/room/${room.id}` 
                   ? 'bg-[#333436] text-white' 
                   : 'text-gray-400 hover:bg-[#2d2d2e] hover:text-white'
               }`}
             >
-              <span className="text-lg">{getRoomIcon(room.id)}</span>
+              <span className="text-xs">{getRoomIcon(room.id)}</span>
               <span className="font-medium">{room.label}</span>
             </Link>
           ))}

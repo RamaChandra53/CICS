@@ -9,6 +9,8 @@ import { formatTimeAgo } from '@/lib/utils';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import VoteButtons from '@/components/VoteButtons';
+import HorizontalVoteButtons from '@/components/HorizontalVoteButtons';
+import CommentHorizontalVotes from '@/components/CommentHorizontalVotes';
 import EmailVerificationModal from '@/components/EmailVerificationModal';
 
 function CommentItem({
@@ -38,8 +40,8 @@ function CommentItem({
         }
       : displayMode === 'partial'
       ? {
-          displayName: `${author?.year || ''} • ${author?.branch || ''}`,
-          avatar: author?.year?.[0] || '?',
+          displayName: `${author?.branch || ''}_${author?.year || ''} ✓`,
+          avatar: author?.branch?.[0] || '?',
           avatarBg: 'bg-purple-600/30 text-purple-400',
           showVerified: false,
         }
@@ -61,7 +63,7 @@ function CommentItem({
   };
 
   return (
-    <div className={depth > 0 ? 'ml-6 border-l border-gray-800/60 pl-4' : ''}>
+    <div className={depth > 0 ? 'ml-4 border-l-2 border-[#343536] pl-4' : ''}>
       <div className="mb-1 flex gap-2.5">
         <div
           className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs ${displayInfo.avatarBg}`}
@@ -84,14 +86,15 @@ function CommentItem({
 
           <p className="text-sm leading-relaxed text-gray-300">{comment.content}</p>
 
-          {depth < 1 && (
-            <button
-              onClick={() => setReplyOpen(!replyOpen)}
-              className="mt-1.5 text-xs text-gray-500 transition-colors hover:text-gray-300"
-            >
-              {replyOpen ? 'Cancel' : 'Reply'}
-            </button>
-          )}
+          {/* Horizontal vote bar */}
+          <div className="mt-2">
+            <CommentHorizontalVotes
+              commentId={comment.id}
+              initialUpvotes={0}
+              initialDownvotes={0}
+              onReply={() => setReplyOpen(!replyOpen)}
+            />
+          </div>
 
           {replyOpen && (
             <div className="mt-2">
@@ -174,14 +177,35 @@ export default function PostPage() {
   const fetchComments = useCallback(async () => {
     setCommentsLoading(true);
 
+    // Fetch all comments for post, then build tree client-side
     const { data } = await supabase
       .from('comments')
       .select('*, profiles (id, username, is_verified, is_anonymous, year, branch)')
       .eq('post_id', postId)
-      .is('parent_comment_id', null)
       .order('created_at', { ascending: true });
 
-    setComments((data as Comment[]) ?? []);
+    // Build tree from flat list
+    const buildCommentTree = (comments: Comment[]) => {
+      const map: Record<string, Comment & { replies: Comment[] }> = {};
+      const roots: (Comment & { replies: Comment[] })[] = [];
+      
+      comments.forEach(c => {
+        map[c.id] = { ...c, replies: [] };
+      });
+      
+      comments.forEach(c => {
+        if (c.parent_comment_id) {
+          map[c.parent_comment_id]?.replies.push(map[c.id]);
+        } else {
+          roots.push(map[c.id]);
+        }
+      });
+      
+      return roots;
+    };
+
+    const commentTree = buildCommentTree((data as Comment[]) ?? []);
+    setComments(commentTree);
     setCommentsLoading(false);
   }, [supabase, postId]);
 
@@ -219,7 +243,7 @@ export default function PostPage() {
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase
           .from('posts')
-          .select('*, profiles (id, username, is_verified, is_anonymous, year, branch)')
+          .select('*, profiles (id, username, is_verified, is_anonymous, year, branch), display_mode')
           .eq('id', postId)
           .single(),
       ]);
@@ -330,13 +354,15 @@ export default function PostPage() {
         }
       : postDisplayMode === 'partial'
       ? {
-          displayName: `${author?.year || ''} • ${author?.branch || ''}`,
-          avatar: author?.year?.[0] || '?',
+          displayName: `${author?.branch || ''}_${author?.year || ''} ✓`,
+          avatar: author?.branch?.[0] || '?',
           avatarBg: 'bg-purple-600/30 text-purple-400',
           showVerified: false,
         }
       : {
-          displayName: author?.username ?? 'Anonymous',
+          displayName: author?.roll_number 
+            ? `${author.roll_number} · ${author.branch || 'Unknown'} · ${author.year || 'Unknown'}`
+            : author?.username || 'Unknown',
           avatar: author?.username?.[0]?.toUpperCase() ?? '?',
           avatarBg: 'bg-indigo-600/30 text-indigo-400',
           showVerified: author?.is_verified || false,
@@ -395,10 +421,12 @@ export default function PostPage() {
         )}
 
         <div className="mt-4 border-t border-gray-800/40 pt-4">
-          <VoteButtons
+          <HorizontalVoteButtons
             postId={post.id}
             initialUpvotes={post.upvotes ?? 0}
             initialDownvotes={post.downvotes ?? 0}
+            commentCount={comments.length}
+            showActions={true}
           />
         </div>
       </div>
@@ -435,10 +463,10 @@ export default function PostPage() {
                   disabled={!profile?.is_email_verified && mode !== 'full'}
                   className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-all duration-200 ${
                     commentDisplayMode === mode
-                      ? 'border-indigo-500 bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25'
+                      ? 'border-[#6366f1] bg-[#6366f1] text-white'
                       : profile?.is_email_verified || mode === 'full'
-                      ? 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600 hover:bg-gray-700/50 hover:text-gray-300'
-                      : 'cursor-not-allowed border-gray-800 bg-gray-900/30 text-gray-600 opacity-50'
+                      ? 'border-gray-700 bg-transparent text-gray-500 hover:border-gray-600 hover:text-gray-300'
+                      : 'cursor-not-allowed border-gray-800 bg-transparent text-gray-600 opacity-50'
                   }`}
                 >
                   <span>{getCommentDisplayModeLabel(mode)}</span>

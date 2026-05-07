@@ -39,7 +39,7 @@ export default function RoomPage() {
         .select(`
           *,
           profiles (id, username, is_verified, is_anonymous),
-          comment_count:comments(count)
+          display_mode
         `)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -58,9 +58,9 @@ export default function RoomPage() {
       }
       
       if (data) {
-        const normalized = data.map((p: Post & { comment_count: { count: number }[] }) => ({
+        const normalized = data.map((p: Post) => ({
           ...p,
-          comment_count: p.comment_count?.[0]?.count ?? 0,
+          comment_count: 0, // Set default for now, can be fetched separately if needed
         }));
         setPosts(normalized);
       }
@@ -169,7 +169,7 @@ export default function RoomPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, postRoom, authProfile, roomName, fetchPosts]);
+  }, [supabase, postRoom, authProfile, roomName]);
 
   const handleMembershipToggle = async () => {
     if (!authProfile || !community || community.type !== 'open' || joinLoading) return;

@@ -11,7 +11,7 @@ interface CreatePostFormProps {
   onPostCreated?: () => void;
 }
 
-export default function CreatePostForm({ profile: profileProp, defaultRoom = 'college', onPostCreated }: CreatePostFormProps) {
+export default function CreatePostForm({ profile, defaultRoom = 'college', onPostCreated }: CreatePostFormProps) {
   const supabase = createClient();
   const [content, setContent] = useState('');
   const [room, setRoom] = useState(defaultRoom);
@@ -22,16 +22,15 @@ export default function CreatePostForm({ profile: profileProp, defaultRoom = 'co
   const [expanded, setExpanded] = useState(false);
   const [displayMode, setDisplayMode] = useState<'full' | 'partial' | 'anonymous'>('full');
   const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [profileState, setProfileState] = useState<Profile>(profileProp);
 
   // Rooms accessible to this user
-  const accessibleRooms = profileState.is_anonymous
+  const accessibleRooms = profile.is_anonymous
     ? ROOMS.filter(r => ['college', 'confessions', 'random', 'rants'].includes(r.id))
     : ROOMS;
   const canSelectFromPresetRooms = accessibleRooms.some(r => r.id === room);
 
   const handleDisplayModeChange = (mode: 'full' | 'partial' | 'anonymous') => {
-    if (!profileState.is_email_verified && mode !== 'full') {
+    if (!profile.is_email_verified && mode !== 'full') {
       setShowVerificationModal(true);
       return;
     }
@@ -40,23 +39,23 @@ export default function CreatePostForm({ profile: profileProp, defaultRoom = 'co
 
   const handleVerificationSuccess = () => {
     // Update the profile state with verification status
-    setProfileState(prev => ({ ...prev, is_email_verified: true }));
+    setProfile(prev => ({ ...prev, is_email_verified: true }));
   };
 
   const getDisplayModeLabel = (mode: 'full' | 'partial' | 'anonymous') => {
     switch (mode) {
       case 'full':
-        return profileState.roll_number 
-          ? `${profileState.roll_number} · ${profileState.branch || 'Unknown'} · ${profileState.year || 'Unknown'}`
-          : profileState.username || 'Unknown';
+        return profile.roll_number 
+          ? `${profile.roll_number} · ${profile.branch || 'Unknown'} · ${profile.year || 'Unknown'}`
+          : profile.username || 'Unknown';
       case 'partial':
-        return profileState.branch && profileState.year 
-          ? `${profileState.branch}_${profileState.year} ✓`
+        return profile.branch && profile.year 
+          ? `${profile.branch}_${profile.year} ✓`
           : 'Verified ✓';
       case 'anonymous':
         return '👻 Anonymous';
       default:
-        return 'Unknown';
+        return profile.username || 'Unknown';
     }
   };
 
@@ -73,7 +72,7 @@ export default function CreatePostForm({ profile: profileProp, defaultRoom = 'co
 
       if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();
-        const filePath = `${profileState.id}/${Date.now()}.${fileExt}`;
+        const filePath = `${profile.id}/${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('post-images')
           .upload(filePath, imageFile);
@@ -83,10 +82,10 @@ export default function CreatePostForm({ profile: profileProp, defaultRoom = 'co
       }
 
       const postData: Record<string, unknown> = {
-        author_id: profileState.id,
+        author_id: profile.id,
         room: normalizedRoom,
         content: content.trim(),
-        is_anon_post: isAnon || normalizedRoom === 'confessions',
+        display_mode: displayMode, // Use display_mode instead of is_anon_post
         image_url: imageUrl,
       };
 
@@ -94,7 +93,7 @@ export default function CreatePostForm({ profile: profileProp, defaultRoom = 'co
       if (normalizedRoom === 'year' || normalizedRoom === 'section') postData.year_tag = profileState.year;
       if (normalizedRoom === 'branch' || normalizedRoom === 'section') postData.branch_tag = profileState.branch;
       if (normalizedRoom === 'section') postData.section_tag = profileState.section;
-
+      
       const { error: insertError } = await supabase.from('posts').insert(postData);
       if (insertError) throw insertError;
 
@@ -186,11 +185,11 @@ export default function CreatePostForm({ profile: profileProp, defaultRoom = 'co
                   key={mode}
                   type="button"
                   onClick={() => handleDisplayModeChange(mode)}
-                  disabled={!profileState.is_email_verified && mode !== 'full'}
+                  disabled={!profile.is_email_verified && mode !== 'full'}
                   className={`flex items-center gap-2 text-xs px-3 py-2 rounded-xl border transition-all duration-200 font-medium ${
                     displayMode === mode
                       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-500 shadow-lg shadow-indigo-500/25'
-                      : profileState.is_email_verified || mode === 'full'
+                      : profile.is_email_verified || mode === 'full'
                       ? 'bg-gray-800/50 text-gray-400 border-gray-700 hover:bg-gray-700/50 hover:text-gray-300 hover:border-gray-600'
                       : 'bg-gray-900/30 text-gray-600 border-gray-800 cursor-not-allowed opacity-50'
                   }`}
@@ -198,7 +197,7 @@ export default function CreatePostForm({ profile: profileProp, defaultRoom = 'co
                   <span className={`w-2 h-2 rounded-full ${
                     displayMode === mode
                       ? 'bg-white'
-                      : profileState.is_email_verified || mode === 'full'
+                      : profile.is_email_verified || mode === 'full'
                       ? 'bg-gray-500'
                       : 'bg-gray-600'
                   }`} />

@@ -24,15 +24,8 @@ export default function RedditRightPanel({ currentRoom }: { currentRoom?: string
             {room.label} community for CICS students. Share your experiences, ask questions, and connect with fellow students.
           </p>
           
-          <div className="flex items-center gap-4 text-gray-400 text-sm mb-4">
-            <div>
-              <div className="text-white font-semibold">1.2k</div>
-              <div>Members</div>
-            </div>
-            <div>
-              <div className="text-white font-semibold">45</div>
-              <div>Online</div>
-            </div>
+          <div className="text-gray-400 text-sm mb-4">
+            r/{room?.label} community for CICS students
           </div>
           
           <button className="w-full bg-[#0079d3] hover:bg-[#0066b3] text-white py-2 px-4 rounded-full font-medium text-sm transition-colors">
