@@ -22,6 +22,7 @@ function getReadableErrorMessage(err: unknown) {
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const [isClient, setIsClient] = useState(false);
   const searchParams = useSearchParams();
   const supabase = createClient();
   const [step, setStep] = useState<'details' | 'otp' | 'newPassword'>('details');
@@ -35,10 +36,15 @@ export default function ForgotPasswordPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [tempEmail, setTempEmail] = useState<string>('');
 
+  // Set client-side flag
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Check for magic link tokens from password reset email
   useEffect(() => {
     // Only run on client side
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
     
     const accessToken = searchParams.get('access_token');
     const refreshToken = searchParams.get('refresh_token');
@@ -72,7 +78,7 @@ export default function ForgotPasswordPage() {
       // User clicked reset link and should enter OTP
       setStep('otp');
     }
-  }, [searchParams, supabase]);
+  }, [searchParams, supabase, isClient]);
 
   const parsedRoll = parseRollNumber(rollNumber);
   const showInvalidRollMessage = rollNumber.trim().length > 0 && !parsedRoll;
