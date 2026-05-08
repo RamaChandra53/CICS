@@ -17,6 +17,7 @@ import ErrorBoundaryFunctional from '@/components/ErrorBoundaryFunctional';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
+import SkeletonFeed from '@/components/ui/SkeletonFeed';
 
 export default function FeedPage() {
   const supabase = createClient();
@@ -27,6 +28,8 @@ export default function FeedPage() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [postsError, setPostsError] = useState('');
   const [postsLoading, setPostsLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
 
   const fetchCommunities = useCallback(async () => {
@@ -47,22 +50,22 @@ export default function FeedPage() {
     }
   }, [supabase]);
 
-  const fetchPosts = useCallback(async () => {
+  const fetchPosts = useCallback(async (page = 0) => {
     try {
       setPostsLoading(true);
       setPostsError('');
 
-      // Optimized query without subquery for better performance
+      // Single joined query to fetch posts with profiles and votes
       const { data, error } = await supabase
         .from('posts')
         .select(`
           *,
-          profiles (id, username, is_verified, is_anonymous),
-          display_mode
+          profiles(roll_number, branch, year, section, is_email_verified, username, is_verified, is_anonymous),
+          post_votes(vote_type, user_id)
         `)
         .eq('room', 'college')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .range(page * 20, (page + 1) * 20 - 1);
 
       if (error) {
         console.error('Error fetching feed posts:', error);
@@ -75,7 +78,15 @@ export default function FeedPage() {
           ...p,
           comment_count: 0, // Set default for now, can be fetched separately if needed
         }));
-        setPosts(normalized);
+        
+        if (page === 0) {
+          setPosts(normalized);
+        } else {
+          setPosts(prev => [...prev, ...normalized]);
+        }
+        
+        // Check if there are more posts to load
+        setHasMore(data.length === 20);
       }
     } catch (error) {
       console.error('Unexpected error fetching feed posts:', error);
@@ -84,6 +95,14 @@ export default function FeedPage() {
       setPostsLoading(false);
     }
   }, [supabase]);
+
+  const loadMore = useCallback(() => {
+    if (!postsLoading && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchPosts(nextPage);
+    }
+  }, [page, postsLoading, hasMore, fetchPosts]);
 
   useEffect(() => {
     const init = async () => {
@@ -103,8 +122,10 @@ export default function FeedPage() {
 
         const fetchPromise = async () => {
           console.log('Feed page: Fetching posts...');
+          setPage(0);
+          setHasMore(true);
           await fetchCommunities();
-          await fetchPosts();
+          await fetchPosts(0);
           console.log('Feed page: Posts and communities fetched');
         };
 
@@ -150,7 +171,7 @@ export default function FeedPage() {
         <div className="flex pt-14">
           <RedditSidebar />
           <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
-            <PostLoadingSkeleton count={3} />
+            <SkeletonFeed count={5} />
           </main>
           <div className="hidden xl:block w-80 p-4">
             <RedditRightPanel />
@@ -213,6 +234,19 @@ export default function FeedPage() {
                     <PostCard post={post} />
                   </div>
                 ))}
+                
+                {/* Load More Button */}
+                {hasMore && (
+                  <div className="flex justify-center py-4">
+                    <button
+                      onClick={loadMore}
+                      disabled={postsLoading}
+                      className="px-6 py-3 bg-accent-primary/20 hover:bg-accent-primary/30 text-accent-primary rounded-lg font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed border border-accent-primary/30"
+                    >
+                      {postsLoading ? 'Loading...' : 'Load More Posts'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </main>

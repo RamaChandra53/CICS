@@ -1,6 +1,6 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import Link from 'next/link';
 import { Post } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
@@ -16,6 +16,11 @@ const PostCard = memo(function PostCard({ post, showRoom = false }: PostCardProp
   const author = post.profiles;
   const displayMode = post.display_mode || 'full';
   const room = ROOMS.find(r => r.id === post.room);
+
+  // Memoize vote handlers to prevent unnecessary re-renders
+  const handleVote = useCallback((e: React.MouseEvent, type: 'up' | 'down') => {
+    // Vote handling is done in VoteButtons component
+  }, []);
 
   // Determine display based on display_mode
   const getDisplayInfo = () => {
@@ -111,6 +116,7 @@ const PostCard = memo(function PostCard({ post, showRoom = false }: PostCardProp
                 src={post.image_url} 
                 alt="Post image" 
                 className="w-full object-cover rounded-xl"
+                loading="lazy"
               />
             </div>
           )}
