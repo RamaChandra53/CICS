@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import RichTextEditor from './RichTextEditor';
+import RichTextEditorModern from './RichTextEditorModern';
 
 interface LinkMetadata {
   title?: string;
@@ -217,11 +217,11 @@ const LinkPostForm: React.FC<LinkPostFormProps> = ({
         <label className="block text-sm font-medium text-gray-400 mb-2">
           Description (optional)
         </label>
-        <RichTextEditor
+        <RichTextEditorModern
           value={description}
           onChange={onDescriptionChange}
           placeholder="Share your thoughts about this link..."
-          minHeight="150px"
+          className="mb-4"
         />
       </div>
 

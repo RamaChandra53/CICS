@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import RichTextEditor from './RichTextEditor';
+import RichTextEditorModern from './RichTextEditorModern';
 
 interface TextPostFormProps {
   headline: string;
@@ -40,11 +40,11 @@ const TextPostForm: React.FC<TextPostFormProps> = ({
         <label className="block text-sm font-medium text-gray-400 mb-2">
           Description (optional)
         </label>
-        <RichTextEditor
+        <RichTextEditorModern
           value={description}
           onChange={onDescriptionChange}
-          placeholder="Add more details to your post..."
-          minHeight="200px"
+          placeholder="Share your thoughts..."
+          className="mb-4"
         />
       </div>
 

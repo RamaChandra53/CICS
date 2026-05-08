@@ -38,8 +38,9 @@ export default function CreatePostForm({ profile, defaultRoom = 'college', onPos
   };
 
   const handleVerificationSuccess = () => {
-    // Update the profile state with verification status
-    setProfile(prev => ({ ...prev, is_email_verified: true }));
+    // Profile verification status is handled by AuthContext
+    // The profile prop will be updated automatically through the context
+    setShowVerificationModal(false);
   };
 
   const getDisplayModeLabel = (mode: 'full' | 'partial' | 'anonymous') => {
@@ -90,9 +91,9 @@ export default function CreatePostForm({ profile, defaultRoom = 'college', onPos
       };
 
       // Add filter tags for filtered rooms
-      if (normalizedRoom === 'year' || normalizedRoom === 'section') postData.year_tag = profileState.year;
-      if (normalizedRoom === 'branch' || normalizedRoom === 'section') postData.branch_tag = profileState.branch;
-      if (normalizedRoom === 'section') postData.section_tag = profileState.section;
+      if (normalizedRoom === 'year' || normalizedRoom === 'section') postData.year_tag = profile.year;
+      if (normalizedRoom === 'branch' || normalizedRoom === 'section') postData.branch_tag = profile.branch;
+      if (normalizedRoom === 'section') postData.section_tag = profile.section;
       
       const { error: insertError } = await supabase.from('posts').insert(postData);
       if (insertError) throw insertError;

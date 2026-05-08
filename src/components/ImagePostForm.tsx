@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import RichTextEditor from './RichTextEditor';
+import RichTextEditorModern from './RichTextEditorModern';
 
 interface ImagePostFormProps {
   headline: string;
@@ -158,11 +158,11 @@ const ImagePostForm: React.FC<ImagePostFormProps> = ({
         <label className="block text-sm font-medium text-gray-400 mb-2">
           Description (optional)
         </label>
-        <RichTextEditor
+        <RichTextEditorModern
           value={description}
           onChange={onDescriptionChange}
           placeholder="Add a description to your images..."
-          minHeight="150px"
+          className="mb-4"
         />
       </div>
 

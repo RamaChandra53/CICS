@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import RichTextEditor from './RichTextEditor';
+import RichTextEditorModern from './RichTextEditorModern';
 
 interface VideoPostFormProps {
   headline: string;
@@ -236,27 +236,20 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
         </div>
       )}
 
-      {/* Rich Text Description */}
+      {/* Description Input */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
-          Description (optional)
-        </label>
-        <RichTextEditor
+        <RichTextEditorModern
           value={description}
           onChange={onDescriptionChange}
-          placeholder="Add a description to your video..."
-          minHeight="150px"
+          placeholder="Write a detailed description of your video..."
         />
-      </div>
-
-      {/* Character count for description */}
-      {description && (
-        <div className="text-xs text-gray-500 text-right">
+        <div className="mt-1 text-xs text-gray-500 text-right">
           {description.replace(/<[^>]*>/g, '').length}/5000 characters
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
 export default VideoPostForm;
+

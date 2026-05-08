@@ -10,6 +10,9 @@ import EmailVerificationModal from '@/components/EmailVerificationModal';
 import { useRouter } from 'next/navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
+import ErrorMessage from '@/components/ui/ErrorMessage';
+import EmptyState from '@/components/ui/EmptyState';
+import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 
 export default function ProfilePage() {
   const supabase = createClient();
@@ -18,9 +21,14 @@ export default function ProfilePage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [postsError, setPostsError] = useState('');
+  const [postsLoading, setPostsLoading] = useState(false);
 
   const fetchUserPosts = useCallback(async (userId: string) => {
     try {
+      setPostsLoading(true);
+      setPostsError('');
+
       const { data, error } = await supabase
         .from('posts')
         .select(`
@@ -33,6 +41,7 @@ export default function ProfilePage() {
 
       if (error) {
         console.error('Error fetching user posts:', error);
+        setPostsError(error.message || 'Failed to fetch your posts');
         return;
       }
 
@@ -45,6 +54,9 @@ export default function ProfilePage() {
       }
     } catch (error) {
       console.error('Unexpected error fetching user posts:', error);
+      setPostsError(error instanceof Error ? error.message : 'Something went wrong while fetching your posts');
+    } finally {
+      setPostsLoading(false);
     }
   }, [supabase]);
 
@@ -93,14 +105,8 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-6 animate-pulse">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-16 h-16 rounded-full bg-gray-700"/>
-            <div className="flex-1">
-              <div className="h-5 bg-gray-700 rounded w-1/3 mb-2"/>
-              <div className="h-3 bg-gray-700 rounded w-1/4"/>
-            </div>
-          </div>
+        <div className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-6">
+          <PostLoadingSkeleton count={1} />
         </div>
       </div>
     );
@@ -109,7 +115,12 @@ export default function ProfilePage() {
   if (!authProfile) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <p className="text-gray-400">Profile not found.</p>
+        <ErrorMessage
+          title="Profile not found"
+          message="Please sign in to view your profile."
+          onRetry={() => router.push('/')}
+          retryText="Sign In"
+        />
       </div>
     );
   }
@@ -217,11 +228,19 @@ export default function ProfilePage() {
 
         {/* Posts */}
         <h2 className="text-gray-400 text-sm font-medium mb-3">Your Posts</h2>
-        {posts.length === 0 ? (
-          <div className="text-center py-12 bg-[#1a1a1a] border border-gray-800/60 rounded-2xl">
-            <div className="text-3xl mb-2">✏️</div>
-            <p className="text-gray-500 text-sm">You haven&apos;t posted anything yet.</p>
-          </div>
+        {postsError ? (
+          <ErrorMessage
+            message={postsError}
+            onRetry={() => user && fetchUserPosts(user.id)}
+          />
+        ) : postsLoading ? (
+          <PostLoadingSkeleton count={2} />
+        ) : posts.length === 0 ? (
+          <EmptyState
+            title="No posts yet"
+            description="You haven't posted anything yet. Share your thoughts with the campus!"
+            icon={<div className="text-3xl">✏️</div>}
+          />
         ) : (
           <div className="space-y-3">
             {posts.map(post => (

@@ -15,6 +15,9 @@ import RedditSidebar from '@/components/RedditSidebar';
 import RedditRightPanel from '@/components/RedditRightPanel';
 import RedditMobileNav from '@/components/RedditMobileNav';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import ErrorMessage from '@/components/ui/ErrorMessage';
+import EmptyState from '@/components/ui/EmptyState';
+import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 
 export default function RoomPage() {
   const supabase = createClient();
@@ -29,11 +32,16 @@ export default function RoomPage() {
   const [joinLoading, setJoinLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [postsError, setPostsError] = useState('');
+  const [postsLoading, setPostsLoading] = useState(false);
   const postRoom = roomName;
   const supportsPosting = isMember;
 
   const fetchPosts = useCallback(async () => {
     try {
+      setPostsLoading(true);
+      setPostsError('');
+
       let query = supabase
         .from('posts')
         .select(`
@@ -54,6 +62,7 @@ export default function RoomPage() {
       
       if (error) {
         console.error('Error fetching posts:', error);
+        setPostsError(error.message || 'Failed to fetch posts');
         return;
       }
       
@@ -66,6 +75,9 @@ export default function RoomPage() {
       }
     } catch (error) {
       console.error('Unexpected error fetching posts:', error);
+      setPostsError(error instanceof Error ? error.message : 'Something went wrong while fetching posts');
+    } finally {
+      setPostsLoading(false);
     }
   }, [supabase, postRoom]);
 
@@ -99,21 +111,21 @@ export default function RoomPage() {
 
           if (communityError) {
             console.error('Community fetch error:', communityError);
-            throw communityError;
+            throw new Error(communityError.message || 'Failed to fetch community');
           }
 
           // If no community found, check if it's a special room that allows viewing
           if (!communityData) {
-            // Allow viewing confessions and rants without membership
-            const allowedRooms = ['confessions', 'rants'];
+            // Allow viewing confessions, rants, random, placement-talk without membership
+            const allowedRooms = ['confessions', 'rants', 'random', 'placement-talk'];
             if (allowedRooms.includes(roomName)) {
               // Create a virtual community for display purposes
               const virtualCommunity: Community = {
                 id: roomName,
-                name: roomName.charAt(0).toUpperCase() + roomName.slice(1),
+                name: roomName.charAt(0).toUpperCase() + roomName.slice(1).replace('-', ' '),
                 slug: roomName,
-                description: `Share your ${roomName} anonymously`,
-                icon: roomName === 'confessions' ? '🤫' : '😤',
+                description: `Share your ${roomName.replace('-', ' ')} anonymously`,
+                icon: roomName === 'confessions' ? '🤫' : roomName === 'rants' ? '😤' : roomName === 'random' ? '🎲' : '💼',
                 member_count: 0,
                 type: 'open',
                 created_at: new Date().toISOString()
@@ -122,18 +134,24 @@ export default function RoomPage() {
               setIsMember(false); // Non-members can view but not post
             } else {
               console.log('Community not found:', roomName);
+              setError('Community not found');
               return;
             }
           } else {
             setCommunity(communityData as Community);
 
             // Check membership for real communities
-            const { data: memberData } = await supabase
+            const { data: memberData, error: memberError } = await supabase
               .from('community_members')
               .select('user_id')
               .eq('user_id', authProfile.id)
               .eq('community_slug', roomName)
               .maybeSingle();
+              
+            if (memberError) {
+              console.error('Membership check error:', memberError);
+              // Don't throw error for membership check, just default to not member
+            }
             setIsMember(Boolean(memberData));
           }
 
@@ -144,7 +162,9 @@ export default function RoomPage() {
       } catch (error) {
         console.error('Room initialization error:', error);
         if (error instanceof Error && error.message === 'Room initialization timeout') {
-          console.error('Room page initialization timed out');
+          setError('Room page initialization timed out. Please try again.');
+        } else {
+          setError(error instanceof Error ? error.message : 'Failed to load room');
         }
       } finally {
         setLoading(false);
@@ -203,7 +223,7 @@ export default function RoomPage() {
     }
   };
 
-  if (!community && !loading) {
+  if (error && !community) {
     return (
       <ErrorBoundary>
         <div className="min-h-screen bg-[#0b1416]">
@@ -211,14 +231,11 @@ export default function RoomPage() {
           <div className="flex pt-12">
             <RedditSidebar />
             <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
-              <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
-                <div className="text-4xl mb-3">🚫</div>
-                <h2 className="text-[#d7dadc] text-lg font-bold mb-2">Community not found</h2>
-                <p className="text-gray-400 text-sm">You&apos;re viewing community posts. {roomName} doesn&apos;t exist yet.</p>
-                <Link href="/feed" className="text-[#0079d3] hover:underline text-sm">
-                  ← Back to Feed
-                </Link>
-              </div>
+              <ErrorMessage
+                title="Community not found"
+                message={error || `The community r/${roomName} doesn't exist.`}
+                onRetry={() => window.location.reload()}
+              />
             </main>
             <div className="hidden xl:block w-80 p-4">
               <RedditRightPanel />
@@ -238,18 +255,7 @@ export default function RoomPage() {
           <div className="flex pt-12">
             <RedditSidebar />
             <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
-              <div className="space-y-2.5">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] flex animate-pulse">
-                    <div className="w-10 bg-[#161617]"></div>
-                    <div className="flex-1 p-2">
-                      <div className="h-4 bg-gray-700 rounded w-1/3 mb-2"/>
-                      <div className="h-3 bg-gray-700 rounded w-full mb-1"/>
-                      <div className="h-3 bg-gray-700 rounded w-3/4"/>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <PostLoadingSkeleton count={3} />
             </main>
             <div className="hidden xl:block w-80 p-4">
               <RedditRightPanel />
@@ -316,11 +322,19 @@ export default function RoomPage() {
             )}
 
             {/* Posts */}
-            {posts.length === 0 ? (
-              <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-8 text-center">
-                <div className="text-4xl mb-3">💬</div>
-                <p className="text-[#d7dadc]">No posts yet in r/{roomName}. Start the conversation!</p>
-              </div>
+            {postsError ? (
+              <ErrorMessage
+                message={postsError}
+                onRetry={fetchPosts}
+              />
+            ) : postsLoading ? (
+              <PostLoadingSkeleton count={2} />
+            ) : posts.length === 0 ? (
+              <EmptyState
+                title="No posts yet"
+                description={`Be the first to share something in r/${roomName}!`}
+                icon={<div className="text-4xl">💬</div>}
+              />
             ) : (
               <div className="space-y-2.5">
                 {posts.map(post => (

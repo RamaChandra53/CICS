@@ -80,7 +80,7 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
       
       {/* Description for selected type */}
       <div className="mt-2 text-xs text-gray-500">
-        {postTypes.find(t => t.type === selectedType)?.description}
+        {postTypes.find(postType => postType.type === selectedType)?.description}
       </div>
     </div>
   );

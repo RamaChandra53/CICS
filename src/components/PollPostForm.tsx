@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import RichTextEditor from './RichTextEditor';
+import RichTextEditorModern from './RichTextEditorModern';
 
 interface PollPostFormProps {
   headline: string;
@@ -219,11 +219,11 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
         <label className="block text-sm font-medium text-gray-400 mb-2">
           Additional Context (optional)
         </label>
-        <RichTextEditor
+        <RichTextEditorModern
           value={description}
           onChange={onDescriptionChange}
           placeholder="Add context or explain why this poll matters..."
-          minHeight="120px"
+          className="mb-4"
         />
       </div>
 
