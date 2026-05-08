@@ -3,14 +3,21 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { generateOTP, storeOTP, verifyOTP, sendOTPEmail } from '@/lib/otp';
+import { validateEmailMatchesRoll, validateMGITEmail } from '@/lib/emailValidation';
 
 interface EmailVerificationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  userRollNumber: string;
 }
 
-export default function EmailVerificationModal({ isOpen, onClose, onSuccess }: EmailVerificationModalProps) {
+export default function EmailVerificationModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  userRollNumber,
+}: EmailVerificationModalProps) {
   const supabase = createClient();
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -20,16 +27,17 @@ export default function EmailVerificationModal({ isOpen, onClose, onSuccess }: E
 
   if (!isOpen) return null;
 
-  const validateEmail = (email: string) => {
-    return email.endsWith('@mgit.ac.in') && email.length > '@mgit.ac.in'.length;
-  };
-
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
-    if (!validateEmail(email)) {
+    if (!validateMGITEmail(email)) {
       setError('Please use your MGIT college email (@mgit.ac.in)');
+      return;
+    }
+
+    if (!validateEmailMatchesRoll(email, userRollNumber)) {
+      setError('This email does not match your roll number. Please use your MGIT email.');
       return;
     }
 

@@ -32,7 +32,7 @@ export default function TagFilter({
       try {
         const { data, error } = await supabase
           .from('predefined_tags')
-          .select('*')
+          .select('name, category, usage_count')
           .order('usage_count', { ascending: false })
           .limit(20);
         

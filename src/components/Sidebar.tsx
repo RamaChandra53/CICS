@@ -100,7 +100,7 @@ export default function Sidebar() {
       
       const { data: existingCommunities } = await supabase
         .from('communities')
-        .select('*')
+        .select('id, name, slug, description, icon, type, member_count, created_at')
         .in('slug', coreSubreddits);
       const existingSlugSet = new Set((existingCommunities ?? []).map(c => c.slug));
 

@@ -56,7 +56,7 @@ export async function verifyOTP(email: string, otp: string, type: 'email_verific
   
   const { data, error } = await supabase
     .from('otp_codes')
-    .select('*')
+    .select('id, expires_at')
     .eq('email', email)
     .eq('code', otp)
     .eq('type', type)

@@ -1,8 +1,11 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
+
+const PROFILE_SELECT =
+  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, is_email_verified';
 
 interface ProfileContextType {
   profile: Profile | null;
@@ -17,7 +20,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
@@ -36,7 +39,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       if (user) {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
+          .select(PROFILE_SELECT)
           .eq('id', user.id)
           .single();
         
@@ -54,7 +57,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
 
   const refreshProfile = async () => {
     await fetchProfile();
@@ -62,7 +65,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [fetchProfile]);
 
   return (
     <ProfileContext.Provider value={{ profile, loading, refreshProfile }}>

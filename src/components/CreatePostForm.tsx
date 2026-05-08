@@ -233,6 +233,7 @@ export default function CreatePostForm({ profile, defaultRoom = 'college', onPos
         isOpen={showVerificationModal}
         onClose={() => setShowVerificationModal(false)}
         onSuccess={handleVerificationSuccess}
+        userRollNumber={profile.roll_number || ''}
       />
     </>
   );

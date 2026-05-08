@@ -4,6 +4,9 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
 
+const PROFILE_SELECT =
+  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, is_email_verified';
+
 interface AuthContextType {
   user: { id: string } | null;
   profile: Profile | null;
@@ -43,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           const { data: profileData } = await supabase
             .from('profiles')
-            .select('*')
+            .select(PROFILE_SELECT)
             .eq('id', user.id)
             .single();
             
@@ -78,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentUser) {
           const { data: profileData } = await supabase
             .from('profiles')
-            .select('*')
+            .select(PROFILE_SELECT)
             .eq('id', currentUser.id)
             .single();
             

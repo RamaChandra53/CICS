@@ -13,6 +13,8 @@ import HorizontalVoteButtons from '@/components/HorizontalVoteButtons';
 import CommentHorizontalVotes from '@/components/CommentHorizontalVotes';
 import EmailVerificationModal from '@/components/EmailVerificationModal';
 
+const COMMENTS_PAGE_SIZE = 50;
+
 function CommentItem({
   comment,
   onReply,
@@ -40,13 +42,15 @@ function CommentItem({
         }
       : displayMode === 'partial'
       ? {
-          displayName: `${author?.branch || ''}_${author?.year || ''} ✓`,
+          displayName: `${author?.branch || ''}_${author?.year || ''}`,
           avatar: author?.branch?.[0] || '?',
           avatarBg: 'bg-purple-600/30 text-purple-400',
-          showVerified: false,
+          showVerified: true,
         }
       : {
-          displayName: author?.username ?? 'Anonymous',
+          displayName: author?.roll_number
+            ? `${author.roll_number} · ${author?.branch || 'Unknown'} · ${author?.year || 'Unknown'}`
+            : author?.username ?? 'Anonymous',
           avatar: author?.username?.[0]?.toUpperCase() ?? '?',
           avatarBg: 'bg-indigo-600/30 text-indigo-400',
           showVerified: author?.is_verified || false,
@@ -75,7 +79,7 @@ function CommentItem({
           <div className="mb-1 flex items-center gap-1.5">
             <span className="text-sm font-medium text-white">{displayInfo.displayName}</span>
 
-            {displayInfo.showVerified && displayMode === 'full' && (
+            {displayInfo.showVerified && (
               <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-semibold text-white">
                 ✓
               </span>
@@ -165,6 +169,9 @@ export default function PostPage() {
 
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [flatComments, setFlatComments] = useState<Comment[]>([]);
+  const [commentPage, setCommentPage] = useState(0);
+  const [hasMoreComments, setHasMoreComments] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -174,40 +181,71 @@ export default function PostPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchComments = useCallback(async () => {
-    setCommentsLoading(true);
+  const buildCommentTree = useCallback((items: Comment[]) => {
+    const map: Record<string, Comment & { replies: Comment[] }> = {};
+    const roots: (Comment & { replies: Comment[] })[] = [];
 
-    // Fetch all comments for post, then build tree client-side
-    const { data } = await supabase
-      .from('comments')
-      .select('*, profiles (id, username, is_verified, is_anonymous, year, branch)')
-      .eq('post_id', postId)
-      .order('created_at', { ascending: true });
+    items.forEach((comment) => {
+      map[comment.id] = { ...comment, replies: [] };
+    });
 
-    // Build tree from flat list
-    const buildCommentTree = (comments: Comment[]) => {
-      const map: Record<string, Comment & { replies: Comment[] }> = {};
-      const roots: (Comment & { replies: Comment[] })[] = [];
-      
-      comments.forEach(c => {
-        map[c.id] = { ...c, replies: [] };
-      });
-      
-      comments.forEach(c => {
-        if (c.parent_comment_id) {
-          map[c.parent_comment_id]?.replies.push(map[c.id]);
-        } else {
-          roots.push(map[c.id]);
+    items.forEach((comment) => {
+      if (comment.parent_comment_id && map[comment.parent_comment_id]) {
+        map[comment.parent_comment_id].replies.push(map[comment.id]);
+      } else {
+        roots.push(map[comment.id]);
+      }
+    });
+
+    const sortReplies = (nodes: Array<Comment & { replies: Comment[] }>) => {
+      nodes.forEach((node) => {
+        if (node.replies.length > 0) {
+          node.replies.sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+          sortReplies(node.replies);
         }
       });
-      
-      return roots;
     };
 
-    const commentTree = buildCommentTree((data as Comment[]) ?? []);
-    setComments(commentTree);
-    setCommentsLoading(false);
-  }, [supabase, postId]);
+    roots.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    sortReplies(roots);
+    return roots;
+  }, []);
+
+  const fetchComments = useCallback(
+    async (pageToLoad = 0, options?: { reset?: boolean }) => {
+      setCommentsLoading(true);
+
+      const targetPage = options?.reset ? 0 : pageToLoad;
+      const { data, error: commentsError } = await supabase
+        .from('comments')
+        .select(
+          'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, created_at, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
+        )
+        .eq('post_id', postId)
+        .order('created_at', { ascending: false })
+        .range(targetPage * COMMENTS_PAGE_SIZE, targetPage * COMMENTS_PAGE_SIZE + COMMENTS_PAGE_SIZE - 1);
+
+      if (commentsError) {
+        console.error('Error fetching comments:', commentsError);
+        setCommentsLoading(false);
+        return;
+      }
+
+      const nextComments = (data as Comment[]) ?? [];
+
+      setHasMoreComments(nextComments.length === COMMENTS_PAGE_SIZE);
+      setFlatComments((prev) => {
+        const merged = options?.reset ? nextComments : [...prev, ...nextComments];
+        setComments(buildCommentTree(merged));
+        return merged;
+      });
+
+      setCommentsLoading(false);
+    },
+    [supabase, postId, buildCommentTree]
+  );
 
   const handleCommentDisplayModeChange = (mode: 'full' | 'partial' | 'anonymous') => {
     if (!profile?.is_email_verified && mode !== 'full') {
@@ -240,17 +278,28 @@ export default function PostPage() {
       }
 
       const [{ data: prof }, { data: postData }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase
+          .from('profiles')
+          .select(
+            'id, username, roll_number, full_name, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, is_email_verified'
+          )
+          .eq('id', user.id)
+          .single(),
         supabase
           .from('posts')
-          .select('*, profiles (id, username, is_verified, is_anonymous, year, branch), display_mode')
+          .select(
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
+          )
           .eq('id', postId)
           .single(),
       ]);
 
       setProfile(prof as Profile);
       setPost(postData as Post);
-      await fetchComments();
+      setCommentPage(0);
+      setHasMoreComments(true);
+      setFlatComments([]);
+      await fetchComments(0, { reset: true });
       setLoading(false);
     };
 
@@ -267,7 +316,10 @@ export default function PostPage() {
           filter: `post_id=eq.${postId}`,
         },
         () => {
-          fetchComments();
+          setCommentPage(0);
+          setHasMoreComments(true);
+          setFlatComments([]);
+          fetchComments(0, { reset: true });
         }
       )
       .subscribe();
@@ -309,13 +361,24 @@ export default function PostPage() {
         setCommentDisplayMode('full');
       }
 
-      await fetchComments();
+      setCommentPage(0);
+      setHasMoreComments(true);
+      setFlatComments([]);
+      await fetchComments(0, { reset: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to post comment.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const loadMoreComments = useCallback(() => {
+    if (!commentsLoading && hasMoreComments) {
+      const nextPage = commentPage + 1;
+      setCommentPage(nextPage);
+      fetchComments(nextPage);
+    }
+  }, [commentPage, commentsLoading, hasMoreComments, fetchComments]);
 
   if (loading) {
     return (
@@ -354,10 +417,10 @@ export default function PostPage() {
         }
       : postDisplayMode === 'partial'
       ? {
-          displayName: `${author?.branch || ''}_${author?.year || ''} ✓`,
+          displayName: `${author?.branch || ''}_${author?.year || ''}`,
           avatar: author?.branch?.[0] || '?',
           avatarBg: 'bg-purple-600/30 text-purple-400',
-          showVerified: false,
+          showVerified: true,
         }
       : {
           displayName: author?.roll_number 
@@ -392,7 +455,7 @@ export default function PostPage() {
               <div className="flex items-center gap-1.5">
                 <span className="font-medium text-white">{postDisplayInfo.displayName}</span>
 
-                {postDisplayInfo.showVerified && postDisplayMode === 'full' && (
+                {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
                   <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-semibold text-white">
                     ✓ verified
                   </span>
@@ -425,14 +488,14 @@ export default function PostPage() {
             postId={post.id}
             initialUpvotes={post.upvotes ?? 0}
             initialDownvotes={post.downvotes ?? 0}
-            commentCount={comments.length}
+            commentCount={flatComments.length}
             showActions={true}
           />
         </div>
       </div>
 
       <h2 className="mb-4 font-semibold text-white">
-        💬 {comments.length} Comment{comments.length !== 1 ? 's' : ''}
+        💬 {flatComments.length} Comment{flatComments.length !== 1 ? 's' : ''}
       </h2>
 
       {profile && (
@@ -486,7 +549,7 @@ export default function PostPage() {
       )}
 
       <div className="space-y-4">
-        {commentsLoading ? (
+        {commentsLoading && flatComments.length === 0 ? (
           <div className="py-8 text-center">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-gray-300" />
             <p className="mt-2 text-sm text-gray-400">Loading comments...</p>
@@ -502,7 +565,22 @@ export default function PostPage() {
           ))
         )}
 
-        {comments.length === 0 && !commentsLoading && (
+        {commentsLoading && flatComments.length > 0 && (
+          <div className="py-4 text-center text-sm text-gray-400">Loading more comments...</div>
+        )}
+
+        {hasMoreComments && !commentsLoading && (
+          <div className="flex justify-center py-4">
+            <button
+              onClick={loadMoreComments}
+              className="rounded-lg border border-gray-700 px-4 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
+            >
+              Load more comments
+            </button>
+          </div>
+        )}
+
+         {flatComments.length === 0 && !commentsLoading && (
           <div className="py-8 text-center">
             <p className="text-sm text-gray-400">No comments yet. Be the first!</p>
           </div>
@@ -513,6 +591,7 @@ export default function PostPage() {
         isOpen={showVerificationModal}
         onClose={() => setShowVerificationModal(false)}
         onSuccess={handleVerificationSuccess}
+        userRollNumber={profile?.roll_number || ''}
       />
     </div>
   );

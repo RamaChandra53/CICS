@@ -7,6 +7,9 @@ interface VoteButtonsProps {
   postId: string;
   initialUpvotes: number;
   initialDownvotes: number;
+  initialUserVote?: VoteType | null;
+  currentUserId?: string | null;
+  skipSync?: boolean;
 }
 
 type VoteType = 'up' | 'down';
@@ -15,6 +18,9 @@ export default function VoteButtons({
   postId,
   initialUpvotes,
   initialDownvotes,
+  initialUserVote,
+  currentUserId,
+  skipSync = false,
 }: VoteButtonsProps) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -79,6 +85,14 @@ export default function VoteButtons({
 
   const loadVote = useCallback(async () => {
     try {
+      if (currentUserId !== undefined) {
+        setUserId(currentUserId);
+        setUserVote(initialUserVote ?? null);
+        await syncVoteState(currentUserId);
+        setErrorMessage('');
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -96,11 +110,18 @@ export default function VoteButtons({
     } catch (err: unknown) {
       setErrorMessage(getErrorMessage(err));
     }
-  }, [supabase, syncVoteState]);
+  }, [supabase, syncVoteState, currentUserId, initialUserVote]);
 
   useEffect(() => {
+    if (skipSync) return;
     loadVote();
-  }, [loadVote]);
+  }, [loadVote, skipSync]);
+
+  useEffect(() => {
+    if (!skipSync) return;
+    setUserId(currentUserId ?? null);
+    setUserVote(initialUserVote ?? null);
+  }, [currentUserId, initialUserVote, skipSync]);
 
   const handleVote = async (e: React.MouseEvent, type: VoteType) => {
     e.preventDefault();
@@ -168,7 +189,9 @@ export default function VoteButtons({
         if (error) throw error;
       }
 
-      await syncVoteState(userId);
+      if (!skipSync) {
+        await syncVoteState(userId);
+      }
     } catch (err: unknown) {
       setUserVote(prevUserVote);
       setUpvotes(prevUpvotes);
