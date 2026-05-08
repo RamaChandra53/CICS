@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Community } from '@/types';
+import { Post, Profile, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useRouter } from 'next/navigation';
@@ -79,7 +79,9 @@ export default function FeedPage() {
           return;
         }
 
-        if (!data || data.length === 0) {
+        const postsData = (data as Post[]) ?? [];
+
+        if (postsData.length === 0) {
           if (targetPage === 0) {
             setPosts([]);
           }
@@ -87,7 +89,7 @@ export default function FeedPage() {
           return;
         }
 
-        const authorIds = [...new Set(data.map((post) => post.author_id))];
+        const authorIds = [...new Set(postsData.map((post) => post.author_id))];
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
           .select('id, roll_number, branch, year, section, is_email_verified, username, is_verified, is_anonymous')
@@ -97,11 +99,12 @@ export default function FeedPage() {
           console.error('Error fetching profiles:', profilesError);
         }
 
+        const profilesData = (profiles as Profile[]) ?? [];
         const profileMap = new Map(
-          (profiles || []).map((profile) => [profile.id, profile])
+          profilesData.map((profile) => [profile.id, profile])
         );
 
-        const postIds = data.map((post) => post.id);
+        const postIds = postsData.map((post) => post.id);
         let voteMap = new Map<string, VoteType>();
 
         if (user?.id && postIds.length > 0) {
@@ -114,13 +117,14 @@ export default function FeedPage() {
           if (votesError) {
             console.error('Error fetching post votes:', votesError);
           } else {
+            const votesData = (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
             voteMap = new Map(
-              (votes || []).map((vote) => [vote.post_id, vote.vote_type as VoteType])
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
             );
           }
         }
 
-        const normalized = data.map((post) => ({
+        const normalized = postsData.map((post) => ({
           ...post,
           profiles: profileMap.get(post.author_id) || null,
           comment_count: 0,
@@ -133,7 +137,7 @@ export default function FeedPage() {
           setPosts((prev) => [...prev, ...normalized]);
         }
 
-        setHasMore(data.length === PAGE_SIZE);
+        setHasMore(postsData.length === PAGE_SIZE);
       } catch (error) {
         console.error('Unexpected error fetching feed posts:', error);
         setPostsError(

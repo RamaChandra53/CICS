@@ -52,7 +52,8 @@ export default function ProfilePage() {
           return;
         }
 
-        const postIds = (data ?? []).map((post) => post.id);
+        const postsData = (data as Post[]) ?? [];
+        const postIds = postsData.map((post) => post.id);
         let voteMap = new Map<string, VoteType>();
 
         if (userId && postIds.length > 0) {
@@ -65,13 +66,14 @@ export default function ProfilePage() {
           if (votesError) {
             console.error('Error fetching post votes:', votesError);
           } else {
+            const votesData = (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
             voteMap = new Map(
-              (votes || []).map((vote) => [vote.post_id, vote.vote_type as VoteType])
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
             );
           }
         }
 
-        const normalized = (data ?? []).map((p: Post & { comment_count: { count: number }[] }) => ({
+        const normalized = postsData.map((p: Post & { comment_count: { count: number }[] }) => ({
           ...p,
           comment_count: p.comment_count?.[0]?.count ?? 0,
           user_vote: voteMap.get(p.id) ?? null,

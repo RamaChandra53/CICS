@@ -182,8 +182,12 @@ export default function PostPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const buildCommentTree = useCallback((items: Comment[]) => {
-    const map: Record<string, Comment & { replies: Comment[] }> = {};
-    const roots: (Comment & { replies: Comment[] })[] = [];
+    interface CommentNode extends Comment {
+      replies: CommentNode[];
+    }
+
+    const map: Record<string, CommentNode> = {};
+    const roots: CommentNode[] = [];
 
     items.forEach((comment) => {
       map[comment.id] = { ...comment, replies: [] };
@@ -197,7 +201,7 @@ export default function PostPage() {
       }
     });
 
-    const sortReplies = (nodes: Array<Comment & { replies: Comment[] }>) => {
+    const sortReplies = (nodes: CommentNode[]) => {
       nodes.forEach((node) => {
         if (node.replies.length > 0) {
           node.replies.sort(
