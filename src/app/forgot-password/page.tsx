@@ -1,6 +1,7 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
@@ -37,6 +38,9 @@ export default function ForgotPasswordPage() {
 
   // Check for magic link tokens from password reset email
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+    
     const accessToken = searchParams.get('access_token');
     const refreshToken = searchParams.get('refresh_token');
     const otpFlag = searchParams.get('otp');
