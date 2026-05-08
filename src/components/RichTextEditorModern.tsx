@@ -28,6 +28,9 @@ const RichTextEditorModern: React.FC<RichTextEditorProps> = ({
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const newContent = e.currentTarget.innerHTML || '';
+    // Ensure text direction is left-to-right
+    e.currentTarget.style.direction = 'ltr';
+    e.currentTarget.style.unicodeBidi = 'normal';
     setContent(newContent);
     onChange(newContent);
   };
@@ -93,7 +96,12 @@ const RichTextEditorModern: React.FC<RichTextEditorProps> = ({
         onInput={handleInput}
         onPaste={handlePaste}
         dangerouslySetInnerHTML={{ __html: content }}
-        style={{ minHeight }}
+        style={{ 
+          minHeight,
+          direction: 'ltr',
+          unicodeBidi: 'normal',
+          textAlign: 'left'
+        }}
         data-placeholder={placeholder}
       />
       

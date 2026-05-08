@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { INVALID_ROLL_MESSAGE, parseRollNumber } from '@/lib/parseRoll';
+import { INVALID_ROLL_MESSAGE, parseRollNumber, getCurrentYear } from '@/lib/parseRoll';
 
 const DEFAULT_PASSWORD = 'cics@123';
 
@@ -34,29 +34,85 @@ function isMissingTableError(err: { message?: string | null; code?: string | nul
   );
 }
 
-async function autoJoinCommunities(
+async function updateDynamicCommunities(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  year: string,
+  rollNumber: string,
   branch: string,
   section: string
 ) {
-  // Join communities based on user's roll number: campus + year + branch + section (if multi-section)
-  const slugs = ['campus', `year-${year}`, branch.toLowerCase()];
+  // Calculate current year dynamically
+  const currentYear = getCurrentYear(rollNumber);
+  const isAlumni = currentYear === 'Alumni';
   
-  // Only add section community for branches that have multiple sections
-  const multiSectionBranches = ['CSE', 'ECE'];
-  if (multiSectionBranches.includes(branch)) {
-    slugs.push(`${branch.toLowerCase()}-${section}`);
+  // Get current community memberships
+  const { data: currentMemberships, error: membershipError } = await supabase
+    .from('community_members')
+    .select('community_slug')
+    .eq('user_id', userId);
+    
+  if (membershipError) {
+    if (isMissingTableError(membershipError, 'community_members')) {
+      return;
+    }
+    throw membershipError;
+  }
+
+  const currentSlugs = new Set((currentMemberships ?? []).map(m => m.community_slug));
+  
+  // Determine target communities - Reddit-style 5 core subreddits
+  let targetSlugs = ['campus']; // Everyone joins campus
+  
+  // Add specific communities based on user type
+  if (isAlumni) {
+    targetSlugs.push('alumni');
+  } else {
+    // All current students join placements and clubs
+    targetSlugs.push('placements', 'clubs');
   }
   
+  // Everyone can join confessions (anonymous-only community)
+  targetSlugs.push('confessions');
+
+  // Remove old year/section communities and add new ones
+  const toRemove = [];
+  const toAdd = [];
+
+  // Check which communities to remove - only keep 5 core subreddits
+  const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs', 'alumni'];
+  for (const slug of currentSlugs) {
+    if (!coreSubreddits.includes(slug)) {
+      toRemove.push(slug);
+    }
+  }
+
+  // Check which communities to add
+  for (const slug of targetSlugs) {
+    if (!currentSlugs.has(slug)) {
+      toAdd.push(slug);
+    }
+  }
+
+  // Remove old communities
+  for (const slug of toRemove) {
+    const { error: removeError } = await supabase
+      .from('community_members')
+      .delete()
+      .eq('user_id', userId)
+      .eq('community_slug', slug);
+    if (removeError && !isMissingTableError(removeError, 'community_members')) {
+      throw removeError;
+    }
+  }
+
+  // Add new communities
   const { data: existingCommunities, error: existingCommunitiesError } = await supabase
     .from('communities')
     .select('slug')
-    .in('slug', slugs);
+    .in('slug', toAdd);
+    
   if (existingCommunitiesError) {
     if (isMissingTableError(existingCommunitiesError, 'communities')) {
-      // Allow login to continue on instances where communities migration is not yet applied.
       return;
     }
     throw existingCommunitiesError;
@@ -64,15 +120,12 @@ async function autoJoinCommunities(
 
   const existingSlugSet = new Set((existingCommunities ?? []).map(c => c.slug));
 
-  for (const slug of slugs) {
+  for (const slug of toAdd) {
     if (!existingSlugSet.has(slug)) continue;
     const { error: memberError } = await supabase
       .from('community_members')
       .upsert({ user_id: userId, community_slug: slug }, { onConflict: 'user_id,community_slug' });
-    if (memberError) {
-      if (isMissingTableError(memberError, 'community_members')) {
-        return;
-      }
+    if (memberError && !isMissingTableError(memberError, 'community_members')) {
       throw memberError;
     }
   }
@@ -202,18 +255,28 @@ export default function LoginPage() {
         throw profileError;
       }
 
-      if (isFirstTimeAttempt) {
-        const normalizedBranch = parsedRollForSignup!.branch.trim().toLowerCase();
-        const normalizedSection = parsedRollForSignup!.section.trim().toLowerCase();
-        const normalizedYear = parsedRollForSignup!.yearNumber;
-        await autoJoinCommunities(
-          supabase,
-          userId,
-          normalizedYear,
-          normalizedBranch,
-          normalizedSection
-        );
-      }
+      // Update year dynamically on every login
+      const currentYear = getCurrentYear(normalizedRollNumber);
+      const isAlumni = currentYear === 'Alumni';
+      
+      // Update profile with current year
+      await supabase
+        .from('profiles')
+        .update({ 
+          year: isAlumni ? null : currentYear,
+          branch: parsedRollForSignup?.branch,
+          section: isAlumni ? null : parsedRollForSignup?.section
+        })
+        .eq('id', userId);
+
+      // Update community memberships dynamically
+      await updateDynamicCommunities(
+        supabase,
+        userId,
+        normalizedRollNumber,
+        parsedRollForSignup!.branch,
+        parsedRollForSignup!.section
+      );
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -229,31 +292,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-primary relative overflow-hidden">
-      {/* Atmospheric background elements */}
-      <div className="absolute inset-0">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-accent-primary/10 rounded-full blur-3xl animate-float"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-secondary/10 rounded-full blur-3xl animate-float" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-accent-muted/10 rounded-full blur-3xl animate-float" style={{animationDelay: '2s'}}></div>
-      </div>
-      
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-bg-primary via-bg-secondary to-bg-primary/80"></div>
-      
-      {/* Main content */}
-      <div className="relative min-h-screen flex items-center justify-center px-4 py-12">
-        <div className="max-w-md w-full glass rounded-3xl p-8 sm:p-10 neon-glow animate-glow">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-accent rounded-2xl mb-6 animate-float">
-              <h1 className="text-3xl font-bold text-white neon-text">CICS</h1>
-            </div>
-            <h2 className="text-2xl font-semibold text-text-primary mb-2">Welcome Back</h2>
-            <p className="text-text-secondary text-sm">Enter your roll number to access the campus network</p>
-          </div>
+    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4 py-12">
+      <div className="max-w-md w-full bg-[#141414] border border-gray-800 rounded-2xl p-6 sm:p-7">
+        <div className="text-center mb-6">
+          <h1 className="text-4xl sm:text-5xl font-bold text-white">Anonstud</h1>
+          <p className="text-gray-400 mt-2 text-sm">Bonjour!, my friend</p>
+          <p className="text-gray-400 text-sm">Stay anon and Have fun</p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-secondary text-xs font-medium mb-2">Roll Number</label>
+            <label className="block text-gray-400 text-xs mb-1.5">Roll Number</label>
             <input
               type="text"
               value={rollNumber}
@@ -261,69 +310,69 @@ export default function LoginPage() {
                 setRollNumber(e.target.value.toUpperCase());
                 if (error) setError('');
               }}
-              placeholder="e.g. 25261A0512"
-              className="input-field font-mono text-sm"
+              placeholder="eg: 25261A0512"
+              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
               required
               maxLength={10}
             />
           </div>
 
           <div>
-            <label className="block text-text-secondary text-xs font-medium mb-2">Password</label>
+            <label className="block text-gray-400 text-xs mb-1.5">Password</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Enter your password"
-              className="input-field text-sm"
+              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
               required
             />
           </div>
 
           {isFirstTimeAttempt && (
-            <div className="glass rounded-xl border border-accent-primary/30 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-accent-primary">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-[#6366f1]">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
                 <p className="text-xs font-medium">First-time login detected</p>
               </div>
-              <p className="text-xs text-text-secondary">
+              <p className="text-xs text-gray-400">
                 Your year, branch, and section are auto-detected from your roll number.
               </p>
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="bg-bg-secondary/50 rounded-lg p-2">
-                  <p className="text-xs text-text-muted">Year</p>
-                  <p className="text-sm font-semibold text-text-primary">{parsedRoll ? parsedRoll.year : '-'}</p>
+                <div className="bg-[#111] rounded-lg p-2">
+                  <p className="text-xs text-gray-500">Year</p>
+                  <p className="text-sm font-semibold text-white">{parsedRoll ? parsedRoll.year : '-'}</p>
                 </div>
-                <div className="bg-bg-secondary/50 rounded-lg p-2">
-                  <p className="text-xs text-text-muted">Branch</p>
-                  <p className="text-sm font-semibold text-text-primary">{parsedRoll?.branch ?? '-'}</p>
+                <div className="bg-[#111] rounded-lg p-2">
+                  <p className="text-xs text-gray-500">Branch</p>
+                  <p className="text-sm font-semibold text-white">{parsedRoll?.branch ?? '-'}</p>
                 </div>
-                <div className="bg-bg-secondary/50 rounded-lg p-2">
-                  <p className="text-xs text-text-muted">Section</p>
-                  <p className="text-sm font-semibold text-text-primary">{parsedRoll?.section ?? '-'}</p>
+                <div className="bg-[#111] rounded-lg p-2">
+                  <p className="text-xs text-gray-500">Section</p>
+                  <p className="text-sm font-semibold text-white">{parsedRoll?.section ?? '-'}</p>
                 </div>
               </div>
             </div>
           )}
 
           {showInvalidRollMessage && (
-            <div className="glass rounded-xl border border-error/30 p-3">
-              <p className="text-error text-sm">{INVALID_ROLL_MESSAGE}</p>
-            </div>
+            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
+              {INVALID_ROLL_MESSAGE}
+            </p>
           )}
 
           {error && (
-            <div className="glass rounded-xl border border-error/30 p-3">
-              <p className="text-error text-sm">{error}</p>
-            </div>
+            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
+              {error}
+            </p>
           )}
 
           <button
             type="submit"
             disabled={isSubmitDisabled}
-            className="btn-primary w-full font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
@@ -333,30 +382,26 @@ export default function LoginPage() {
                 </svg>
                 Signing in...
               </span>
-            ) : 'Access Campus Network'}
+            ) : 'Login'}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-border-primary space-y-3">
+        <div className="mt-6 pt-6 border-t border-gray-700 space-y-3">
           <div className="text-center">
-            <p className="text-xs text-text-muted">
-              Default password: <span className="font-mono text-accent-primary bg-bg-secondary/30 px-2 py-1 rounded">{DEFAULT_PASSWORD}</span>
+            <p className="text-xs text-gray-400">
+              First time password: <span className="font-mono text-[#6366f1] bg-[#111] px-2 py-1 rounded">{DEFAULT_PASSWORD}</span>
             </p>
           </div>
           
           <div className="text-center">
             <button
               onClick={() => router.push('/forgot-password')}
-              className="text-accent-primary hover:text-accent-secondary text-sm font-medium transition-colors inline-flex items-center gap-1"
+              className="text-gray-400 hover:text-white text-sm transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              Forgot password?
+              ← Forgot password?
             </button>
           </div>
         </div>
-      </div>
       </div>
     </div>
   );

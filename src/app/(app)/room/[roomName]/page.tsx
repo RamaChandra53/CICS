@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post, Community, Profile } from '@/types';
 import PostCard from '@/components/PostCard';
@@ -18,6 +18,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
+import TagFilter from '@/components/TagFilter';
 
 export default function RoomPage() {
   const supabase = createClient();
@@ -34,11 +35,31 @@ export default function RoomPage() {
   const [error, setError] = useState('');
   const [postsError, setPostsError] = useState('');
   const [postsLoading, setPostsLoading] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  
+  // Store fetched posts per community in a ref
+  const postCache = useRef<Record<string, Post[]>>({});
   const postRoom = roomName;
   const supportsPosting = isMember;
 
   const fetchPosts = useCallback(async () => {
     try {
+      // Map community slugs to room values
+      let roomFilter = postRoom;
+      if (postRoom === 'campus') roomFilter = 'college';
+      
+      // Create cache key including tags
+      const cacheKey = `${roomFilter}_${selectedTags.sort().join(',')}`;
+      
+      // If already cached, use it instantly
+      if (postCache.current[cacheKey]) {
+        setPosts(postCache.current[cacheKey]);
+        setPostsLoading(false);
+        return;
+      }
+      
+      // Otherwise fetch and cache
       setPostsLoading(true);
       setPostsError('');
 
@@ -51,12 +72,15 @@ export default function RoomPage() {
         `)
         .order('created_at', { ascending: false })
         .limit(50);
-
-      // Map community slugs to room values
-      let roomFilter = postRoom;
-      if (postRoom === 'campus') roomFilter = 'college';
       
       query = query.eq('room', roomFilter);
+
+      // Apply tag filtering if tags are selected
+      if (selectedTags.length > 0) {
+        // Filter posts that contain any of the selected tags
+        const tagFilters = selectedTags.map(tag => `tags.ilike.%${tag}%`).join(',');
+        query = query.or(tagFilters);
+      }
 
       const { data, error } = await query;
       
@@ -71,6 +95,9 @@ export default function RoomPage() {
           ...p,
           comment_count: 0, // Set default for now, can be fetched separately if needed
         }));
+        
+        // Cache the posts
+        postCache.current[roomFilter] = normalized;
         setPosts(normalized);
       }
     } catch (error) {
@@ -79,7 +106,48 @@ export default function RoomPage() {
     } finally {
       setPostsLoading(false);
     }
-  }, [supabase, postRoom]);
+  }, [supabase, postRoom, isMember, selectedTags]);
+
+  // Prefetch adjacent communities
+  const prefetchCommunities = useCallback(async (slugs: string[]) => {
+    for (const slug of slugs) {
+      let roomFilter = slug;
+      if (slug === 'campus') roomFilter = 'college';
+      
+      if (!postCache.current[roomFilter]) {
+        try {
+          const { data } = await supabase
+            .from('posts')
+            .select(`
+              *,
+              profiles (id, username, is_verified, is_anonymous),
+              display_mode
+            `)
+            .eq('room', roomFilter)
+            .order('created_at', { ascending: false })
+            .limit(20);
+          
+          if (data) {
+            const normalized = data.map((p: Post) => ({
+              ...p,
+              comment_count: p.comment_count || 0
+            }));
+            postCache.current[roomFilter] = normalized;
+          }
+        } catch (error) {
+          console.error(`Error prefetching ${slug}:`, error);
+        }
+      }
+    }
+  }, [supabase]);
+
+  // Handle community switching
+  useEffect(() => {
+    // When room changes, set switching state to show loading indicator
+    setSwitching(true);
+    const timer = setTimeout(() => setSwitching(false), 500); // Hide after 500ms
+    return () => clearTimeout(timer);
+  }, [roomName]);
 
   useEffect(() => {
     const init = async () => {
@@ -98,64 +166,106 @@ export default function RoomPage() {
       try {
         // Add timeout to prevent infinite loading
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Room initialization timeout')), 10000)
+          setTimeout(() => reject(new Error('Room initialization timeout')), 20000)
         );
 
         const initPromise = async () => {
-          // First try to find community by slug
-          const { data: communityData, error: communityError } = await supabase
-            .from('communities')
-            .select('*')
-            .eq('slug', roomName)
-            .maybeSingle();
+          try {
+            // Parallel fetch community and membership data
+            const [communityResult, memberResult] = await Promise.allSettled([
+              supabase
+                .from('communities')
+                .select('*')
+                .eq('slug', roomName)
+                .maybeSingle(),
+              // Only check membership if we have authProfile
+              authProfile ? supabase
+                .from('community_members')
+                .select('user_id')
+                .eq('user_id', authProfile.id)
+                .eq('community_slug', roomName)
+                .maybeSingle() : Promise.resolve({ data: null, error: null })
+            ]);
 
-          if (communityError) {
-            console.error('Community fetch error:', communityError);
-            throw new Error(communityError.message || 'Failed to fetch community');
-          }
+            let communityData: any = null;
+            let memberData: any = null;
+            let communityError: any = null;
+            let memberError: any = null;
 
-          // If no community found, check if it's a special room that allows viewing
-          if (!communityData) {
-            // Allow viewing confessions, rants, random, placement-talk without membership
-            const allowedRooms = ['confessions', 'rants', 'random', 'placement-talk'];
-            if (allowedRooms.includes(roomName)) {
-              // Create a virtual community for display purposes
-              const virtualCommunity: Community = {
-                id: roomName,
-                name: roomName.charAt(0).toUpperCase() + roomName.slice(1).replace('-', ' '),
-                slug: roomName,
-                description: `Share your ${roomName.replace('-', ' ')} anonymously`,
-                icon: roomName === 'confessions' ? '🤫' : roomName === 'rants' ? '😤' : roomName === 'random' ? '🎲' : '💼',
-                member_count: 0,
-                type: 'open',
-                created_at: new Date().toISOString()
-              };
-              setCommunity(virtualCommunity);
-              setIsMember(false); // Non-members can view but not post
+            if (communityResult.status === 'fulfilled') {
+              communityData = communityResult.value.data;
+              communityError = communityResult.value.error;
             } else {
-              console.log('Community not found:', roomName);
-              setError('Community not found');
-              return;
+              communityError = communityResult.reason;
             }
-          } else {
-            setCommunity(communityData as Community);
 
-            // Check membership for real communities
-            const { data: memberData, error: memberError } = await supabase
-              .from('community_members')
-              .select('user_id')
-              .eq('user_id', authProfile.id)
-              .eq('community_slug', roomName)
-              .maybeSingle();
+            if (memberResult.status === 'fulfilled') {
+              memberData = memberResult.value.data;
+              memberError = memberResult.value.error;
+            } else {
+              memberError = memberResult.reason;
+            }
+
+            if (communityError) {
+              console.error('Community fetch error:', communityError);
+              throw new Error(communityError.message || 'Failed to fetch community');
+            }
+
+            // If no community found, check if it's a special room that allows viewing
+            if (!communityData) {
+              // Allow viewing confessions, rants, random, placement-talk without membership
+              const allowedRooms = ['confessions', 'rants', 'random', 'placement-talk'];
+              if (allowedRooms.includes(roomName)) {
+                // Create a virtual community for display purposes
+                const virtualCommunity: Community = {
+                  id: roomName,
+                  name: roomName.charAt(0).toUpperCase() + roomName.slice(1).replace('-', ' '),
+                  slug: roomName,
+                  description: `Share your ${roomName.replace('-', ' ')} anonymously`,
+                  icon: roomName === 'confessions' ? '🤫' : roomName === 'rants' ? '😤' : roomName === 'random' ? '🎲' : '💼',
+                  member_count: 0,
+                  type: 'open',
+                  created_at: new Date().toISOString()
+                };
+                setCommunity(virtualCommunity);
+                setIsMember(false); // Non-members can view but not post
+              } else {
+                console.log('Community not found:', roomName);
+                setError('Community not found');
+                return;
+              }
+            } else {
+              setCommunity(communityData as Community);
               
-            if (memberError) {
-              console.error('Membership check error:', memberError);
-              // Don't throw error for membership check, just default to not member
+              // Handle membership check with error resilience
+              if (memberError) {
+                console.error('Membership check error:', memberError);
+                // Don't throw error for membership check, just default to not member
+                setIsMember(false);
+              } else {
+                setIsMember(Boolean(memberData));
+              }
             }
-            setIsMember(Boolean(memberData));
-          }
 
-          await fetchPosts();
+            // Fetch posts separately to avoid blocking
+            await fetchPosts();
+            
+            // After main feed loads, prefetch adjacent communities silently
+            const allCommunities = ['campus', 'confessions', 'random', 'placement-talk', 'rants'];
+            const currentIndex = allCommunities.indexOf(roomName);
+            if (currentIndex !== -1) {
+              const adjacentCommunities: string[] = [];
+              // Get next 3 communities (circular)
+              for (let i = 1; i <= 3; i++) {
+                const nextIndex = (currentIndex + i) % allCommunities.length;
+                adjacentCommunities.push(allCommunities[nextIndex]);
+              }
+              // Prefetch in background without blocking
+              setTimeout(() => prefetchCommunities(adjacentCommunities), 2000); // Increased delay
+            }
+          } catch (error) {
+            throw error; // Re-throw to be caught by outer try-catch
+          }
         };
 
         await Promise.race([initPromise(), timeoutPromise]);
@@ -276,6 +386,10 @@ export default function RoomPage() {
           
           {/* Main Content */}
           <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+            {/* Subtle loading indicator for community switching */}
+            {switching && (
+              <div className="h-1 bg-indigo-500 animate-pulse w-full mb-4" />
+            )}
             {/* Community Header */}
             <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-4 mb-4">
               <div className="flex items-start justify-between gap-4">
@@ -308,6 +422,15 @@ export default function RoomPage() {
                   {error}
                 </p>
               )}
+            </div>
+
+            {/* Tag Filter */}
+            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-4 mb-4">
+              <TagFilter
+                selectedTags={selectedTags}
+                onTagsChange={setSelectedTags}
+                maxTags={5}
+              />
             </div>
 
             {/* Create Post */}

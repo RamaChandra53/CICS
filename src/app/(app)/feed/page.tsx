@@ -34,16 +34,22 @@ export default function FeedPage() {
 
   const fetchCommunities = useCallback(async () => {
     try {
+      console.log('fetchCommunities: Starting query...');
+      const queryStart = Date.now();
+      
       const { data, error } = await supabase
         .from('communities')
         .select('*')
         .order('member_count', { ascending: false });
+
+      console.log(`fetchCommunities: Query completed in ${Date.now() - queryStart}ms`);
 
       if (error) {
         console.error('Error fetching communities:', error);
         return;
       }
 
+      console.log(`fetchCommunities: Found ${data?.length || 0} communities`);
       setCommunities(data || []);
     } catch (error) {
       console.error('Unexpected error fetching communities:', error);
@@ -55,17 +61,33 @@ export default function FeedPage() {
       setPostsLoading(true);
       setPostsError('');
 
-      // Single joined query to fetch posts with profiles and votes
+      console.log(`fetchPosts: Fetching page ${page}...`);
+      
+      // Simplified query to avoid timeout - fetch posts first, then profiles separately
+      console.log('fetchPosts: Starting posts query...');
+      const postsQueryStart = Date.now();
+      
       const { data, error } = await supabase
         .from('posts')
         .select(`
-          *,
-          profiles(roll_number, branch, year, section, is_email_verified, username, is_verified, is_anonymous),
-          post_votes(vote_type, user_id)
+          id,
+          author_id,
+          room,
+          content,
+          image_url,
+          is_anon_post,
+          year_tag,
+          branch_tag,
+          section_tag,
+          created_at,
+          upvotes,
+          downvotes
         `)
-        .eq('room', 'college')
+        .eq('room', 'campus')
         .order('created_at', { ascending: false })
         .range(page * 20, (page + 1) * 20 - 1);
+
+      console.log(`fetchPosts: Posts query completed in ${Date.now() - postsQueryStart}ms`);
 
       if (error) {
         console.error('Error fetching feed posts:', error);
@@ -73,11 +95,50 @@ export default function FeedPage() {
         return;
       }
 
-      if (data) {
-        const normalized = data.map((p: Post) => ({
-          ...p,
-          comment_count: 0, // Set default for now, can be fetched separately if needed
+      if (data && data.length > 0) {
+        console.log(`fetchPosts: Found ${data.length} posts`);
+        
+        // Get unique author IDs to fetch profiles in batch
+        console.log('fetchPosts: Building author ID list...');
+        const authorIdsStart = Date.now();
+        const authorIds = [...new Set(data.map(post => post.author_id))];
+        console.log(`fetchPosts: Author IDs prepared in ${Date.now() - authorIdsStart}ms, unique authors: ${authorIds.length}`);
+        
+        // Fetch profiles for all authors in one query
+        console.log('fetchPosts: Starting profiles query...');
+        const profilesQueryStart = Date.now();
+        
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, roll_number, branch, year, section, is_email_verified, username, is_verified, is_anonymous')
+          .in('id', authorIds);
+
+        console.log(`fetchPosts: Profiles query completed in ${Date.now() - profilesQueryStart}ms`);
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+        }
+
+        console.log(`fetchPosts: Found ${profiles?.length || 0} profiles`);
+
+        // Create a map of profiles for quick lookup
+        console.log('fetchPosts: Creating profile map...');
+        const mapStart = Date.now();
+        const profileMap = new Map(
+          (profiles || []).map(profile => [profile.id, profile])
+        );
+        console.log(`fetchPosts: Profile map created in ${Date.now() - mapStart}ms`);
+
+        // Combine posts with their profiles
+        console.log('fetchPosts: Combining posts with profiles...');
+        const combineStart = Date.now();
+        const normalized = data.map((post: any) => ({
+          ...post,
+          profiles: profileMap.get(post.author_id) || null,
+          post_votes: [], // Empty for now, can be fetched separately if needed
+          comment_count: 0,
         }));
+        console.log(`fetchPosts: Posts combined in ${Date.now() - combineStart}ms`);
         
         if (page === 0) {
           setPosts(normalized);
@@ -87,6 +148,13 @@ export default function FeedPage() {
         
         // Check if there are more posts to load
         setHasMore(data.length === 20);
+      } else {
+        // No posts found
+        console.log('fetchPosts: No posts found');
+        if (page === 0) {
+          setPosts([]);
+        }
+        setHasMore(false);
       }
     } catch (error) {
       console.error('Unexpected error fetching feed posts:', error);
@@ -115,30 +183,38 @@ export default function FeedPage() {
 
       try {
         console.log('Feed page: Starting initialization...');
-        // Add timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Feed initialization timeout')), 60000)
-        );
-
-        const fetchPromise = async () => {
-          console.log('Feed page: Fetching posts...');
-          setPage(0);
-          setHasMore(true);
-          await fetchCommunities();
-          await fetchPosts(0);
-          console.log('Feed page: Posts and communities fetched');
-        };
-
-        await Promise.race([fetchPromise(), timeoutPromise]);
+        
+        // Try to fetch data without timeout first to see what's happening
+        console.log('Feed page: Starting fetch...');
+        setPage(0);
+        setHasMore(true);
+        
+        console.log('Feed page: Fetching communities...');
+        const communitiesStart = Date.now();
+        await fetchCommunities();
+        console.log(`Feed page: Communities fetched in ${Date.now() - communitiesStart}ms`);
+        
+        console.log('Feed page: Fetching posts...');
+        const postsStart = Date.now();
+        await fetchPosts(0);
+        console.log(`Feed page: Posts fetched in ${Date.now() - postsStart}ms`);
+        
+        console.log('Feed page: All fetch operations completed');
         console.log('Feed page: Initialization completed');
       } catch (error) {
         console.error('Feed initialization error:', error);
-        if (error instanceof Error && error.message === 'Feed initialization timeout') {
-          console.error('Feed page initialization timed out');
-          setPostsError('Feed loading timed out. Please try again.');
+        
+        // If there's a database error, try to load with minimal data
+        if (error instanceof Error) {
+          console.error('Error details:', error.message);
+          setPostsError(`Failed to load feed: ${error.message}. Please refresh the page.`);
         } else {
-          setPostsError(error instanceof Error ? error.message : 'Failed to load feed');
+          setPostsError('Failed to load feed. Please refresh the page.');
         }
+        
+        // Set empty state to allow UI to render
+        setPosts([]);
+        setCommunities([]);
       } finally {
         console.log('Feed page: Setting loading to false');
         setLoading(false);
@@ -153,7 +229,7 @@ export default function FeedPage() {
         event: '*',
         schema: 'public',
         table: 'posts',
-        filter: 'room=eq.college',
+        filter: 'room=eq.campus',
       }, () => {
         fetchPosts();
       })

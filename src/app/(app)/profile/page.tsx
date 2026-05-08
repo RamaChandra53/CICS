@@ -188,9 +188,13 @@ export default function ProfilePage() {
 
               {!authProfile.is_anonymous && (
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {authProfile.year && (
+                  {authProfile.year ? (
                     <span className="bg-gray-800 text-gray-400 text-xs px-2.5 py-1 rounded-full">
                       📅 {authProfile.year} Year
+                    </span>
+                  ) : (
+                    <span className="bg-purple-800/30 text-purple-400 text-xs px-2.5 py-1 rounded-full border border-purple-700/50">
+                      🎓 Alumni
                     </span>
                   )}
                   {authProfile.branch && (
@@ -198,7 +202,7 @@ export default function ProfilePage() {
                       💻 {authProfile.branch}
                     </span>
                   )}
-                  {authProfile.section && (
+                  {authProfile.section && authProfile.year && (
                     <span className="bg-gray-800 text-gray-400 text-xs px-2.5 py-1 rounded-full">
                       👥 Section {authProfile.section}
                     </span>

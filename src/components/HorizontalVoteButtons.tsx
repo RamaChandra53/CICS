@@ -9,6 +9,7 @@ interface HorizontalVoteButtonsProps {
   initialDownvotes: number;
   commentCount?: number;
   showActions?: boolean;
+  postContent?: string;
 }
 
 type VoteType = 'up' | 'down';
@@ -19,6 +20,7 @@ export default function HorizontalVoteButtons({
   initialDownvotes,
   commentCount = 0,
   showActions = true,
+  postContent = '',
 }: HorizontalVoteButtonsProps) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -35,6 +37,40 @@ export default function HorizontalVoteButtons({
       if (typeof message === 'string' && message.trim()) return message;
     }
     return 'Failed to record vote. Please try again.';
+  };
+
+  // Share functionality
+  const handleShare = useCallback(async () => {
+    const postUrl = `${window.location.origin}/post/${postId}`;
+    const shareText = postContent?.split('\n')[0].substring(0, 100) || 'Check out this post';
+    
+    if (navigator.share) {
+      // Native share API for mobile
+      try {
+        await navigator.share({
+          title: 'CICS Post',
+          text: shareText,
+          url: postUrl
+        });
+      } catch (error) {
+        console.error('Share failed:', error);
+        // Fallback to clipboard
+        await copyToClipboard(postUrl);
+      }
+    } else {
+      // Fallback for desktop - copy to clipboard
+      await copyToClipboard(postUrl);
+    }
+  }, [postId, postContent]);
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Show success feedback (you could add a toast here)
+      console.log('Post link copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
   };
 
   useEffect(() => {
@@ -229,7 +265,10 @@ export default function HorizontalVoteButtons({
             <span className="text-xs">💬</span>
             <span className="text-xs">{commentCount} Comments</span>
           </button>
-          <button className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors">
+          <button 
+            onClick={handleShare}
+            className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors"
+          >
             <span className="text-xs">↗</span>
             <span className="text-xs">Share</span>
           </button>

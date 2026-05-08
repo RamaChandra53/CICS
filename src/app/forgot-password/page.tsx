@@ -1,14 +1,13 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
-export const revalidate = 0;
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { parseRollNumber } from '@/lib/parseRoll';
 import { generateOTP, storeOTP, verifyOTP, sendOTPEmail } from '@/lib/otp';
+import { validateMGITEmail, validateEmailMatchesRoll } from '@/lib/emailValidation';
 
 function getReadableErrorMessage(err: unknown) {
   if (err instanceof Error) return err.message;
@@ -76,7 +75,7 @@ export default function ForgotPasswordPage() {
   const showInvalidRollMessage = rollNumber.trim().length > 0 && !parsedRoll;
 
   const validateEmail = (email: string) => {
-    return email.endsWith('@mgit.ac.in') && email.length > '@mgit.ac.in'.length;
+    return validateMGITEmail(email);
   };
 
   const handleSendOTP = async (e: React.FormEvent) => {
@@ -95,6 +94,11 @@ export default function ForgotPasswordPage() {
 
     if (!validateEmail(email)) {
       setError('Please use your MGIT college email (@mgit.ac.in)');
+      return;
+    }
+
+    if (!validateEmailMatchesRoll(email, rollNumber.trim().toUpperCase())) {
+      setError('This email doesn\'t match your roll number. Please use your own MGIT email.');
       return;
     }
 

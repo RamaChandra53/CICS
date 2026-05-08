@@ -25,9 +25,18 @@ function ErrorBoundaryComponent({ children, fallback }: Props) {
   React.useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled promise rejection:', event.reason);
+      console.error('Promise rejection details:', {
+        reason: event.reason,
+        type: typeof event.reason,
+        stack: event.reason instanceof Error ? event.reason.stack : 'No stack available'
+      });
+      
+      // Try to prevent the default browser behavior
+      event.preventDefault();
+      
       setErrorState({
         hasError: true,
-        error: event.reason instanceof Error ? event.reason : new Error('Unhandled promise rejection')
+        error: event.reason instanceof Error ? event.reason : new Error(`Unhandled promise rejection: ${JSON.stringify(event.reason)}`)
       });
     };
 

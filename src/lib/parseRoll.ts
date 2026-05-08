@@ -5,12 +5,7 @@ type ParsedRoll = {
   section: string;
 };
 
-const YEAR_MAP: Record<string, ParsedRoll['yearNumber']> = {
-  '25': '1',
-  '24': '2',
-  '23': '3',
-  '22': '4',
-};
+// Dynamic year calculation - no more hardcoded year mapping
 
 const YEAR_LABEL_MAP: Record<ParsedRoll['yearNumber'], string> = {
   '1': '1st',
@@ -73,6 +68,26 @@ function resolveSection(branch: string, sectionKey: string) {
   return '1';
 }
 
+export function getCurrentYear(rollNumber: string): string {
+  const intakeYear = parseInt(rollNumber.slice(0, 2))
+  const now = new Date()
+  // Academic year starts in July
+  const academicYear = now.getMonth() >= 6 
+    ? now.getFullYear() % 100 
+    : (now.getFullYear() - 1) % 100
+  
+  const diff = academicYear - intakeYear
+  
+  const yearMap: Record<number, string> = {
+    0: '1st',
+    1: '2nd',
+    2: '3rd',
+    3: '4th',
+  }
+  
+  return yearMap[diff] ?? 'Alumni'
+}
+
 export function parseRollNumber(roll: string): ParsedRoll | null {
   const normalized = roll.trim().toUpperCase();
   if (normalized.length !== 10) return null;
@@ -84,16 +99,32 @@ export function parseRollNumber(roll: string): ParsedRoll | null {
   const branchCode = match[3];
   const studentCode = match[4];
 
-  const yearNumber = YEAR_MAP[intakeYear];
   const branch = BRANCH_MAP[branchCode];
-  if (!yearNumber || !branch) return null;
+  if (!branch) return null;
 
   const sectionKey = `${branchCode}${studentCode}`;
   const section = resolveSection(branch, sectionKey);
   if (!section) return null;
 
+  // Use dynamic year calculation
+  const currentYear = getCurrentYear(normalized);
+  let yearNumber: string;
+  
+  if (currentYear === 'Alumni') {
+    yearNumber = 'Alumni';
+  } else {
+    // Map year labels back to numbers for compatibility
+    const labelToNumber: Record<string, string> = {
+      '1st': '1',
+      '2nd': '2',
+      '3rd': '3',
+      '4th': '4',
+    };
+    yearNumber = labelToNumber[currentYear] || '1';
+  }
+
   return {
-    year: YEAR_LABEL_MAP[yearNumber],
+    year: currentYear,
     yearNumber,
     branch,
     section,

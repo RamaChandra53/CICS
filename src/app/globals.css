@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Bricolage+Grotesque:wght@200;300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -45,9 +45,10 @@
 body {
   color: var(--text-primary);
   background: var(--bg-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Space Grotesk', 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 400;
   line-height: 1.6;
+  font-feature-settings: "ss01" 1, "ss02" 1;
 }
 
 /* Custom scrollbar */
@@ -197,6 +198,13 @@ body {
   
   .animate-glow {
     animation: glow 2s ease-in-out infinite alternate;
+  }
+  
+  /* Fix text direction issues */
+  .rich-text-editor [contenteditable] {
+    direction: ltr !important;
+    unicode-bidi: normal !important;
+    text-align: left !important;
   }
 }
 

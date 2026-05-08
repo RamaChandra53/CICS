@@ -34,35 +34,8 @@ export default function RedditRightPanel({ currentRoom }: { currentRoom?: string
         </div>
       )}
 
-      {/* About CICS */}
-      <div className="p-4">
-        <h3 className="text-white font-bold text-sm mb-3">About CICS</h3>
-        <div className="space-y-2 text-gray-400 text-sm">
-          <div>• College Internal Communication System</div>
-          <div>• Connect with students across all branches</div>
-          <div>• Share campus updates and experiences</div>
-          <div>• Anonymous posting supported</div>
-          <div>• Verified student accounts only</div>
-        </div>
-      </div>
-
-      {/* Quick Links */}
-      <div className="p-4 border-t border-[#343536]">
-        <h3 className="text-white font-bold text-sm mb-3">Quick Links</h3>
-        <div className="space-y-2">
-          <a href="#" className="block text-[#0079d3] hover:underline text-sm">Campus Rules</a>
-          <a href="#" className="block text-[#0079d3] hover:underline text-sm">Academic Calendar</a>
-          <a href="#" className="block text-[#0079d3] hover:underline text-sm">Placement Resources</a>
-          <a href="#" className="block text-[#0079d3] hover:underline text-sm">Hostel Info</a>
-        </div>
-      </div>
-
-      {/* Create Post Button */}
-      <div className="p-4 border-t border-[#343536]">
-        <button className="w-full bg-[#0079d3] hover:bg-[#0066b3] text-white py-2 px-4 rounded-full font-medium text-sm transition-colors">
-          Create Post
-        </button>
-      </div>
-    </div>
+      
+      
+          </div>
   );
 }

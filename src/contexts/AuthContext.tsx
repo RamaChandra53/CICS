@@ -24,9 +24,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     const initializeAuth = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user }, error } = await supabase.auth.getUser();
         
         if (!mounted) return;
+        
+        // Handle refresh token errors gracefully
+        if (error && error.message?.includes('Refresh Token Not Found')) {
+          console.warn('Session expired, clearing auth state');
+          await supabase.auth.signOut();
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
         
         if (user) {
           setUser(user);
@@ -43,6 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
+        // Clear auth state on any auth error
+        if (error instanceof Error && error.message.includes('Refresh Token')) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setProfile(null);
+        }
       } finally {
         if (mounted) {
           setLoading(false);
@@ -84,7 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
     setUser(null);
     setProfile(null);
   };

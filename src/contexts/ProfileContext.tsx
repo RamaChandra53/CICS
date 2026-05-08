@@ -19,21 +19,38 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      // Handle auth errors gracefully
+      if (authError) {
+        console.warn('Auth error in ProfileContext:', authError);
+        if (authError.message?.includes('Refresh Token') || authError.message?.includes('lock')) {
+          console.log('Clearing auth state due to token conflict');
+          await supabase.auth.signOut();
+          setProfile(null);
+        }
+        setLoading(false);
+        return;
+      }
       
       if (user) {
-        const { data: profileData } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
           .single();
         
-        if (profileData) {
+        if (profileError) {
+          console.error('Profile fetch error:', profileError);
+        } else if (profileData) {
           setProfile(profileData as Profile);
         }
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Unexpected error fetching profile:', error);
+      // Clear auth state on unexpected errors
+      await supabase.auth.signOut();
+      setProfile(null);
     } finally {
       setLoading(false);
     }

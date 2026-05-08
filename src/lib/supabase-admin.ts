@@ -7,7 +7,10 @@ export function createAdminClient() {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
   if (!supabaseServiceKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not defined');
+    console.warn('SUPABASE_SERVICE_ROLE_KEY not defined, falling back to regular client');
+    // Fallback to regular client for development
+    const { createClient } = require('./supabase');
+    return createClient();
   }
   
   return createClient(supabaseUrl, supabaseServiceKey, {

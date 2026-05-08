@@ -89,29 +89,22 @@ export default function Sidebar() {
       : [];
 
     // Existing users may not have been backfilled into community_members.
-    // Bootstrap them into their communities so the sidebar is never empty.
+    // Bootstrap them into the 5 core subreddits so the sidebar is never empty.
     if (communities.length === 0) {
-      const yearSlug = profile?.year ? `year-${profile.year}` : null;
-      const branchSlug = profile?.branch?.toLowerCase() ?? null;
-      const sectionSlug = profile?.branch && profile?.section
-        ? `${profile.branch.toLowerCase()}-${profile.section.toLowerCase()}`
-        : null;
+      const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs'];
       
-      const autoSlugs = ['campus', yearSlug, branchSlug].filter(Boolean) as string[];
-      
-      // Only add section community for branches that have multiple sections
-      const multiSectionBranches = ['CSE', 'ECE'];
-      if (profile?.branch && multiSectionBranches.includes(profile.branch) && sectionSlug) {
-        autoSlugs.push(sectionSlug);
+      // Add alumni if user is alumni (no year)
+      if (!profile?.year) {
+        coreSubreddits.push('alumni');
       }
       
       const { data: existingCommunities } = await supabase
         .from('communities')
-        .select('slug')
-        .in('slug', autoSlugs);
+        .select('*')
+        .in('slug', coreSubreddits);
       const existingSlugSet = new Set((existingCommunities ?? []).map(c => c.slug));
 
-      for (const slug of autoSlugs) {
+      for (const slug of coreSubreddits) {
         if (!existingSlugSet.has(slug)) continue;
         await ensureMembership(supabase, user.id, slug);
       }
@@ -139,31 +132,33 @@ export default function Sidebar() {
     }
 
     const allJoined = profile?.is_anonymous
-      ? communities.filter(c => ['campus', 'confessions', 'rants'].includes(c.slug))
+      ? communities.filter(c => ['campus', 'confessions'].includes(c.slug))
       : communities;
 
-    const yearSlug = profile?.year ? `year-${profile.year.replace(/\D/g, '') || profile.year.toLowerCase()}` : null;
-    const branchSlug = profile?.branch?.toLowerCase() ?? null;
-    const sectionSlug = profile?.branch && profile?.section
-      ? `${profile.branch.toLowerCase()}-${profile.section.toLowerCase()}`
-      : null;
-    const mySlugSet = new Set(['campus', yearSlug, branchSlug, sectionSlug].filter(Boolean) as string[]);
+    // Define the 5 core subreddits
+    const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs', 'alumni'];
+    
+    // For alumni, include alumni community, for students include placements/clubs
+    const userCoreSubreddits = !profile?.year 
+      ? ['campus', 'confessions', 'placements', 'clubs', 'alumni']
+      : ['campus', 'confessions', 'placements', 'clubs'];
 
     const mine = allJoined
-      .filter(c => mySlugSet.has(c.slug))
+      .filter(c => userCoreSubreddits.includes(c.slug))
       .sort((a, b) => b.member_count - a.member_count);
     const joined = allJoined
-      .filter(c => !mySlugSet.has(c.slug))
+      .filter(c => !userCoreSubreddits.includes(c.slug))
       .sort((a, b) => b.member_count - a.member_count);
 
-    const { data: openCommunities } = await supabase
+    // Only show core subreddits that user hasn't joined yet
+    const { data: coreCommunities } = await supabase
       .from('communities')
       .select('id,name,slug,description,icon,type,member_count,created_at')
-      .eq('type', 'open')
+      .in('slug', coreSubreddits)
       .order('member_count', { ascending: false });
 
     const joinedSlugSet = new Set(allJoined.map(c => c.slug));
-    const explore = (openCommunities ?? []).filter(c => !joinedSlugSet.has(c.slug));
+    const explore = (coreCommunities ?? []).filter(c => !joinedSlugSet.has(c.slug));
 
     setMyCommunities(mine);
     setJoinedCommunities(joined);
@@ -175,8 +170,14 @@ export default function Sidebar() {
   }, [fetchJoinedCommunities]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
+    try {
+      await supabase.auth.signOut();
+      router.push('/');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Still try to redirect even if sign out fails
+      router.push('/');
+    }
   };
 
   return (
@@ -192,16 +193,24 @@ export default function Sidebar() {
         </Link>
       </div>
 
-      {/* Rooms */}
+      {/* Reddit-style Subreddits */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-200px)]">
-        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">My Communities</p>
+        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">Core Subreddits</p>
         {myCommunities.map(renderCommunityLink)}
 
-        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2 mt-2">Joined</p>
-        {joinedCommunities.map(renderCommunityLink)}
+        {joinedCommunities.length > 0 && (
+          <>
+            <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2 mt-2">Other Communities</p>
+            {joinedCommunities.map(renderCommunityLink)}
+          </>
+        )}
 
-        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2 mt-2">Explore</p>
-        {exploreCommunities.map(renderCommunityLink)}
+        {exploreCommunities.length > 0 && (
+          <>
+            <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2 mt-2">Available</p>
+            {exploreCommunities.map(renderCommunityLink)}
+          </>
+        )}
       </nav>
 
       {/* Bottom links */}

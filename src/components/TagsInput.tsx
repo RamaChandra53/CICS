@@ -1,6 +1,14 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createClient } from '@/lib/supabase';
+
+interface PredefinedTag {
+  name: string;
+  category: string;
+  description: string;
+  usage_count: number;
+}
 
 interface TagsInputProps {
   tags: string[];
@@ -9,6 +17,7 @@ interface TagsInputProps {
   maxTags?: number;
   className?: string;
   suggestions?: string[];
+  showCategories?: boolean;
 }
 
 const TagsInput: React.FC<TagsInputProps> = ({
@@ -17,27 +26,58 @@ const TagsInput: React.FC<TagsInputProps> = ({
   placeholder = "Add tags...",
   maxTags = 10,
   className = '',
-  suggestions = []
+  suggestions = [],
+  showCategories = true
 }) => {
+  const supabase = createClient();
   const [inputValue, setInputValue] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
+  const [filteredSuggestions, setFilteredSuggestions] = useState<PredefinedTag[]>([]);
+  const [predefinedTags, setPredefinedTags] = useState<PredefinedTag[]>([]);
+  const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch predefined tags on mount
+  useEffect(() => {
+    const fetchPredefinedTags = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('predefined_tags')
+          .select('*')
+          .order('usage_count', { ascending: false });
+        
+        if (error) throw error;
+        setPredefinedTags(data || []);
+      } catch (error) {
+        console.error('Error fetching predefined tags:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPredefinedTags();
+  }, [supabase]);
 
   // Filter suggestions based on input
   useEffect(() => {
-    if (inputValue && suggestions.length > 0) {
-      const filtered = suggestions.filter(
-        suggestion => 
-          suggestion.toLowerCase().includes(inputValue.toLowerCase()) &&
-          !tags.includes(suggestion)
-      ).slice(0, 5);
+    if (inputValue) {
+      const filtered = predefinedTags.filter(
+        tag => 
+          tag.name.toLowerCase().includes(inputValue.toLowerCase()) &&
+          !tags.includes(tag.name)
+      ).slice(0, 8);
       setFilteredSuggestions(filtered);
       setShowSuggestions(filtered.length > 0);
     } else {
-      setShowSuggestions(false);
+      // Show popular tags when input is empty
+      const popular = predefinedTags
+        .filter(tag => !tags.includes(tag.name))
+        .slice(0, 5);
+      setFilteredSuggestions(popular);
+      setShowSuggestions(popular.length > 0);
     }
-  }, [inputValue, suggestions, tags]);
+  }, [inputValue, predefinedTags, tags]);
 
   const addTag = (tag: string) => {
     const trimmedTag = tag.trim().toLowerCase();
@@ -68,8 +108,8 @@ const TagsInput: React.FC<TagsInputProps> = ({
     }
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    addTag(suggestion);
+  const handleSuggestionClick = (suggestion: PredefinedTag) => {
+    addTag(suggestion.name);
   };
 
   const handleInputBlur = () => {
@@ -83,7 +123,7 @@ const TagsInput: React.FC<TagsInputProps> = ({
   };
 
   return (
-    <div className={`tags-input ${className}`}>
+    <div className={`tags-input ${className} relative`}>
       <div className="flex flex-wrap items-center gap-2 p-3 bg-[#1a1a1b] border border-[#343536] rounded-lg focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-colors">
         {/* Render existing tags */}
         {tags.map((tag, index) => (
@@ -91,7 +131,7 @@ const TagsInput: React.FC<TagsInputProps> = ({
             key={index}
             className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-600 text-white text-sm rounded-md"
           >
-            <span>{tag}</span>
+            <span>#{tag}</span>
             <button
               type="button"
               onClick={() => removeTag(index)}
@@ -127,15 +167,39 @@ const TagsInput: React.FC<TagsInputProps> = ({
 
       {/* Suggestions dropdown */}
       {showSuggestions && (
-        <div className="absolute z-10 mt-1 w-full bg-[#1a1a1b] border border-[#343536] rounded-lg shadow-lg max-h-40 overflow-y-auto">
+        <div className="absolute z-10 mt-1 w-full bg-[#1a1a1b] border border-[#343536] rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {showCategories && (
+            <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-700">
+              Popular Tags
+            </div>
+          )}
           {filteredSuggestions.map((suggestion, index) => (
             <button
-              key={index}
+              key={suggestion.name}
               type="button"
               onClick={() => handleSuggestionClick(suggestion)}
-              className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-[#343536] hover:text-white transition-colors first:rounded-t-lg last:rounded-b-lg"
+              className="w-full px-3 py-2 text-left text-sm hover:bg-[#343536] transition-colors first:rounded-t-lg last:rounded-b-lg group"
             >
-              {suggestion}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-indigo-400 group-hover:text-indigo-300">#{suggestion.name}</span>
+                  {showCategories && (
+                    <span className="text-xs text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
+                      {suggestion.category}
+                    </span>
+                  )}
+                </div>
+                {suggestion.usage_count > 0 && (
+                  <span className="text-xs text-gray-500">
+                    {suggestion.usage_count}
+                  </span>
+                )}
+              </div>
+              {showCategories && suggestion.description && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {suggestion.description}
+                </div>
+              )}
             </button>
           ))}
         </div>
