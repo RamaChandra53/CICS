@@ -1,10 +1,11 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { parseRollNumber } from '@/lib/parseRoll';
 import { generateOTP, storeOTP, verifyOTP, sendOTPEmail } from '@/lib/otp';
 import { validateMGITEmail, validateEmailMatchesRoll } from '@/lib/emailValidation';
@@ -23,7 +24,7 @@ function getReadableErrorMessage(err: unknown) {
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
-  const searchParams = useSearchParams();
+  const [searchParams, setSearchParams] = useState<any>(null);
   const supabase = createClient();
   const [step, setStep] = useState<'details' | 'otp' | 'newPassword'>('details');
   const [loading, setLoading] = useState(false);
@@ -41,10 +42,22 @@ export default function ForgotPasswordPage() {
     setIsClient(true);
   }, []);
 
+  // Initialize searchParams on client side
+  useEffect(() => {
+    if (isClient && typeof window !== 'undefined') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        setSearchParams(urlParams);
+      } catch (error) {
+        console.error('Error parsing URL params:', error);
+      }
+    }
+  }, [isClient]);
+
   // Check for magic link tokens from password reset email
   useEffect(() => {
     // Only run on client side
-    if (!isClient) return;
+    if (!isClient || !searchParams) return;
     
     const accessToken = searchParams.get('access_token');
     const refreshToken = searchParams.get('refresh_token');
@@ -78,7 +91,7 @@ export default function ForgotPasswordPage() {
       // User clicked reset link and should enter OTP
       setStep('otp');
     }
-  }, [searchParams, supabase, isClient]);
+  }, [isClient, searchParams, supabase]);
 
   const parsedRoll = parseRollNumber(rollNumber);
   const showInvalidRollMessage = rollNumber.trim().length > 0 && !parsedRoll;
@@ -236,6 +249,19 @@ export default function ForgotPasswordPage() {
       setLoading(false);
     }
   };
+
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full bg-[#141414] border border-gray-800 rounded-2xl p-6 sm:p-7">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+            <p className="text-gray-400 mt-4">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4 py-12">
