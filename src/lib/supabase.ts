@@ -1,8 +1,8 @@
 import { createBrowserClient } from '@supabase/ssr';
 
 let browserClient: ReturnType<typeof createBrowserClient> | null = null;
-const FALLBACK_SUPABASE_URL = 'http://127.0.0.1:54321';
-const FALLBACK_SUPABASE_ANON_KEY = 'public-anon-key-placeholder';
+const FALLBACK_SUPABASE_URL = 'https://missing-env.invalid';
+const FALLBACK_SUPABASE_ANON_KEY = 'missing-env-anon-key';
 
 export function createClient() {
   if (browserClient) {
