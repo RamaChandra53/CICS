@@ -33,7 +33,7 @@ export default function RoomPage() {
   const router = useRouter();
   const params = useParams();
   const rawRoomName = params.roomName as string;
-  const roomName = /^[a-z0-9-]+$/i.test(rawRoomName) ? rawRoomName : '';
+  const roomName = /^[a-z0-9-]{1,64}$/i.test(rawRoomName) ? rawRoomName : '';
   const supabase = useMemo(() => createClient(), []);
   const { user, profile: authProfile, loading: authLoading } = useAuth();
 

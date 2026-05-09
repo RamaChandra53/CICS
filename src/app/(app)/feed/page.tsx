@@ -68,7 +68,7 @@ export default function FeedPage() {
           .select(
             'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
           )
-          .in('room', [...FEED_ROOMS])
+          .in('room', FEED_ROOMS)
           .order('created_at', { ascending: false })
           .range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
 
