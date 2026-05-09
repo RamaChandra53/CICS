@@ -584,7 +584,7 @@ export default function PostPage() {
           </div>
         )}
 
-         {flatComments.length === 0 && !commentsLoading && (
+        {flatComments.length === 0 && !commentsLoading && (
           <div className="py-8 text-center">
             <p className="text-sm text-gray-400">No comments yet. Be the first!</p>
           </div>
