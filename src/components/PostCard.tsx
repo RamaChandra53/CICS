@@ -173,7 +173,7 @@ const PostCard = memo(function PostCard({
           <div className="flex items-center gap-4 text-xs text-text-muted mt-3 pt-3 border-t border-border-primary">
             <button aria-label="View comments" className="flex items-center gap-1 hover:text-accent-primary transition-all duration-300 transform hover:scale-110">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h0v3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
               </svg>
               <span>{post.comment_count || 0} Comments</span>
             </button>
