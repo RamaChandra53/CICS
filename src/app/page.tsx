@@ -284,6 +284,14 @@ export default function LoginPage() {
         throw profileError;
       }
 
+      const { data: persistedProfile } = await supabase
+        .from('profiles')
+        .select('is_first_login')
+        .eq('id', userId)
+        .maybeSingle();
+      const finalShouldRequirePasswordReset =
+        persistedProfile?.is_first_login === true || shouldRequirePasswordReset;
+
       // Update year dynamically on every login
       const currentYear = getCurrentYear(normalizedRollNumber);
       const isAlumni = currentYear === 'Alumni';
@@ -307,7 +315,7 @@ export default function LoginPage() {
         console.error('Community sync failed:', communityError);
       });
 
-      router.push(shouldRequirePasswordReset ? '/set-password' : '/feed');
+      router.push(finalShouldRequirePasswordReset ? '/set-password' : '/feed');
     } catch (err: unknown) {
       setError(getReadableErrorMessage(err));
     } finally {
