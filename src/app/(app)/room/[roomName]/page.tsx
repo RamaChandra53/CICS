@@ -20,6 +20,7 @@ import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import TagFilter from '@/components/TagFilter';
 
 const PAGE_SIZE = 15;
+const VIEWABLE_FALLBACK_ROOMS = ['confessions', 'rants', 'random', 'placement-talk'] as const;
 
 type VoteType = 'up' | 'down';
 type CommunityQueryRecord = Pick<
@@ -29,10 +30,11 @@ type CommunityQueryRecord = Pick<
 type CommunityMembershipRecord = { user_id: string };
 
 export default function RoomPage() {
-  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const params = useParams();
-  const roomName = params.roomName as string;
+  const rawRoomName = params.roomName as string;
+  const roomName = /^[a-z0-9-]+$/i.test(rawRoomName) ? rawRoomName : '';
+  const supabase = useMemo(() => createClient(), []);
   const { user, profile: authProfile, loading: authLoading } = useAuth();
 
   const [posts, setPosts] = useState<Post[]>([]);
@@ -53,7 +55,7 @@ export default function RoomPage() {
   const tagFilterInitialized = useRef(false);
   const postRoom = roomName;
   const supportsPosting = isMember;
-  const hasSafeRoomName = /^[a-z0-9-]+$/i.test(roomName);
+  const hasSafeRoomName = roomName.length > 0;
 
   const fetchPosts = useCallback(
     async (pageToLoad = 0, options?: { reset?: boolean }) => {
@@ -311,8 +313,7 @@ export default function RoomPage() {
             // If no community found, check if it's a special room that allows viewing
             if (!communityData) {
               // Allow viewing confessions, rants, random, placement-talk without membership
-               const allowedRooms = ['confessions', 'rants', 'random', 'placement-talk'];
-              if (allowedRooms.includes(roomName)) {
+               if (VIEWABLE_FALLBACK_ROOMS.includes(roomName as (typeof VIEWABLE_FALLBACK_ROOMS)[number])) {
                 // Create a virtual community for display purposes
                 const virtualCommunity: Community = {
                   id: roomName,

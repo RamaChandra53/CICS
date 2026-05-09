@@ -230,7 +230,7 @@ export default function PostPage() {
         )
         .eq('post_id', postId)
         .order('created_at', { ascending: false })
-        .range(targetPage * COMMENTS_PAGE_SIZE, targetPage * COMMENTS_PAGE_SIZE + COMMENTS_PAGE_SIZE - 1);
+        .range(targetPage * COMMENTS_PAGE_SIZE, (targetPage + 1) * COMMENTS_PAGE_SIZE - 1);
 
       if (commentsError) {
         console.error('Error fetching comments:', commentsError);

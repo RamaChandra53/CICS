@@ -20,6 +20,7 @@ import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import SkeletonFeed from '@/components/ui/SkeletonFeed';
 
 const PAGE_SIZE = 15;
+const FEED_ROOMS = ['campus', 'college'] as const;
 
 type VoteType = 'up' | 'down';
 
@@ -62,14 +63,12 @@ export default function FeedPage() {
         setPostsError('');
 
         const targetPage = options?.reset ? 0 : pageToLoad;
-        const roomFilter = ['campus', 'college'];
-
         const { data, error } = await supabase
           .from('posts')
           .select(
             'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
           )
-          .in('room', roomFilter)
+          .in('room', [...FEED_ROOMS])
           .order('created_at', { ascending: false })
           .range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
 
