@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { INVALID_ROLL_MESSAGE, parseRollNumber, getCurrentYear } from '@/lib/parseRoll';
@@ -37,10 +37,11 @@ function isMissingTableError(err: { message?: string | null; code?: string | nul
 async function updateDynamicCommunities(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  rollNumber: string,
-  branch: string,
-  section: string
+  rollNumber: string
 ) {
+  type CommunityMembership = { community_slug: string };
+  type CommunitySlugRecord = { slug: string };
+
   // Calculate current year dynamically
   const currentYear = getCurrentYear(rollNumber);
   const isAlumni = currentYear === 'Alumni';
@@ -58,10 +59,12 @@ async function updateDynamicCommunities(
     throw membershipError;
   }
 
-  const currentSlugs = new Set((currentMemberships ?? []).map(m => m.community_slug));
+  const currentSlugs = new Set(
+    ((currentMemberships ?? []) as CommunityMembership[]).map((membership) => membership.community_slug)
+  );
   
   // Determine target communities - Reddit-style 5 core subreddits
-  let targetSlugs = ['campus']; // Everyone joins campus
+  const targetSlugs: string[] = ['campus']; // Everyone joins campus
   
   // Add specific communities based on user type
   if (isAlumni) {
@@ -75,8 +78,8 @@ async function updateDynamicCommunities(
   targetSlugs.push('confessions');
 
   // Remove old year/section communities and add new ones
-  const toRemove = [];
-  const toAdd = [];
+  const toRemove: string[] = [];
+  const toAdd: string[] = [];
 
   // Check which communities to remove - only keep 5 core subreddits
   const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs', 'alumni'];
@@ -118,7 +121,9 @@ async function updateDynamicCommunities(
     throw existingCommunitiesError;
   }
 
-  const existingSlugSet = new Set((existingCommunities ?? []).map(c => c.slug));
+  const existingSlugSet = new Set(
+    ((existingCommunities ?? []) as CommunitySlugRecord[]).map((community) => community.slug)
+  );
 
   for (const slug of toAdd) {
     if (!existingSlugSet.has(slug)) continue;
@@ -133,7 +138,7 @@ async function updateDynamicCommunities(
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [rollNumber, setRollNumber] = useState('');
@@ -144,17 +149,24 @@ export default function LoginPage() {
   const isSubmitDisabled = loading || (isFirstTimeAttempt && !parsedRoll);
 
   useEffect(() => {
+    let cancelled = false;
+
     const checkSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || cancelled) return;
       const { data: profile } = await supabase
         .from('profiles')
         .select('is_first_login')
         .eq('id', user.id)
         .single();
-      router.replace(profile?.is_first_login ? '/set-password' : '/feed');
+      if (!cancelled) {
+        router.replace(profile?.is_first_login ? '/set-password' : '/feed');
+      }
     };
     checkSession();
+    return () => {
+      cancelled = true;
+    };
   }, [router, supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -270,13 +282,13 @@ export default function LoginPage() {
         .eq('id', userId);
 
       // Update community memberships dynamically
-      await updateDynamicCommunities(
+      void updateDynamicCommunities(
         supabase,
         userId,
-        normalizedRollNumber,
-        parsedRollForSignup!.branch,
-        parsedRollForSignup!.section
-      );
+        normalizedRollNumber
+      ).catch((communityError) => {
+        console.error('Community sync failed:', communityError);
+      });
 
       const { data: profile } = await supabase
         .from('profiles')

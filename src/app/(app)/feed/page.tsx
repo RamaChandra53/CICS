@@ -2,9 +2,9 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Profile, Community } from '@/types';
+import { Post, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useRouter } from 'next/navigation';
@@ -24,7 +24,7 @@ const PAGE_SIZE = 15;
 type VoteType = 'up' | 'down';
 
 export default function FeedPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const { user, profile: authProfile, loading: authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
@@ -67,7 +67,7 @@ export default function FeedPage() {
         const { data, error } = await supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes'
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
           )
           .in('room', roomFilter)
           .order('created_at', { ascending: false })
@@ -88,21 +88,6 @@ export default function FeedPage() {
           setHasMore(false);
           return;
         }
-
-        const authorIds = [...new Set(postsData.map((post) => post.author_id))];
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, roll_number, branch, year, section, is_email_verified, username, is_verified, is_anonymous')
-          .in('id', authorIds);
-
-        if (profilesError) {
-          console.error('Error fetching profiles:', profilesError);
-        }
-
-        const profilesData = (profiles as Profile[]) ?? [];
-        const profileMap = new Map(
-          profilesData.map((profile) => [profile.id, profile])
-        );
 
         const postIds = postsData.map((post) => post.id);
         let voteMap = new Map<string, VoteType>();
@@ -126,7 +111,7 @@ export default function FeedPage() {
 
         const normalized = postsData.map((post) => ({
           ...post,
-          profiles: profileMap.get(post.author_id) || null,
+          profiles: post.profiles ?? null,
           comment_count: 0,
           user_vote: voteMap.get(post.id) ?? null,
         }));

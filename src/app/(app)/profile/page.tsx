@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Profile } from '@/types';
+import { Post } from '@/types';
 import PostCard from '@/components/PostCard';
 import EmailVerificationModal from '@/components/EmailVerificationModal';
 import { useRouter } from 'next/navigation';

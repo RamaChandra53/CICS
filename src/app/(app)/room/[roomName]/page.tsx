@@ -2,13 +2,12 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Community, Profile } from '@/types';
+import { Post, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import CreatePostForm from '@/components/CreatePostForm';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import RedditNavbar from '@/components/RedditNavbar';
 import RedditSidebar from '@/components/RedditSidebar';
@@ -23,9 +22,14 @@ import TagFilter from '@/components/TagFilter';
 const PAGE_SIZE = 15;
 
 type VoteType = 'up' | 'down';
+type CommunityQueryRecord = Pick<
+  Community,
+  'id' | 'name' | 'slug' | 'description' | 'icon' | 'type' | 'member_count' | 'created_at'
+>;
+type CommunityMembershipRecord = { user_id: string };
 
 export default function RoomPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const params = useParams();
   const roomName = params.roomName as string;
@@ -49,6 +53,7 @@ export default function RoomPage() {
   const tagFilterInitialized = useRef(false);
   const postRoom = roomName;
   const supportsPosting = isMember;
+  const hasSafeRoomName = /^[a-z0-9-]+$/i.test(roomName);
 
   const fetchPosts = useCallback(
     async (pageToLoad = 0, options?: { reset?: boolean }) => {
@@ -230,6 +235,12 @@ export default function RoomPage() {
   useEffect(() => {
     const init = async () => {
       if (authLoading) return;
+
+      if (!hasSafeRoomName) {
+        setError('Invalid community');
+        setLoading(false);
+        return;
+      }
       
       if (!user) {
         router.push('/');
@@ -257,31 +268,39 @@ export default function RoomPage() {
                 .eq('slug', roomName)
                 .maybeSingle(),
               // Only check membership if we have authProfile
-              authProfile ? supabase
-                .from('community_members')
-                .select('user_id')
-                .eq('user_id', authProfile.id)
-                .eq('community_slug', roomName)
-                .maybeSingle() : Promise.resolve({ data: null, error: null })
+              authProfile
+                ? supabase
+                    .from('community_members')
+                    .select('user_id')
+                    .eq('user_id', authProfile.id)
+                    .eq('community_slug', roomName)
+                    .maybeSingle()
+                : Promise.resolve({ data: null, error: null })
             ]);
 
-            let communityData: any = null;
-            let memberData: any = null;
-            let communityError: any = null;
-            let memberError: any = null;
+            let communityData: CommunityQueryRecord | null = null;
+            let memberData: CommunityMembershipRecord | null = null;
+            let communityError: { message?: string } | null = null;
+            let memberError: { message?: string } | null = null;
 
             if (communityResult.status === 'fulfilled') {
-              communityData = communityResult.value.data;
+              communityData = (communityResult.value.data as CommunityQueryRecord | null) ?? null;
               communityError = communityResult.value.error;
             } else {
-              communityError = communityResult.reason;
+              communityError =
+                communityResult.reason instanceof Error
+                  ? communityResult.reason
+                  : { message: 'Failed to fetch community' };
             }
 
             if (memberResult.status === 'fulfilled') {
-              memberData = memberResult.value.data;
+              memberData = (memberResult.value.data as CommunityMembershipRecord | null) ?? null;
               memberError = memberResult.value.error;
             } else {
-              memberError = memberResult.reason;
+              memberError =
+                memberResult.reason instanceof Error
+                  ? memberResult.reason
+                  : { message: 'Failed to fetch membership' };
             }
 
             if (communityError) {
@@ -292,7 +311,7 @@ export default function RoomPage() {
             // If no community found, check if it's a special room that allows viewing
             if (!communityData) {
               // Allow viewing confessions, rants, random, placement-talk without membership
-              const allowedRooms = ['confessions', 'rants', 'random', 'placement-talk'];
+               const allowedRooms = ['confessions', 'rants', 'random', 'placement-talk'];
               if (allowedRooms.includes(roomName)) {
                 // Create a virtual community for display purposes
                 const virtualCommunity: Community = {
@@ -364,26 +383,32 @@ export default function RoomPage() {
     init();
 
     // Map community slugs to room values for real-time subscription
-    const roomFilter = roomName === 'campus' ? 'room=in.(campus,college)' : `room=eq.${roomName}`;
-    
-    const channel = supabase
-      .channel(`room-${roomName}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'posts',
-        filter: roomFilter,
-      }, () => {
-        setPage(0);
-        setHasMore(true);
-        fetchPosts(0, { reset: true });
-      })
-      .subscribe();
+     const channel = hasSafeRoomName
+       ? supabase
+           .channel(`room-${roomName}`)
+           .on(
+             'postgres_changes',
+             {
+               event: 'INSERT',
+               schema: 'public',
+               table: 'posts',
+               filter: roomName === 'campus' ? 'room=in.(campus,college)' : `room=eq.${roomName}`,
+             },
+             () => {
+               setPage(0);
+               setHasMore(true);
+               fetchPosts(0, { reset: true });
+             }
+           )
+           .subscribe()
+       : null;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, postRoom, authProfile, roomName, authLoading, user, router, fetchPosts, prefetchCommunities]);
+     return () => {
+       if (channel) {
+         supabase.removeChannel(channel);
+       }
+     };
+   }, [supabase, postRoom, authProfile, roomName, authLoading, user, router, fetchPosts, prefetchCommunities, hasSafeRoomName]);
 
   useEffect(() => {
     if (tagFilterInitialized.current) {

@@ -8,10 +8,10 @@ import { Post, Comment, Profile, ROOMS } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import VoteButtons from '@/components/VoteButtons';
 import HorizontalVoteButtons from '@/components/HorizontalVoteButtons';
 import CommentHorizontalVotes from '@/components/CommentHorizontalVotes';
 import EmailVerificationModal from '@/components/EmailVerificationModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 const COMMENTS_PAGE_SIZE = 50;
 
@@ -166,6 +166,7 @@ export default function PostPage() {
   const router = useRouter();
   const params = useParams();
   const postId = params.postId as string;
+  const { user, profile: authProfile, loading: authLoading } = useAuth();
 
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -271,40 +272,49 @@ export default function PostPage() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const init = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      if (authLoading) return;
 
       if (!user) {
         router.push('/');
         return;
       }
 
-      const [{ data: prof }, { data: postData }] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select(
-            'id, username, roll_number, full_name, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, is_email_verified'
-          )
-          .eq('id', user.id)
-          .single(),
-        supabase
+      setProfile(authProfile ?? null);
+      setError('');
+
+      try {
+        const { data: postData, error: postError } = await supabase
           .from('posts')
           .select(
             'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
           )
           .eq('id', postId)
-          .single(),
-      ]);
+          .single();
 
-      setProfile(prof as Profile);
-      setPost(postData as Post);
-      setCommentPage(0);
-      setHasMoreComments(true);
-      setFlatComments([]);
-      await fetchComments(0, { reset: true });
-      setLoading(false);
+        if (postError) {
+          throw postError;
+        }
+
+        if (cancelled) return;
+
+        setPost(postData as Post);
+        setCommentPage(0);
+        setHasMoreComments(true);
+        setFlatComments([]);
+        await fetchComments(0, { reset: true });
+      } catch (initError) {
+        console.error('Error loading post:', initError);
+        if (!cancelled) {
+          setError(initError instanceof Error ? initError.message : 'Failed to load post.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     };
 
     init();
@@ -329,9 +339,10 @@ export default function PostPage() {
       .subscribe();
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [supabase, router, postId, fetchComments]);
+  }, [supabase, router, postId, fetchComments, authLoading, user, authProfile]);
 
   const handleAddComment = async (
     parentId?: string,
