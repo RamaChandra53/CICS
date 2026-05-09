@@ -186,6 +186,7 @@ export default function LoginPage() {
 
       const email = toInternalEmail(normalizedRollNumber);
       let userId: string | null = null;
+      let createdNewAccount = false;
 
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
@@ -223,6 +224,7 @@ export default function LoginPage() {
         if (signUpError) {
           throw new Error('Invalid roll number or password.');
         }
+        createdNewAccount = true;
 
         if (!signUpData.session) {
           const { data: fallbackSignIn, error: fallbackSignInError } = await supabase.auth.signInWithPassword({
@@ -244,13 +246,29 @@ export default function LoginPage() {
         throw new Error('Unable to complete sign in. Please try again.');
       }
 
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('is_first_login')
+        .eq('id', userId)
+        .maybeSingle();
+      const existingFirstLoginState = existingProfile?.is_first_login;
+      const inferredFirstLoginState =
+        createdNewAccount ||
+        existingFirstLoginState === true ||
+        (existingFirstLoginState == null && isFirstTimeAttempt);
+      const shouldRequirePasswordReset = inferredFirstLoginState;
+
       const profilePayload: Record<string, string | boolean> = {
         id: userId,
         username: normalizedRollNumber,
         roll_number: normalizedRollNumber,
         is_anonymous: false,
-        is_first_login: isFirstTimeAttempt,
       };
+      if (existingFirstLoginState != null) {
+        profilePayload.is_first_login = existingFirstLoginState;
+      } else if (inferredFirstLoginState) {
+        profilePayload.is_first_login = true;
+      }
       if (isFirstTimeAttempt) {
         profilePayload.year = parsedRollForSignup!.year;
         profilePayload.branch = parsedRollForSignup!.branch;
@@ -266,6 +284,14 @@ export default function LoginPage() {
         }
         throw profileError;
       }
+
+      const { data: persistedProfile } = await supabase
+        .from('profiles')
+        .select('is_first_login')
+        .eq('id', userId)
+        .maybeSingle();
+      const finalShouldRequirePasswordReset =
+        persistedProfile?.is_first_login ?? shouldRequirePasswordReset;
 
       // Update year dynamically on every login
       const currentYear = getCurrentYear(normalizedRollNumber);
@@ -290,12 +316,7 @@ export default function LoginPage() {
         console.error('Community sync failed:', communityError);
       });
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_first_login')
-        .eq('id', userId)
-        .single();
-      router.push(profile?.is_first_login ? '/set-password' : '/feed');
+      router.push(finalShouldRequirePasswordReset ? '/set-password' : '/feed');
     } catch (err: unknown) {
       setError(getReadableErrorMessage(err));
     } finally {
