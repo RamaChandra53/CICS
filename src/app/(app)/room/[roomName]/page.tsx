@@ -72,8 +72,10 @@ export default function RoomPage() {
               .eq('user_id', user.id)
               .in('post_id', cachedPostIds);
 
+            const votesData =
+              (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
             const voteMap = new Map(
-              (votes || []).map((vote) => [vote.post_id, vote.vote_type as VoteType])
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
             );
 
             const updatedPosts = cached.posts.map((post) => ({
@@ -126,7 +128,8 @@ export default function RoomPage() {
           return;
         }
 
-        const postIds = (data ?? []).map((post) => post.id);
+        const postsData = (data as Post[]) ?? [];
+        const postIds = postsData.map((post) => post.id);
         let voteMap = new Map<string, VoteType>();
 
         if (user?.id && postIds.length > 0) {
@@ -139,13 +142,15 @@ export default function RoomPage() {
           if (votesError) {
             console.error('Error fetching post votes:', votesError);
           } else {
+            const votesData =
+              (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
             voteMap = new Map(
-              (votes || []).map((vote) => [vote.post_id, vote.vote_type as VoteType])
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
             );
           }
         }
 
-        const normalized = (data ?? []).map((post: Post) => ({
+        const normalized = postsData.map((post: Post) => ({
           ...post,
           comment_count: 0,
           user_vote: voteMap.get(post.id) ?? null,
