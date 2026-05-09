@@ -171,7 +171,7 @@ const PostCard = memo(function PostCard({
 
           {/* Actions */}
           <div className="flex items-center gap-4 text-xs text-text-muted mt-3 pt-3 border-t border-border-primary">
-            <button className="flex items-center gap-1 hover:text-accent-primary transition-all duration-300 transform hover:scale-110">
+            <button aria-label="View comments" className="flex items-center gap-1 hover:text-accent-primary transition-all duration-300 transform hover:scale-110">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h0v3z" />
               </svg>
@@ -179,6 +179,7 @@ const PostCard = memo(function PostCard({
             </button>
             <button 
               onClick={handleShare}
+              aria-label="Share post"
               className="flex items-center gap-1 hover:text-accent-primary transition-all duration-300 transform hover:scale-110"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -186,7 +187,7 @@ const PostCard = memo(function PostCard({
               </svg>
               <span>Share</span>
             </button>
-            <button className="flex items-center gap-1 hover:text-error transition-all duration-300 transform hover:scale-110">
+            <button aria-label="Report post" className="flex items-center gap-1 hover:text-error transition-all duration-300 transform hover:scale-110">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
               </svg>
