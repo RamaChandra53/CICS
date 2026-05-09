@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Profile } from '@/types';
+import { Post } from '@/types';
 import PostCard from '@/components/PostCard';
 import EmailVerificationModal from '@/components/EmailVerificationModal';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
+
+const PAGE_SIZE = 10;
+
+type VoteType = 'up' | 'down';
 
 export default function ProfilePage() {
   const supabase = createClient();
@@ -23,42 +27,77 @@ export default function ProfilePage() {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [postsError, setPostsError] = useState('');
   const [postsLoading, setPostsLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchUserPosts = useCallback(async (userId: string) => {
-    try {
-      setPostsLoading(true);
-      setPostsError('');
+  const fetchUserPosts = useCallback(
+    async (userId: string, pageToLoad = 0, options?: { reset?: boolean }) => {
+      try {
+        setPostsLoading(true);
+        setPostsError('');
 
-      const { data, error } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          profiles (id, username, is_verified, is_anonymous),
-          comment_count:comments(count)
-        `)
-        .eq('author_id', userId)
-        .order('created_at', { ascending: false });
+        const targetPage = options?.reset ? 0 : pageToLoad;
+        const { data, error } = await supabase
+          .from('posts')
+          .select(
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch), comment_count:comments(count)'
+          )
+          .eq('author_id', userId)
+          .order('created_at', { ascending: false })
+          .range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
 
-      if (error) {
-        console.error('Error fetching user posts:', error);
-        setPostsError(error.message || 'Failed to fetch your posts');
-        return;
-      }
+        if (error) {
+          console.error('Error fetching user posts:', error);
+          setPostsError(error.message || 'Failed to fetch your posts');
+          return;
+        }
 
-      if (data) {
-        const normalized = data.map((p: Post & { comment_count: { count: number }[] }) => ({
+        const postsData =
+          (data as Array<Post & { comment_count: { count: number }[] }>) ?? [];
+        const postIds = postsData.map((post) => post.id);
+        let voteMap = new Map<string, VoteType>();
+
+        if (userId && postIds.length > 0) {
+          const { data: votes, error: votesError } = await supabase
+            .from('post_votes')
+            .select('post_id, vote_type')
+            .eq('user_id', userId)
+            .in('post_id', postIds);
+
+          if (votesError) {
+            console.error('Error fetching post votes:', votesError);
+          } else {
+            const votesData = (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
+            voteMap = new Map(
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
+            );
+          }
+        }
+
+        const normalized = postsData.map((p) => ({
           ...p,
           comment_count: p.comment_count?.[0]?.count ?? 0,
+          user_vote: voteMap.get(p.id) ?? null,
         }));
-        setPosts(normalized);
+
+        if (options?.reset || targetPage === 0) {
+          setPosts(normalized);
+        } else {
+          setPosts((prev) => [...prev, ...normalized]);
+        }
+
+        setHasMore(normalized.length === PAGE_SIZE);
+      } catch (error) {
+        console.error('Unexpected error fetching user posts:', error);
+        setPostsError(
+          error instanceof Error ? error.message : 'Something went wrong while fetching your posts'
+        );
+      } finally {
+        setPostsLoading(false);
       }
-    } catch (error) {
-      console.error('Unexpected error fetching user posts:', error);
-      setPostsError(error instanceof Error ? error.message : 'Something went wrong while fetching your posts');
-    } finally {
-      setPostsLoading(false);
-    }
-  }, [supabase]);
+    },
+    [supabase]
+  );
 
   useEffect(() => {
     const init = async () => {
@@ -76,7 +115,9 @@ export default function ProfilePage() {
         );
 
         const initPromise = async () => {
-          await fetchUserPosts(user.id);
+          setPage(0);
+          setHasMore(true);
+          await fetchUserPosts(user.id, 0, { reset: true });
         };
 
         await Promise.race([initPromise(), timeoutPromise]);
@@ -91,6 +132,14 @@ export default function ProfilePage() {
     };
     init();
   }, [supabase, router, authLoading, user, authProfile, fetchUserPosts]);
+
+  const loadMore = useCallback(() => {
+    if (!postsLoading && hasMore && user) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchUserPosts(user.id, nextPage);
+    }
+  }, [postsLoading, hasMore, user, page, fetchUserPosts]);
 
   const handleVerificationSuccess = () => {
     // Profile verification status is handled by AuthContext
@@ -235,9 +284,9 @@ export default function ProfilePage() {
         {postsError ? (
           <ErrorMessage
             message={postsError}
-            onRetry={() => user && fetchUserPosts(user.id)}
+            onRetry={() => user && fetchUserPosts(user.id, 0, { reset: true })}
           />
-        ) : postsLoading ? (
+        ) : postsLoading && posts.length === 0 ? (
           <PostLoadingSkeleton count={2} />
         ) : posts.length === 0 ? (
           <EmptyState
@@ -247,9 +296,30 @@ export default function ProfilePage() {
           />
         ) : (
           <div className="space-y-3">
-            {posts.map(post => (
-              <PostCard key={post.id} post={post} showRoom />
+            {posts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                showRoom
+                currentUserId={user?.id ?? null}
+                initialUserVote={post.user_vote ?? null}
+              />
             ))}
+
+            {postsLoading && posts.length > 0 && (
+              <div className="py-4 text-center text-xs text-gray-400">Loading more posts...</div>
+            )}
+
+            {hasMore && !postsLoading && (
+              <div className="flex justify-center py-4">
+                <button
+                  onClick={loadMore}
+                  className="rounded-lg border border-gray-700 px-4 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
+                >
+                  Load more posts
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -258,6 +328,7 @@ export default function ProfilePage() {
           isOpen={showVerificationModal}
           onClose={() => setShowVerificationModal(false)}
           onSuccess={handleVerificationSuccess}
+          userRollNumber={authProfile.roll_number || ''}
         />
       </div>
     </ErrorBoundary>

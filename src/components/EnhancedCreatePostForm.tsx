@@ -94,7 +94,9 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   const getDisplayModeLabel = (mode: 'full' | 'partial' | 'anonymous') => {
     switch (mode) {
       case 'full':
-        return profile.roll_number ? `${profile.roll_number}` : profile.username || 'Unknown';
+        return profile.roll_number
+          ? `${profile.roll_number} · ${profile.branch || 'Unknown'} · ${profile.year || 'Unknown'}`
+          : profile.username || 'Unknown';
 
       case 'partial':
         return profile.branch && profile.year
@@ -247,6 +249,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         image_url: imageUrl,
         video_url: videoUrl,
         is_anon_post: formData.isAnonymous || false,
+        display_mode: displayMode,
         year_tag: profile.year || null,
         branch_tag: profile.branch || null,
         section_tag: profile.section || null,

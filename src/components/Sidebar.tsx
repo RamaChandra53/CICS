@@ -100,9 +100,11 @@ export default function Sidebar() {
       
       const { data: existingCommunities } = await supabase
         .from('communities')
-        .select('*')
+        .select('id, name, slug, description, icon, type, member_count, created_at')
         .in('slug', coreSubreddits);
-      const existingSlugSet = new Set((existingCommunities ?? []).map(c => c.slug));
+      const existingSlugSet = new Set(
+        ((existingCommunities ?? []) as Community[]).map((community) => community.slug)
+      );
 
       for (const slug of coreSubreddits) {
         if (!existingSlugSet.has(slug)) continue;
@@ -157,8 +159,10 @@ export default function Sidebar() {
       .in('slug', coreSubreddits)
       .order('member_count', { ascending: false });
 
-    const joinedSlugSet = new Set(allJoined.map(c => c.slug));
-    const explore = (coreCommunities ?? []).filter(c => !joinedSlugSet.has(c.slug));
+    const joinedSlugSet = new Set(allJoined.map((community) => community.slug));
+    const explore = ((coreCommunities ?? []) as Community[]).filter(
+      (community) => !joinedSlugSet.has(community.slug)
+    );
 
     setMyCommunities(mine);
     setJoinedCommunities(joined);

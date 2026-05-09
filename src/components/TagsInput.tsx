@@ -44,7 +44,7 @@ const TagsInput: React.FC<TagsInputProps> = ({
       try {
         const { data, error } = await supabase
           .from('predefined_tags')
-          .select('*')
+          .select('name, category, description, usage_count')
           .order('usage_count', { ascending: false });
         
         if (error) throw error;

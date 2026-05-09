@@ -13,7 +13,7 @@ export function validateMGITEmail(email: string): boolean {
 
 /**
  * Validates if the email matches the user's roll number
- * Email format: firstname_branch+rollnumber@mgit.ac.in
+ * Email local part must include intake year (first 2 digits) and last 4 digits of roll number
  * @param email - College email address
  * @param rollNumber - User's roll number
  * @returns boolean indicating if email matches roll number
@@ -21,17 +21,21 @@ export function validateMGITEmail(email: string): boolean {
 export function validateEmailMatchesRoll(email: string, rollNumber: string): boolean {
   if (!email || !rollNumber) return false;
   
-  // Email format: firstname_branch+rollnumber@mgit.ac.in
   // Extract part before @
-  const localPart = email.split('@')[0]; // e.g. ashokkumar_csb253263
+  const localPart = email.split('@')[0]?.toLowerCase(); // e.g. ashokkumar_csb253263
   
   if (!localPart) return false;
   
+  const normalizedRoll = rollNumber.trim();
+  if (normalizedRoll.length < 6) return false;
+
+  // Intake year is first 2 digits
+  const intakeYear = normalizedRoll.slice(0, 2);
+
   // Get last 4 digits of roll number
-  const rollSuffix = rollNumber.slice(-4); // e.g. 3260
+  const rollSuffix = normalizedRoll.slice(-4); // e.g. 0512
   
-  // Check if roll suffix appears in local part
-  return localPart.includes(rollSuffix);
+  return localPart.includes(intakeYear) && localPart.includes(rollSuffix);
 }
 
 /**

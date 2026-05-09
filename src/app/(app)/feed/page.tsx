@@ -2,9 +2,9 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Profile, Community } from '@/types';
+import { Post, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useRouter } from 'next/navigation';
@@ -19,8 +19,13 @@ import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import SkeletonFeed from '@/components/ui/SkeletonFeed';
 
+const PAGE_SIZE = 15;
+const FEED_ROOMS = ['campus', 'college'] as const;
+
+type VoteType = 'up' | 'down';
+
 export default function FeedPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const { user, profile: authProfile, loading: authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
@@ -34,135 +39,100 @@ export default function FeedPage() {
 
   const fetchCommunities = useCallback(async () => {
     try {
-      console.log('fetchCommunities: Starting query...');
-      const queryStart = Date.now();
-      
       const { data, error } = await supabase
         .from('communities')
-        .select('*')
-        .order('member_count', { ascending: false });
-
-      console.log(`fetchCommunities: Query completed in ${Date.now() - queryStart}ms`);
+        .select('id, name, slug, description, icon, type, member_count, created_at')
+        .order('member_count', { ascending: false })
+        .limit(30);
 
       if (error) {
         console.error('Error fetching communities:', error);
         return;
       }
 
-      console.log(`fetchCommunities: Found ${data?.length || 0} communities`);
       setCommunities(data || []);
     } catch (error) {
       console.error('Unexpected error fetching communities:', error);
     }
   }, [supabase]);
 
-  const fetchPosts = useCallback(async (page = 0) => {
-    try {
-      setPostsLoading(true);
-      setPostsError('');
+  const fetchPosts = useCallback(
+    async (pageToLoad = 0, options?: { reset?: boolean }) => {
+      try {
+        setPostsLoading(true);
+        setPostsError('');
 
-      console.log(`fetchPosts: Fetching page ${page}...`);
-      
-      // Simplified query to avoid timeout - fetch posts first, then profiles separately
-      console.log('fetchPosts: Starting posts query...');
-      const postsQueryStart = Date.now();
-      
-      const { data, error } = await supabase
-        .from('posts')
-        .select(`
-          id,
-          author_id,
-          room,
-          content,
-          image_url,
-          is_anon_post,
-          year_tag,
-          branch_tag,
-          section_tag,
-          created_at,
-          upvotes,
-          downvotes
-        `)
-        .eq('room', 'campus')
-        .order('created_at', { ascending: false })
-        .range(page * 20, (page + 1) * 20 - 1);
+        const targetPage = options?.reset ? 0 : pageToLoad;
+        const { data, error } = await supabase
+          .from('posts')
+          .select(
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
+          )
+          .in('room', FEED_ROOMS)
+          .order('created_at', { ascending: false })
+          .range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
 
-      console.log(`fetchPosts: Posts query completed in ${Date.now() - postsQueryStart}ms`);
-
-      if (error) {
-        console.error('Error fetching feed posts:', error);
-        setPostsError(error.message || 'Failed to fetch feed posts');
-        return;
-      }
-
-      if (data && data.length > 0) {
-        console.log(`fetchPosts: Found ${data.length} posts`);
-        
-        // Get unique author IDs to fetch profiles in batch
-        console.log('fetchPosts: Building author ID list...');
-        const authorIdsStart = Date.now();
-        const authorIds = [...new Set(data.map(post => post.author_id))];
-        console.log(`fetchPosts: Author IDs prepared in ${Date.now() - authorIdsStart}ms, unique authors: ${authorIds.length}`);
-        
-        // Fetch profiles for all authors in one query
-        console.log('fetchPosts: Starting profiles query...');
-        const profilesQueryStart = Date.now();
-        
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, roll_number, branch, year, section, is_email_verified, username, is_verified, is_anonymous')
-          .in('id', authorIds);
-
-        console.log(`fetchPosts: Profiles query completed in ${Date.now() - profilesQueryStart}ms`);
-
-        if (profilesError) {
-          console.error('Error fetching profiles:', profilesError);
+        if (error) {
+          console.error('Error fetching feed posts:', error);
+          setPostsError(error.message || 'Failed to fetch feed posts');
+          return;
         }
 
-        console.log(`fetchPosts: Found ${profiles?.length || 0} profiles`);
+        const postsData = (data as Post[]) ?? [];
 
-        // Create a map of profiles for quick lookup
-        console.log('fetchPosts: Creating profile map...');
-        const mapStart = Date.now();
-        const profileMap = new Map(
-          (profiles || []).map(profile => [profile.id, profile])
-        );
-        console.log(`fetchPosts: Profile map created in ${Date.now() - mapStart}ms`);
+        if (postsData.length === 0) {
+          if (targetPage === 0) {
+            setPosts([]);
+          }
+          setHasMore(false);
+          return;
+        }
 
-        // Combine posts with their profiles
-        console.log('fetchPosts: Combining posts with profiles...');
-        const combineStart = Date.now();
-        const normalized = data.map((post: any) => ({
+        const postIds = postsData.map((post) => post.id);
+        let voteMap = new Map<string, VoteType>();
+
+        if (user?.id && postIds.length > 0) {
+          const { data: votes, error: votesError } = await supabase
+            .from('post_votes')
+            .select('post_id, vote_type')
+            .eq('user_id', user.id)
+            .in('post_id', postIds);
+
+          if (votesError) {
+            console.error('Error fetching post votes:', votesError);
+          } else {
+            const votesData = (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
+            voteMap = new Map(
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
+            );
+          }
+        }
+
+        const normalized = postsData.map((post) => ({
           ...post,
-          profiles: profileMap.get(post.author_id) || null,
-          post_votes: [], // Empty for now, can be fetched separately if needed
+          profiles: post.profiles ?? null,
           comment_count: 0,
+          user_vote: voteMap.get(post.id) ?? null,
         }));
-        console.log(`fetchPosts: Posts combined in ${Date.now() - combineStart}ms`);
-        
-        if (page === 0) {
+
+        if (options?.reset || targetPage === 0) {
           setPosts(normalized);
         } else {
-          setPosts(prev => [...prev, ...normalized]);
+          setPosts((prev) => [...prev, ...normalized]);
         }
-        
-        // Check if there are more posts to load
-        setHasMore(data.length === 20);
-      } else {
-        // No posts found
-        console.log('fetchPosts: No posts found');
-        if (page === 0) {
-          setPosts([]);
-        }
-        setHasMore(false);
+
+        setHasMore(postsData.length === PAGE_SIZE);
+      } catch (error) {
+        console.error('Unexpected error fetching feed posts:', error);
+        setPostsError(
+          error instanceof Error ? error.message : 'Something went wrong while fetching feed posts'
+        );
+      } finally {
+        setPostsLoading(false);
       }
-    } catch (error) {
-      console.error('Unexpected error fetching feed posts:', error);
-      setPostsError(error instanceof Error ? error.message : 'Something went wrong while fetching feed posts');
-    } finally {
-      setPostsLoading(false);
-    }
-  }, [supabase]);
+    },
+    [supabase, user?.id]
+  );
 
   const loadMore = useCallback(() => {
     if (!postsLoading && hasMore) {
@@ -182,25 +152,17 @@ export default function FeedPage() {
       }
 
       try {
-        console.log('Feed page: Starting initialization...');
-        
-        // Try to fetch data without timeout first to see what's happening
-        console.log('Feed page: Starting fetch...');
         setPage(0);
         setHasMore(true);
-        
-        console.log('Feed page: Fetching communities...');
-        const communitiesStart = Date.now();
-        await fetchCommunities();
-        console.log(`Feed page: Communities fetched in ${Date.now() - communitiesStart}ms`);
-        
-        console.log('Feed page: Fetching posts...');
-        const postsStart = Date.now();
-        await fetchPosts(0);
-        console.log(`Feed page: Posts fetched in ${Date.now() - postsStart}ms`);
-        
-        console.log('Feed page: All fetch operations completed');
-        console.log('Feed page: Initialization completed');
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Feed initialization timeout')), 15000)
+        );
+
+        await Promise.race([
+          Promise.all([fetchCommunities(), fetchPosts(0, { reset: true })]),
+          timeoutPromise,
+        ]);
       } catch (error) {
         console.error('Feed initialization error:', error);
         
@@ -216,7 +178,6 @@ export default function FeedPage() {
         setPosts([]);
         setCommunities([]);
       } finally {
-        console.log('Feed page: Setting loading to false');
         setLoading(false);
       }
     };
@@ -226,19 +187,21 @@ export default function FeedPage() {
     const channel = supabase
       .channel('feed-posts')
       .on('postgres_changes', {
-        event: '*',
+        event: 'INSERT',
         schema: 'public',
         table: 'posts',
-        filter: 'room=eq.campus',
+        filter: 'room=in.(campus,college)',
       }, () => {
-        fetchPosts();
+        setPage(0);
+        setHasMore(true);
+        fetchPosts(0, { reset: true });
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, router, authLoading, user, fetchPosts]);
+  }, [supabase, router, authLoading, user, fetchPosts, fetchCommunities]);
 
   if (loading) {
     return (
@@ -270,12 +233,16 @@ export default function FeedPage() {
             {/* Create Post Box */}
             {authProfile && (
               <div className="glass rounded-xl p-4 mb-6 neon-glow">
-                <EnhancedCreatePostForm
-                  profile={authProfile}
-                  communities={communities}
-                  defaultCommunity="campus"
-                  onPostCreated={fetchPosts}
-                />
+                  <EnhancedCreatePostForm
+                    profile={authProfile}
+                    communities={communities}
+                    defaultCommunity="campus"
+                    onPostCreated={() => {
+                      setPage(0);
+                      setHasMore(true);
+                      fetchPosts(0, { reset: true });
+                    }}
+                  />
               </div>
             )}
 
@@ -283,9 +250,9 @@ export default function FeedPage() {
             {postsError ? (
               <ErrorMessage
                 message={postsError}
-                onRetry={fetchPosts}
+                onRetry={() => fetchPosts(0, { reset: true })}
               />
-            ) : postsLoading ? (
+            ) : postsLoading && posts.length === 0 ? (
               <PostLoadingSkeleton count={2} />
             ) : posts.length === 0 ? (
               <EmptyState
@@ -302,13 +269,17 @@ export default function FeedPage() {
             ) : (
               <div className="space-y-4">
                 {posts.map((post, index) => (
-                  <div 
-                    key={post.id} 
-                    className="transform transition-all duration-500"
-                    style={{animationDelay: `${index * 100}ms`}}
-                  >
-                    <PostCard post={post} />
-                  </div>
+                    <div 
+                      key={post.id} 
+                      className="transform transition-all duration-500"
+                      style={{animationDelay: `${index * 100}ms`}}
+                    >
+                      <PostCard
+                        post={post}
+                        currentUserId={user?.id ?? null}
+                        initialUserVote={post.user_vote ?? null}
+                      />
+                    </div>
                 ))}
                 
                 {/* Load More Button */}

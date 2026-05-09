@@ -43,8 +43,9 @@ export type Post = {
   downvotes: number;
   created_at: string;
   updated_at: string;
-  profiles?: Profile;
+  profiles?: Profile | null;
   comment_count?: number;
+  user_vote?: 'up' | 'down' | null;
 };
 
 export type Comment = {
@@ -56,7 +57,7 @@ export type Comment = {
   is_anon_comment: boolean;
   display_mode: 'full' | 'partial' | 'anonymous';
   created_at: string;
-  profiles?: Profile;
+  profiles?: Profile | null;
   replies?: Comment[];
 };
 

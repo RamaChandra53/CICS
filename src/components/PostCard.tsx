@@ -10,11 +10,18 @@ import VoteButtons from './VoteButtons';
 interface PostCardProps {
   post: Post;
   showRoom?: boolean;
+  currentUserId?: string | null;
+  initialUserVote?: 'up' | 'down' | null;
 }
 
-const PostCard = memo(function PostCard({ post, showRoom = false }: PostCardProps) {
+const PostCard = memo(function PostCard({
+  post,
+  showRoom = false,
+  currentUserId,
+  initialUserVote,
+}: PostCardProps) {
   const author = post.profiles;
-  const displayMode = post.display_mode || 'full';
+  const displayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
   const room = ROOMS.find(r => r.id === post.room);
 
   // Memoize vote handlers to prevent unnecessary re-renders
@@ -59,19 +66,23 @@ const PostCard = memo(function PostCard({ post, showRoom = false }: PostCardProp
   // Determine display based on display_mode
   const getDisplayInfo = () => {
     switch (displayMode) {
-      case 'full':
+      case 'full': {
+        const rollInfo = author?.roll_number
+          ? `${author.roll_number} · ${author?.branch || 'Unknown'} · ${author?.year || 'Unknown'}`
+          : author?.username ?? 'Anonymous';
         return {
-          displayName: author?.roll_number ? `${author.roll_number}` : (author?.username ?? 'Anonymous'),
+          displayName: rollInfo,
           avatar: author?.username?.[0]?.toUpperCase() ?? '?',
           avatarBg: 'bg-indigo-600/30 text-indigo-400',
           showVerified: author?.is_verified || false
         };
+      }
       case 'partial':
         return {
-          displayName: `${author?.branch || ''}_${author?.year || ''} ✓`,
+          displayName: `${author?.branch || ''}_${author?.year || ''}`,
           avatar: author?.branch?.[0] || '?',
           avatarBg: 'bg-purple-600/30 text-purple-400',
-          showVerified: false
+          showVerified: true
         };
       case 'anonymous':
         return {
@@ -100,7 +111,10 @@ const PostCard = memo(function PostCard({ post, showRoom = false }: PostCardProp
           <VoteButtons 
             postId={post.id} 
             initialUpvotes={post.upvotes} 
-            initialDownvotes={post.downvotes} 
+            initialDownvotes={post.downvotes}
+            currentUserId={currentUserId}
+            initialUserVote={initialUserVote}
+            skipSync={currentUserId !== undefined}
           />
         </div>
 

@@ -2,13 +2,12 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Community, Profile } from '@/types';
+import { Post, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import CreatePostForm from '@/components/CreatePostForm';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import RedditNavbar from '@/components/RedditNavbar';
 import RedditSidebar from '@/components/RedditSidebar';
@@ -20,11 +19,22 @@ import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import TagFilter from '@/components/TagFilter';
 
+const PAGE_SIZE = 15;
+const VIEWABLE_FALLBACK_ROOMS = ['confessions', 'rants', 'random', 'placement-talk'] as const;
+
+type VoteType = 'up' | 'down';
+type CommunityQueryRecord = Pick<
+  Community,
+  'id' | 'name' | 'slug' | 'description' | 'icon' | 'type' | 'member_count' | 'created_at'
+>;
+type CommunityMembershipRecord = { user_id: string };
+
 export default function RoomPage() {
-  const supabase = createClient();
   const router = useRouter();
   const params = useParams();
-  const roomName = params.roomName as string;
+  const rawRoomName = params.roomName as string;
+  const roomName = /^[a-z0-9-]{1,64}$/i.test(rawRoomName) ? rawRoomName : '';
+  const supabase = useMemo(() => createClient(), []);
   const { user, profile: authProfile, loading: authLoading } = useAuth();
 
   const [posts, setPosts] = useState<Post[]>([]);
@@ -37,102 +47,177 @@ export default function RoomPage() {
   const [postsLoading, setPostsLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   
   // Store fetched posts per community in a ref
-  const postCache = useRef<Record<string, Post[]>>({});
+  const postCache = useRef<Record<string, { posts: Post[]; hasMore: boolean }>>({});
+  const tagFilterInitialized = useRef(false);
   const postRoom = roomName;
   const supportsPosting = isMember;
+  const hasSafeRoomName = roomName.length > 0;
 
-  const fetchPosts = useCallback(async () => {
-    try {
-      // Map community slugs to room values
-      let roomFilter = postRoom;
-      if (postRoom === 'campus') roomFilter = 'college';
-      
-      // Create cache key including tags
-      const cacheKey = `${roomFilter}_${selectedTags.sort().join(',')}`;
-      
-      // If already cached, use it instantly
-      if (postCache.current[cacheKey]) {
-        setPosts(postCache.current[cacheKey]);
-        setPostsLoading(false);
-        return;
-      }
-      
-      // Otherwise fetch and cache
-      setPostsLoading(true);
-      setPostsError('');
+  const fetchPosts = useCallback(
+    async (pageToLoad = 0, options?: { reset?: boolean }) => {
+      try {
+        const roomFilters = postRoom === 'campus' ? ['campus', 'college'] : [postRoom];
+        const cacheKey = `${roomFilters.join('|')}_${[...selectedTags].sort().join(',')}`;
 
-      let query = supabase
-        .from('posts')
-        .select(`
-          *,
-          profiles (id, username, is_verified, is_anonymous),
-          display_mode
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      query = query.eq('room', roomFilter);
+        if (options?.reset) {
+          setPage(0);
+          setHasMore(true);
+        }
 
-      // Apply tag filtering if tags are selected
-      if (selectedTags.length > 0) {
-        // Filter posts that contain any of the selected tags
-        const tagFilters = selectedTags.map(tag => `tags.ilike.%${tag}%`).join(',');
-        query = query.or(tagFilters);
-      }
+        if (pageToLoad === 0 && postCache.current[cacheKey]) {
+          const cached = postCache.current[cacheKey];
 
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error('Error fetching posts:', error);
-        setPostsError(error.message || 'Failed to fetch posts');
-        return;
-      }
-      
-      if (data) {
-        const normalized = data.map((p: Post) => ({
-          ...p,
-          comment_count: 0, // Set default for now, can be fetched separately if needed
+          if (user?.id && cached.posts.length > 0) {
+            const cachedPostIds = cached.posts.map((post) => post.id);
+            const { data: votes } = await supabase
+              .from('post_votes')
+              .select('post_id, vote_type')
+              .eq('user_id', user.id)
+              .in('post_id', cachedPostIds);
+
+            const votesData =
+              (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
+            const voteMap = new Map(
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
+            );
+
+            const updatedPosts = cached.posts.map((post) => ({
+              ...post,
+              user_vote: voteMap.get(post.id) ?? null,
+            }));
+
+            postCache.current[cacheKey] = {
+              posts: updatedPosts,
+              hasMore: cached.hasMore,
+            };
+
+            setPosts(updatedPosts);
+          } else {
+            setPosts(cached.posts);
+          }
+
+          setHasMore(cached.hasMore);
+          setPostsLoading(false);
+          return;
+        }
+
+        setPostsLoading(true);
+        setPostsError('');
+
+        let query = supabase
+          .from('posts')
+          .select(
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
+          )
+          .order('created_at', { ascending: false })
+          .range(pageToLoad * PAGE_SIZE, pageToLoad * PAGE_SIZE + PAGE_SIZE - 1);
+
+        if (roomFilters.length > 1) {
+          query = query.in('room', roomFilters);
+        } else {
+          query = query.eq('room', roomFilters[0]);
+        }
+
+        if (selectedTags.length > 0) {
+          const tagFilters = selectedTags.map((tag) => `tags.ilike.%${tag}%`).join(',');
+          query = query.or(tagFilters);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error('Error fetching posts:', error);
+          setPostsError(error.message || 'Failed to fetch posts');
+          return;
+        }
+
+        const postsData = (data as Post[]) ?? [];
+        const postIds = postsData.map((post) => post.id);
+        let voteMap = new Map<string, VoteType>();
+
+        if (user?.id && postIds.length > 0) {
+          const { data: votes, error: votesError } = await supabase
+            .from('post_votes')
+            .select('post_id, vote_type')
+            .eq('user_id', user.id)
+            .in('post_id', postIds);
+
+          if (votesError) {
+            console.error('Error fetching post votes:', votesError);
+          } else {
+            const votesData =
+              (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
+            voteMap = new Map(
+              votesData.map((vote) => [vote.post_id, vote.vote_type])
+            );
+          }
+        }
+
+        const normalized = postsData.map((post: Post) => ({
+          ...post,
+          comment_count: 0,
+          user_vote: voteMap.get(post.id) ?? null,
         }));
-        
-        // Cache the posts
-        postCache.current[roomFilter] = normalized;
-        setPosts(normalized);
+
+        const cachedPosts = postCache.current[cacheKey]?.posts ?? [];
+        const merged = pageToLoad === 0 ? normalized : [...cachedPosts, ...normalized];
+
+        postCache.current[cacheKey] = {
+          posts: merged,
+          hasMore: normalized.length === PAGE_SIZE,
+        };
+
+        setPosts(merged);
+        setHasMore(normalized.length === PAGE_SIZE);
+      } catch (error) {
+        console.error('Unexpected error fetching posts:', error);
+        setPostsError(
+          error instanceof Error ? error.message : 'Something went wrong while fetching posts'
+        );
+      } finally {
+        setPostsLoading(false);
       }
-    } catch (error) {
-      console.error('Unexpected error fetching posts:', error);
-      setPostsError(error instanceof Error ? error.message : 'Something went wrong while fetching posts');
-    } finally {
-      setPostsLoading(false);
-    }
-  }, [supabase, postRoom, isMember, selectedTags]);
+    },
+    [supabase, postRoom, selectedTags, user?.id]
+  );
 
   // Prefetch adjacent communities
   const prefetchCommunities = useCallback(async (slugs: string[]) => {
     for (const slug of slugs) {
-      let roomFilter = slug;
-      if (slug === 'campus') roomFilter = 'college';
-      
-      if (!postCache.current[roomFilter]) {
+      const roomFilters = slug === 'campus' ? ['campus', 'college'] : [slug];
+      const cacheKey = `${roomFilters.join('|')}_`;
+
+      if (!postCache.current[cacheKey]) {
         try {
-          const { data } = await supabase
+          let query = supabase
             .from('posts')
-            .select(`
-              *,
-              profiles (id, username, is_verified, is_anonymous),
-              display_mode
-            `)
-            .eq('room', roomFilter)
+            .select(
+              'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
+            )
             .order('created_at', { ascending: false })
-            .limit(20);
-          
+            .range(0, PAGE_SIZE - 1);
+
+          if (roomFilters.length > 1) {
+            query = query.in('room', roomFilters);
+          } else {
+            query = query.eq('room', roomFilters[0]);
+          }
+
+          const { data } = await query;
+
           if (data) {
             const normalized = data.map((p: Post) => ({
               ...p,
               comment_count: p.comment_count || 0
             }));
-            postCache.current[roomFilter] = normalized;
+            postCache.current[cacheKey] = {
+              posts: normalized,
+              hasMore: normalized.length === PAGE_SIZE,
+            };
           }
         } catch (error) {
           console.error(`Error prefetching ${slug}:`, error);
@@ -152,6 +237,12 @@ export default function RoomPage() {
   useEffect(() => {
     const init = async () => {
       if (authLoading) return;
+
+      if (!hasSafeRoomName) {
+        setError('Invalid community');
+        setLoading(false);
+        return;
+      }
       
       if (!user) {
         router.push('/');
@@ -175,35 +266,43 @@ export default function RoomPage() {
             const [communityResult, memberResult] = await Promise.allSettled([
               supabase
                 .from('communities')
-                .select('*')
+                .select('id, name, slug, description, icon, type, member_count, created_at')
                 .eq('slug', roomName)
                 .maybeSingle(),
               // Only check membership if we have authProfile
-              authProfile ? supabase
-                .from('community_members')
-                .select('user_id')
-                .eq('user_id', authProfile.id)
-                .eq('community_slug', roomName)
-                .maybeSingle() : Promise.resolve({ data: null, error: null })
+              authProfile
+                ? supabase
+                    .from('community_members')
+                    .select('user_id')
+                    .eq('user_id', authProfile.id)
+                    .eq('community_slug', roomName)
+                    .maybeSingle()
+                : Promise.resolve({ data: null, error: null })
             ]);
 
-            let communityData: any = null;
-            let memberData: any = null;
-            let communityError: any = null;
-            let memberError: any = null;
+            let communityData: CommunityQueryRecord | null = null;
+            let memberData: CommunityMembershipRecord | null = null;
+            let communityError: { message?: string } | null = null;
+            let memberError: { message?: string } | null = null;
 
             if (communityResult.status === 'fulfilled') {
-              communityData = communityResult.value.data;
+              communityData = (communityResult.value.data as CommunityQueryRecord | null) ?? null;
               communityError = communityResult.value.error;
             } else {
-              communityError = communityResult.reason;
+              communityError =
+                communityResult.reason instanceof Error
+                  ? communityResult.reason
+                  : { message: 'Failed to fetch community' };
             }
 
             if (memberResult.status === 'fulfilled') {
-              memberData = memberResult.value.data;
+              memberData = (memberResult.value.data as CommunityMembershipRecord | null) ?? null;
               memberError = memberResult.value.error;
             } else {
-              memberError = memberResult.reason;
+              memberError =
+                memberResult.reason instanceof Error
+                  ? memberResult.reason
+                  : { message: 'Failed to fetch membership' };
             }
 
             if (communityError) {
@@ -214,8 +313,7 @@ export default function RoomPage() {
             // If no community found, check if it's a special room that allows viewing
             if (!communityData) {
               // Allow viewing confessions, rants, random, placement-talk without membership
-              const allowedRooms = ['confessions', 'rants', 'random', 'placement-talk'];
-              if (allowedRooms.includes(roomName)) {
+               if (VIEWABLE_FALLBACK_ROOMS.includes(roomName as (typeof VIEWABLE_FALLBACK_ROOMS)[number])) {
                 // Create a virtual community for display purposes
                 const virtualCommunity: Community = {
                   id: roomName,
@@ -248,7 +346,9 @@ export default function RoomPage() {
             }
 
             // Fetch posts separately to avoid blocking
-            await fetchPosts();
+            setPage(0);
+            setHasMore(true);
+            await fetchPosts(0, { reset: true });
             
             // After main feed loads, prefetch adjacent communities silently
             const allCommunities = ['campus', 'confessions', 'random', 'placement-talk', 'rants'];
@@ -284,22 +384,50 @@ export default function RoomPage() {
     init();
 
     // Map community slugs to room values for real-time subscription
-    const roomFilter = roomName === 'campus' ? 'college' : roomName;
-    
-    const channel = supabase
-      .channel(`room-${roomName}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'posts',
-        filter: roomName === 'campus' ? undefined : `room=eq.${roomFilter}`,
-      }, fetchPosts)
-      .subscribe();
+     const channel = hasSafeRoomName
+       ? supabase
+           .channel(`room-${roomName}`)
+           .on(
+             'postgres_changes',
+             {
+               event: 'INSERT',
+               schema: 'public',
+               table: 'posts',
+               filter: roomName === 'campus' ? 'room=in.(campus,college)' : `room=eq.${roomName}`,
+             },
+             () => {
+               setPage(0);
+               setHasMore(true);
+               fetchPosts(0, { reset: true });
+             }
+           )
+           .subscribe()
+       : null;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, postRoom, authProfile, roomName]);
+     return () => {
+       if (channel) {
+         supabase.removeChannel(channel);
+       }
+     };
+   }, [supabase, postRoom, authProfile, roomName, authLoading, user, router, fetchPosts, prefetchCommunities, hasSafeRoomName]);
+
+  useEffect(() => {
+    if (tagFilterInitialized.current) {
+      setPage(0);
+      setHasMore(true);
+      fetchPosts(0, { reset: true });
+    } else {
+      tagFilterInitialized.current = true;
+    }
+  }, [selectedTags, fetchPosts]);
+
+  const loadMore = useCallback(() => {
+    if (!postsLoading && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchPosts(nextPage);
+    }
+  }, [page, postsLoading, hasMore, fetchPosts]);
 
   const handleMembershipToggle = async () => {
     if (!authProfile || !community || community.type !== 'open' || joinLoading) return;
@@ -439,7 +567,11 @@ export default function RoomPage() {
                 <CreatePostForm
                   profile={authProfile}
                   defaultRoom={postRoom === 'campus' ? 'college' : postRoom}
-                  onPostCreated={fetchPosts}
+                  onPostCreated={() => {
+                    setPage(0);
+                    setHasMore(true);
+                    fetchPosts(0, { reset: true });
+                  }}
                 />
               </div>
             )}
@@ -448,9 +580,9 @@ export default function RoomPage() {
             {postsError ? (
               <ErrorMessage
                 message={postsError}
-                onRetry={fetchPosts}
+                onRetry={() => fetchPosts(0, { reset: true })}
               />
-            ) : postsLoading ? (
+            ) : postsLoading && posts.length === 0 ? (
               <PostLoadingSkeleton count={2} />
             ) : posts.length === 0 ? (
               <EmptyState
@@ -460,9 +592,29 @@ export default function RoomPage() {
               />
             ) : (
               <div className="space-y-2.5">
-                {posts.map(post => (
-                  <PostCard key={post.id} post={post} />
+                {posts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    currentUserId={user?.id ?? null}
+                    initialUserVote={post.user_vote ?? null}
+                  />
                 ))}
+
+                {postsLoading && posts.length > 0 && (
+                  <div className="py-4 text-center text-xs text-gray-400">Loading more posts...</div>
+                )}
+
+                {hasMore && !postsLoading && (
+                  <div className="flex justify-center py-4">
+                    <button
+                      onClick={loadMore}
+                      className="rounded-lg border border-gray-700 px-4 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
+                    >
+                      Load more posts
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </main>
