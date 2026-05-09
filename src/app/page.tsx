@@ -252,10 +252,11 @@ export default function LoginPage() {
         .eq('id', userId)
         .maybeSingle();
       const existingFirstLoginState = existingProfile?.is_first_login;
-      const shouldRequirePasswordReset =
+      const inferredFirstLoginState =
         createdNewAccount ||
         existingFirstLoginState === true ||
         (existingFirstLoginState == null && isFirstTimeAttempt);
+      const shouldRequirePasswordReset = inferredFirstLoginState;
 
       const profilePayload: Record<string, string | boolean> = {
         id: userId,
@@ -265,7 +266,7 @@ export default function LoginPage() {
       };
       if (existingFirstLoginState != null) {
         profilePayload.is_first_login = existingFirstLoginState;
-      } else if (createdNewAccount || isFirstTimeAttempt) {
+      } else if (inferredFirstLoginState) {
         profilePayload.is_first_login = true;
       }
       if (isFirstTimeAttempt) {
@@ -290,7 +291,7 @@ export default function LoginPage() {
         .eq('id', userId)
         .maybeSingle();
       const finalShouldRequirePasswordReset =
-        persistedProfile?.is_first_login === true || shouldRequirePasswordReset;
+        persistedProfile?.is_first_login ?? shouldRequirePasswordReset;
 
       // Update year dynamically on every login
       const currentYear = getCurrentYear(normalizedRollNumber);
