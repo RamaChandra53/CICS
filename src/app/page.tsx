@@ -251,15 +251,23 @@ export default function LoginPage() {
         .select('is_first_login')
         .eq('id', userId)
         .maybeSingle();
-      const shouldRequirePasswordReset = createdNewAccount || existingProfile?.is_first_login === true;
+      const existingFirstLoginState = existingProfile?.is_first_login;
+      const shouldRequirePasswordReset =
+        createdNewAccount ||
+        existingFirstLoginState === true ||
+        (existingFirstLoginState == null && isFirstTimeAttempt);
 
       const profilePayload: Record<string, string | boolean> = {
         id: userId,
         username: normalizedRollNumber,
         roll_number: normalizedRollNumber,
         is_anonymous: false,
-        is_first_login: shouldRequirePasswordReset,
       };
+      if (existingFirstLoginState != null) {
+        profilePayload.is_first_login = existingFirstLoginState;
+      } else if (createdNewAccount || isFirstTimeAttempt) {
+        profilePayload.is_first_login = true;
+      }
       if (isFirstTimeAttempt) {
         profilePayload.year = parsedRollForSignup!.year;
         profilePayload.branch = parsedRollForSignup!.branch;
