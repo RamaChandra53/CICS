@@ -61,14 +61,18 @@ export default function SetPasswordPage() {
         return;
       }
 
-      const { error: updateAuthError } = await supabase.auth.updateUser({ password: newPassword });
-      if (updateAuthError) throw updateAuthError;
-
+      // Update the profile FIRST so that when updateUser fires the PASSWORD_UPDATED
+      // auth event (which triggers a profile re-fetch in AuthContext), the DB already
+      // has is_first_login: false. Doing it the other way around causes a race where
+      // AuthContext reads the stale is_first_login: true value and loops back here.
       const { error: updateProfileError } = await supabase
         .from('profiles')
         .update({ is_first_login: false })
         .eq('id', user.id);
       if (updateProfileError) throw updateProfileError;
+
+      const { error: updateAuthError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateAuthError) throw updateAuthError;
 
       router.replace('/feed');
     } catch (err: unknown) {
