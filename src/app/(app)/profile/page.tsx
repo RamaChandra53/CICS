@@ -52,7 +52,8 @@ export default function ProfilePage() {
           return;
         }
 
-        const postsData = (data as Post[]) ?? [];
+        const postsData =
+          (data as Array<Post & { comment_count: { count: number }[] }>) ?? [];
         const postIds = postsData.map((post) => post.id);
         let voteMap = new Map<string, VoteType>();
 
@@ -73,7 +74,7 @@ export default function ProfilePage() {
           }
         }
 
-        const normalized = postsData.map((p: Post & { comment_count: { count: number }[] }) => ({
+        const normalized = postsData.map((p) => ({
           ...p,
           comment_count: p.comment_count?.[0]?.count ?? 0,
           user_vote: voteMap.get(p.id) ?? null,
