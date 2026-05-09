@@ -262,18 +262,25 @@ export default function HorizontalVoteButtons({
       {showActions && (
         <>
           <button className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors">
-            <span className="text-xs">💬</span>
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h0v3z" />
+            </svg>
             <span className="text-xs">{commentCount} Comments</span>
           </button>
           <button 
             onClick={handleShare}
             className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors"
           >
-            <span className="text-xs">↗</span>
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
+            </svg>
             <span className="text-xs">Share</span>
           </button>
-          <button className="rounded-full bg-[#282828] p-1 text-white hover:bg-[#383838] transition-colors">
-            <span className="text-xs">🚩</span>
+          <button className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
+            </svg>
+            <span className="text-xs">Report</span>
           </button>
         </>
       )}
