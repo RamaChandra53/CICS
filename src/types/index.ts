@@ -11,6 +11,7 @@ export type Profile = {
   is_anonymous: boolean;
   id_card_url: string | null;
   email: string | null;
+  college_email: string | null;
   is_email_verified: boolean;
   created_at: string;
 };

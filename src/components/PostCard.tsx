@@ -77,7 +77,7 @@ const PostCard = memo(function PostCard({
           displayName: `${author?.branch || ''}_${author?.year || ''}`,
           avatar: author?.branch?.[0] || '?',
           avatarBg: 'bg-purple-600/30 text-purple-400',
-          showVerified: true
+          showVerified: !!(author?.is_email_verified || author?.is_verified)
         };
       case 'anonymous':
         return {

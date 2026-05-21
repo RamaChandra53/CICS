@@ -15,6 +15,13 @@ import PollPostForm from './PollPostForm';
 
 import CommunitySelector from './CommunitySelector';
 
+const ANONYMOUS_ALLOWED_WITHOUT_EMAIL = ['confessions', 'rants', 'random'];
+const ANONYMOUS_REQUIRES_EMAIL = ['placements'];
+
+function requiresEmailForAnonymous(community: string) {
+  return ANONYMOUS_REQUIRES_EMAIL.includes(community);
+}
+
 interface EnhancedCreatePostFormProps {
   profile: Profile;
   defaultCommunity?: string;
@@ -108,13 +115,21 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   };
 
   const handleDisplayModeChange = (mode: 'full' | 'partial' | 'anonymous') => {
-    if (!profile.is_email_verified && mode !== 'full') {
-      setShowVerificationModal(true);
+    // Full and partial modes are always allowed
+    if (mode !== 'anonymous') {
+      setDisplayMode(mode);
+      updateFormData({ isAnonymous: false });
       return;
     }
 
-    setDisplayMode(mode);
-    updateFormData({ isAnonymous: mode === 'anonymous' });
+    // Anonymous: check if community requires verification
+    if (!profile.is_email_verified && requiresEmailForAnonymous(formData.community)) {
+      setShowVerificationModal(true);
+      return; // Don't change mode
+    }
+
+    setDisplayMode('anonymous');
+    updateFormData({ isAnonymous: true });
   };
 
   const handleVerificationSuccess = () => {
@@ -128,10 +143,12 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
           ? `${profile.roll_number} · ${profile.branch || 'Unknown'} · ${profile.year || 'Unknown'}`
           : profile.username || 'Unknown';
 
-      case 'partial':
+      case 'partial': {
+        const isVerified = profile.is_email_verified || profile.is_verified;
         return profile.branch && profile.year
-          ? `${profile.branch}_${profile.year} ✓`
-          : 'Verified ✓';
+          ? `${profile.branch}_${profile.year}${isVerified ? ' ✓' : ''}`
+          : isVerified ? 'Verified ✓' : (profile.branch || profile.year || 'Partial');
+      }
 
       case 'anonymous':
         return '👻 Anonymous';
@@ -464,37 +481,40 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-300 mb-3 font-['Space_Grotesk']">Post Identity</label>
               <div className="flex items-center gap-3 flex-wrap">
-                {(['full', 'partial', 'anonymous'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => handleDisplayModeChange(mode)}
-                    disabled={!profile.is_email_verified && mode !== 'full'}
-                    className={`flex items-center gap-3 text-sm px-4 py-3 rounded-xl border transition-all duration-300 font-medium font-['Space_Grotesk'] ${
-                      displayMode === mode
-                        ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white border-transparent shadow-lg shadow-purple-500/25 transform scale-105'
-                        : profile.is_email_verified || mode === 'full'
-                        ? 'bg-gray-800/50 text-gray-300 border-gray-600 hover:bg-gray-700/50 hover:text-white hover:border-gray-500 hover:transform hover:scale-105'
-                        : 'bg-gray-900/30 text-gray-600 border-gray-700 cursor-not-allowed opacity-50'
-                    }`}
-                  >
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                {(['full', 'partial', 'anonymous'] as const).map((mode) => {
+                  const isAnonBlocked = mode === 'anonymous' && !profile.is_email_verified && requiresEmailForAnonymous(formData.community);
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => handleDisplayModeChange(mode)}
+                      disabled={isAnonBlocked}
+                      className={`flex items-center gap-3 text-sm px-4 py-3 rounded-xl border transition-all duration-300 font-medium font-['Space_Grotesk'] ${
                         displayMode === mode
-                          ? 'bg-white shadow-lg'
-                          : profile.is_email_verified || mode === 'full'
-                            ? 'bg-gray-400'
-                            : 'bg-gray-500'
+                          ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white border-transparent shadow-lg shadow-purple-500/25 transform scale-105'
+                          : isAnonBlocked
+                          ? 'bg-gray-900/30 text-gray-600 border-gray-700 cursor-not-allowed opacity-50'
+                          : 'bg-gray-800/50 text-gray-300 border-gray-600 hover:bg-gray-700/50 hover:text-white hover:border-gray-500 hover:transform hover:scale-105'
                       }`}
-                    />
-                    <span className="font-medium">{getDisplayModeLabel(mode)}</span>
-                    {!profile.is_email_verified && mode !== 'full' && (
-                      <span className="text-xs ml-1">🔒</span>
-                    )}
-                  </button>
-                ))}
+                    >
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                          displayMode === mode
+                            ? 'bg-white shadow-lg'
+                            : isAnonBlocked
+                              ? 'bg-gray-500'
+                              : 'bg-gray-400'
+                        }`}
+                      />
+                      <span className="font-medium">{getDisplayModeLabel(mode)}</span>
+                      {isAnonBlocked && (
+                        <span className="text-xs ml-1">🔒</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              <p className="text-xs text-gray-500 mt-2">Choose how your identity appears with this post</p>
+              <p className="text-xs text-gray-500 mt-2">Choose how your identity appears. Verification is only needed for anonymous posts in higher-trust spaces.</p>
             </div>
           )}
 

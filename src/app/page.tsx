@@ -421,8 +421,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full bg-[#141414] border border-gray-800 rounded-2xl p-6 sm:p-7">
         <div className="text-center mb-6">
           <h1 className="text-4xl sm:text-5xl font-bold text-white">Anonstud</h1>
-          <p className="text-gray-400 mt-2 text-sm">Private college discussions only for MGIT students.</p>
-          <p className="text-gray-400 text-sm">Stay anonymous. Talk freely. </p>
+          <p className="text-gray-500 text-sm">Only MGIT students can enter. You can stay anonymous inside.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -514,7 +513,7 @@ export default function LoginPage() {
         <div className="mt-6 pt-6 border-t border-gray-700 space-y-3">
           <div className="text-center">
             <p className="text-xs text-gray-400">
-              First time password: <span className="font-mono text-[#6366f1] bg-[#111] px-2 py-1 rounded">{DEFAULT_PASSWORD}</span>
+              First time logging in? Use your temporary credentials.
             </p>
           </div>
 

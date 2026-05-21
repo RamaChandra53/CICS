@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
 
 const PROFILE_SELECT =
-  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, is_email_verified';
+  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, college_email, is_email_verified';
 
 interface AuthContextType {
   user: { id: string } | null;

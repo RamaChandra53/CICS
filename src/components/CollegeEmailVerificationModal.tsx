@@ -191,7 +191,7 @@ export default function CollegeEmailVerificationModal({
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white text-xl font-semibold flex items-center gap-2">
             <span className="text-2xl">🔒</span>
-            Unlock Anonymous Posting
+            Verify for trusted anonymous posting
           </h2>
           <button
             onClick={onClose}
@@ -205,10 +205,7 @@ export default function CollegeEmailVerificationModal({
           <>
             <div className="mb-6">
               <p className="text-gray-300 text-sm mb-3">
-                Verify your MGIT college email to post anonymously.
-              </p>
-              <p className="text-gray-400 text-xs">
-                Your identity stays hidden publicly but is stored securely for moderation.
+                Basic posting works without verification. MGIT email verification unlocks anonymous posting in higher-trust spaces like Placements.
               </p>
             </div>
             
