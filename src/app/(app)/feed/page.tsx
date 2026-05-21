@@ -48,6 +48,8 @@ export default function FeedPage() {
   const communityChips = useMemo(() => {
     if (communities.length === 0) return BASE_COMMUNITY_CHIPS;
     const labelMap = new Map(communities.map((community) => [community.slug, community.name]));
+    const hasMatchingChip = BASE_COMMUNITY_CHIPS.some((chip) => labelMap.has(chip.id));
+    if (!hasMatchingChip) return BASE_COMMUNITY_CHIPS;
     return BASE_COMMUNITY_CHIPS.map((chip) => ({
       ...chip,
       label: labelMap.get(chip.id) ?? chip.label,

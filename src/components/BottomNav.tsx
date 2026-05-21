@@ -48,7 +48,7 @@ export default function BottomNav() {
                 const target = document.getElementById('create-post');
                 target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
-              className={`flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors ${
+              className={`flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-medium transition-colors ${
                 isActive ? 'text-indigo-400' : 'text-slate-400'
               }`}
             >
