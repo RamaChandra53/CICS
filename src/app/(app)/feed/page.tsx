@@ -54,6 +54,20 @@ export default function FeedPage() {
     }));
   }, [communities]);
 
+  const visiblePosts = useMemo(() => {
+    const roomFilterMap: Record<string, string | null> = {
+      all: null,
+      general: 'campus',
+      confessions: 'confessions',
+      rants: 'rants',
+      random: 'random',
+      placements: 'placements',
+    };
+    const roomFilter = roomFilterMap[activeChip] ?? null;
+    if (!roomFilter) return posts;
+    return posts.filter((post) => post.room === roomFilter);
+  }, [activeChip, posts]);
+
 
   const fetchCommunities = useCallback(async () => {
     try {
@@ -285,7 +299,7 @@ export default function FeedPage() {
               />
             ) : postsLoading && posts.length === 0 ? (
               <PostLoadingSkeleton count={2} />
-            ) : posts.length === 0 ? (
+            ) : visiblePosts.length === 0 ? (
               <EmptyState
                 title="No posts yet"
                 description="Be the first to share something with the campus!"
@@ -299,7 +313,7 @@ export default function FeedPage() {
               />
             ) : (
               <div className="space-y-3">
-                {posts.map((post, index) => (
+                {visiblePosts.map((post, index) => (
                     <div 
                       key={post.id} 
                       className="transform transition-all duration-500"

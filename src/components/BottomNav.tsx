@@ -35,9 +35,8 @@ export default function BottomNav() {
             <Link
               key={item.id}
               href={item.href}
-              onClick={(event) => {
+              onClick={() => {
                 if (item.id !== 'post' || pathname !== '/feed') return;
-                event.preventDefault();
                 const target = document.getElementById('create-post');
                 target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}

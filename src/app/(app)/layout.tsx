@@ -50,7 +50,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <button
               aria-label="Notifications"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#252a31] bg-[#15181c] text-slate-300"
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#252a31] bg-[#15181c] text-slate-300"
             >
               <svg
                 className="h-5 w-5"
@@ -64,6 +64,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
                 <path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
                 <path d="M13.73 21a2 2 0 01-3.46 0" />
               </svg>
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-indigo-400" />
             </button>
             <Link
               href="/profile"
