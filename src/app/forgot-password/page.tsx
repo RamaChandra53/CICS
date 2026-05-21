@@ -1,7 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
+
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
@@ -209,11 +208,6 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      console.log(`=== RESETTING PASSWORD ===`);
-      console.log(`User ID: ${userId}`);
-      console.log(`Email: ${tempEmail}`);
-      console.log(`New password length: ${newPassword.length}`);
-
       // Use API route to reset password
       const response = await fetch('/api/reset-password', {
         method: 'POST',
@@ -227,16 +221,11 @@ export default function ForgotPasswordPage() {
         }),
       });
 
-      console.log(`API response status:`, response.status);
-
       const result = await response.json();
-      console.log(`API response result:`, result);
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to reset password');
       }
-
-      console.log(`Password reset successful!`);
 
       // Success message and redirect
       setError('Password reset successfully! Redirecting to login...');

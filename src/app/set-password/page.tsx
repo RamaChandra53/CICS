@@ -1,14 +1,14 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
 
-import { FormEvent, useEffect, useState } from 'react';
+
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 
 export default function SetPasswordPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -126,13 +126,29 @@ export default function SetPasswordPage() {
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Updating...' : 'Update Password'}
-          </button>
+          <div className="flex flex-col gap-3 mt-6">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Updating...' : 'Update Password'}
+            </button>
+            
+            <button
+              type="button"
+              onClick={async () => {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  await supabase.from('profiles').update({ is_first_login: false }).eq('id', user.id);
+                }
+                router.replace('/feed');
+              }}
+              className="w-full bg-transparent hover:bg-white/5 text-gray-400 text-sm font-medium py-3 px-4 rounded-xl transition-colors"
+            >
+              Skip for now (I already have a secure password)
+            </button>
+          </div>
         </form>
       </div>
     </div>

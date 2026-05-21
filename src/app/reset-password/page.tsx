@@ -1,8 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
-export const revalidate = 0;
+
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';

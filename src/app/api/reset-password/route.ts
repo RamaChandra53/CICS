@@ -14,18 +14,13 @@ export async function POST(request: NextRequest) {
 
     // Generate internal email format used by the login system
     const internalEmail = `${rollNumber.trim().toUpperCase()}@cics.local`;
-    console.log(`Generated internal email: ${internalEmail}`);
 
     // Create admin client with service role key
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    console.log(`Supabase URL: ${supabaseUrl}`);
-    console.log(`Service key exists: ${!!supabaseServiceKey}`);
-    console.log(`Service key length: ${supabaseServiceKey?.length}`);
-
     if (!supabaseServiceKey) {
-      console.error('Service key not configured');
+      console.error('SUPABASE_SERVICE_ROLE_KEY not configured');
       return NextResponse.json(
         { error: 'Service key not configured' },
         { status: 500 }
@@ -39,21 +34,14 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Update user password using admin API with internal email
-    console.log(`Attempting to update password for user: ${userId}`);
-    console.log(`Using internal email: ${internalEmail}`);
-    console.log(`New password length: ${newPassword.length}`);
-    
     // First update password
-    const { error: updateError, data: updateData } = await supabaseAdmin.auth.admin.updateUserById(
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
       userId,
       { password: newPassword }
     );
 
-    console.log(`Password update result:`, { updateError, updateData });
-
     if (updateError) {
-      console.error('Password update error:', updateError);
+      console.error('Password update failed');
       return NextResponse.json(
         { error: `Failed to update password: ${updateError.message}` },
         { status: 500 }
@@ -61,25 +49,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Then update email separately
-    console.log(`Updating email to: ${internalEmail}`);
-    const { error: emailError, data: emailData } = await supabaseAdmin.auth.admin.updateUserById(
+    const { error: emailError } = await supabaseAdmin.auth.admin.updateUserById(
       userId,
       { email: internalEmail }
     );
 
-    console.log(`Email update result:`, { emailError, emailData });
-
     if (emailError) {
-      console.error('Email update error:', emailError);
       // Don't fail the request if email update fails, password is already updated
-      console.log('Password updated but email update failed');
-    } else {
-      console.log(`Email successfully updated to: ${internalEmail}`);
+      console.error('Email update failed (password was updated successfully)');
     }
 
-    console.log(`Password successfully updated for user: ${userId}`);
-
-    // Update email in profiles table if needed (keep MGIT email if provided)
+    // Update roll_number in profiles table if needed
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({ 
@@ -88,8 +68,7 @@ export async function POST(request: NextRequest) {
       .eq('id', userId);
 
     if (profileError) {
-      console.error('Profile update error:', profileError);
-      // Don't fail the request if profile update fails
+      console.error('Profile update failed (password was updated successfully)');
     }
 
     return NextResponse.json(
@@ -98,7 +77,7 @@ export async function POST(request: NextRequest) {
     );
 
   } catch (error) {
-    console.error('Reset password API error:', error);
+    console.error('Reset password API error');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

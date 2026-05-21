@@ -1,12 +1,12 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
+
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post, Community } from '@/types';
 import PostCard from '@/components/PostCard';
-import CreatePostForm from '@/components/CreatePostForm';
+import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import RedditNavbar from '@/components/RedditNavbar';
@@ -255,11 +255,6 @@ export default function RoomPage() {
       }
 
       try {
-        // Add timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Room initialization timeout')), 20000)
-        );
-
         const initPromise = async () => {
           try {
             // Parallel fetch community and membership data
@@ -368,14 +363,10 @@ export default function RoomPage() {
           }
         };
 
-        await Promise.race([initPromise(), timeoutPromise]);
+        await initPromise();
       } catch (error) {
         console.error('Room initialization error:', error);
-        if (error instanceof Error && error.message === 'Room initialization timeout') {
-          setError('Room page initialization timed out. Please try again.');
-        } else {
-          setError(error instanceof Error ? error.message : 'Failed to load room');
-        }
+        setError(error instanceof Error ? error.message : 'Failed to load room');
       } finally {
         setLoading(false);
       }
@@ -563,10 +554,10 @@ export default function RoomPage() {
 
             {/* Create Post */}
             {authProfile && supportsPosting && (
-              <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-2 mb-4">
-                <CreatePostForm
+              <div className="glass rounded-xl p-4 mb-6 neon-glow">
+                <EnhancedCreatePostForm
                   profile={authProfile}
-                  defaultRoom={postRoom === 'campus' ? 'college' : postRoom}
+                  defaultCommunity={postRoom === 'campus' ? 'college' : postRoom}
                   onPostCreated={() => {
                     setPage(0);
                     setHasMore(true);

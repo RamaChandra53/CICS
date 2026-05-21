@@ -48,46 +48,46 @@ export async function GET(request: NextRequest) {
   }
 }
 
+function getMetaContent(html: string, nameOrProperty: string): string {
+  // Match <meta property="X" content="Y"> or <meta name="X" content="Y">
+  // Also handles content before property/name attribute
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|name)=["']${nameOrProperty}["'][^>]+content=["']([^"']*)["']`, 'i'),
+    new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${nameOrProperty}["']`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return '';
+}
+
 function extractMetadata(html: string, url: string) {
-  // Create a temporary DOM element to parse HTML
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = html;
+  // Extract title from <title> tag
+  const titleTagMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  const titleTagContent = titleTagMatch?.[1] ?? '';
 
-  // Helper function to get content from meta tags
-  const getMetaContent = (name: string, property?: string) => {
-    // Try property first (for Open Graph)
-    if (property) {
-      const meta = tempDiv.querySelector(`meta[property="${property}"]`) ||
-                   tempDiv.querySelector(`meta[name="${property}"]`);
-      if (meta) return meta.getAttribute('content');
-    }
-    
-    // Try name
-    const meta = tempDiv.querySelector(`meta[name="${name}"]`) ||
-                 tempDiv.querySelector(`meta[property="${name}"]`);
-    return meta?.getAttribute('content');
-  };
-
-  // Extract metadata
-  const title = 
-    getMetaContent('', 'og:title') ||
-    getMetaContent('title') ||
-    tempDiv.querySelector('title')?.textContent ||
+  const title =
+    getMetaContent(html, 'og:title') ||
+    getMetaContent(html, 'title') ||
+    titleTagContent ||
     '';
 
-  const description = 
-    getMetaContent('', 'og:description') ||
-    getMetaContent('description') ||
+  const description =
+    getMetaContent(html, 'og:description') ||
+    getMetaContent(html, 'description') ||
     '';
 
-  const image = 
-    getMetaContent('', 'og:image') ||
-    getMetaContent('image') ||
+  const image =
+    getMetaContent(html, 'og:image') ||
+    getMetaContent(html, 'image') ||
     '';
 
-  const siteName = 
-    getMetaContent('', 'og:site_name') ||
-    getMetaContent('site_name') ||
+  const siteName =
+    getMetaContent(html, 'og:site_name') ||
+    getMetaContent(html, 'site_name') ||
     '';
 
   // Get domain from URL
@@ -99,6 +99,6 @@ function extractMetadata(html: string, url: string) {
     image: image.trim(),
     siteName: siteName.trim() || domain,
     url: url,
-    domain: domain
+    domain: domain,
   };
 }

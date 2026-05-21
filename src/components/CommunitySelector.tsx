@@ -40,7 +40,7 @@ const CommunitySelector: React.FC<CommunitySelectorProps> = ({
           <option value="">Select a community...</option>
           {communities.map((community) => (
             <option key={community.slug} value={community.slug}>
-              {community.icon} {community.name} ({community.member_count} members)
+              {community.icon} {community.name}
             </option>
           ))}
         </select>
@@ -61,9 +61,6 @@ const CommunitySelector: React.FC<CommunitySelectorProps> = ({
             <div className="flex-1">
               <h3 className="text-white font-medium text-sm">{selectedCommunityData.name}</h3>
               <p className="text-gray-400 text-xs">{selectedCommunityData.description}</p>
-              <p className="text-gray-500 text-xs mt-1">
-                {selectedCommunityData.member_count.toLocaleString()} members
-              </p>
             </div>
           </div>
         </div>

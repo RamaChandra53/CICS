@@ -1,6 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
+
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
@@ -155,14 +155,7 @@ export default function FeedPage() {
         setPage(0);
         setHasMore(true);
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Feed initialization timeout')), 15000)
-        );
-
-        await Promise.race([
-          Promise.all([fetchCommunities(), fetchPosts(0, { reset: true })]),
-          timeoutPromise,
-        ]);
+        await Promise.all([fetchCommunities(), fetchPosts(0, { reset: true })]);
       } catch (error) {
         console.error('Feed initialization error:', error);
         
@@ -235,7 +228,6 @@ export default function FeedPage() {
               <div className="glass rounded-xl p-4 mb-6 neon-glow">
                   <EnhancedCreatePostForm
                     profile={authProfile}
-                    communities={communities}
                     defaultCommunity="campus"
                     onPostCreated={() => {
                       setPage(0);

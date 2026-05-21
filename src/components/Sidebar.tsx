@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Community } from '@/types';
@@ -20,7 +20,7 @@ async function ensureMembership(
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [joinedCommunities, setJoinedCommunities] = useState<Community[]>([]);
   const [exploreCommunities, setExploreCommunities] = useState<Community[]>([]);

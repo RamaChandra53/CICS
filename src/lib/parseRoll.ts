@@ -78,6 +78,8 @@ export function getCurrentYear(rollNumber: string): string {
   
   const diff = academicYear - intakeYear
   
+  if (diff < 0) return '1st';
+
   const yearMap: Record<number, string> = {
     0: '1st',
     1: '2nd',
@@ -92,7 +94,7 @@ export function parseRollNumber(roll: string): ParsedRoll | null {
   const normalized = roll.trim().toUpperCase();
   if (normalized.length !== 10) return null;
 
-  const match = normalized.match(/^(22|23|24|25)(261)A([0-9]{2})([0-9A-Z]{2})$/);
+  const match = normalized.match(/^([0-9]{2})(261)A([0-9]{2})([0-9A-Z]{2})$/);
   if (!match) return null;
 
   const intakeYear = match[1];

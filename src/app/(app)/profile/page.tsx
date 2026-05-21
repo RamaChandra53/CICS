@@ -1,8 +1,8 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback } from 'react';
+
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post } from '@/types';
 import PostCard from '@/components/PostCard';
@@ -19,7 +19,7 @@ const PAGE_SIZE = 10;
 type VoteType = 'up' | 'down';
 
 export default function ProfilePage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const { user, profile: authProfile, loading: authLoading, signOut } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);

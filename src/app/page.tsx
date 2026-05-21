@@ -1,6 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase';
@@ -53,13 +53,13 @@ async function updateDynamicCommunities(
   // Calculate current year dynamically
   const currentYear = getCurrentYear(rollNumber);
   const isAlumni = currentYear === 'Alumni';
-  
+
   // Get current community memberships
   const { data: currentMemberships, error: membershipError } = await supabase
     .from('community_members')
     .select('community_slug')
     .eq('user_id', userId);
-    
+
   if (membershipError) {
     if (isMissingTableError(membershipError, 'community_members')) {
       return;
@@ -70,10 +70,10 @@ async function updateDynamicCommunities(
   const currentSlugs = new Set(
     ((currentMemberships ?? []) as CommunityMembership[]).map((membership) => membership.community_slug)
   );
-  
+
   // Determine target communities - Reddit-style 5 core subreddits
   const targetSlugs: string[] = ['campus']; // Everyone joins campus
-  
+
   // Add specific communities based on user type
   if (isAlumni) {
     targetSlugs.push('alumni');
@@ -81,7 +81,7 @@ async function updateDynamicCommunities(
     // All current students join placements and clubs
     targetSlugs.push('placements', 'clubs');
   }
-  
+
   // Everyone can join confessions (anonymous-only community)
   targetSlugs.push('confessions');
 
@@ -121,7 +121,7 @@ async function updateDynamicCommunities(
     .from('communities')
     .select('slug')
     .in('slug', toAdd);
-    
+
   if (existingCommunitiesError) {
     if (isMissingTableError(existingCommunitiesError, 'communities')) {
       return;
@@ -301,14 +301,14 @@ export default function LoginPage() {
             data: {
               roll_number: normalizedUpperIdentifier,
               is_first_login: true,
-              year: parsedRollForSignup!.year,
+              year: parsedRollForSignup!.year === 'Alumni' ? null : parsedRollForSignup!.year,
               branch: parsedRollForSignup!.branch,
               section: parsedRollForSignup!.section,
             },
           },
         });
         if (signUpError) {
-          throw new Error(lastSignInErrorMessage || 'Invalid roll number or password.');
+          throw new Error(signUpError.message || lastSignInErrorMessage || 'Invalid roll number or password.');
         }
         createdNewAccount = true;
 
@@ -341,12 +341,14 @@ export default function LoginPage() {
         (existingFirstLoginState == null && isFirstTimeAttempt);
       const shouldRequirePasswordReset = inferredFirstLoginState;
 
-      const profilePayload: Record<string, string | boolean> = {
+      const profilePayload: Record<string, string | boolean | null> = {
         id: userId,
         is_anonymous: false,
       };
-      if (createdNewAccount) {
-        profilePayload.username = normalizedUpperIdentifier;
+      // Always include username to satisfy NOT NULL constraint during upsert
+      profilePayload.username = existingProfile?.username || normalizedUpperIdentifier;
+
+      if (createdNewAccount || !existingProfile?.roll_number) {
         profilePayload.roll_number = normalizedUpperIdentifier;
       }
       if (existingFirstLoginState != null) {
@@ -355,7 +357,7 @@ export default function LoginPage() {
         profilePayload.is_first_login = true;
       }
       if (isFirstTimeAttempt) {
-        profilePayload.year = parsedRollForSignup!.year;
+        profilePayload.year = parsedRollForSignup!.year === 'Alumni' ? null : parsedRollForSignup!.year;
         profilePayload.branch = parsedRollForSignup!.branch;
         profilePayload.section = parsedRollForSignup!.section;
       }
@@ -395,7 +397,7 @@ export default function LoginPage() {
             section: isAlumni ? null : parsedEffectiveRoll.section
           })
           .eq('id', userId);
-        
+
         // Update community memberships dynamically when roll number is valid
         void updateDynamicCommunities(
           supabase,
@@ -419,13 +421,13 @@ export default function LoginPage() {
       <div className="max-w-md w-full bg-[#141414] border border-gray-800 rounded-2xl p-6 sm:p-7">
         <div className="text-center mb-6">
           <h1 className="text-4xl sm:text-5xl font-bold text-white">Anonstud</h1>
-          <p className="text-gray-400 mt-2 text-sm">Bonjour!, my friend</p>
-          <p className="text-gray-400 text-sm">Stay anon and Have fun</p>
+          <p className="text-gray-400 mt-2 text-sm">Private college discussions only for MGIT students.</p>
+          <p className="text-gray-400 text-sm">Stay anonymous. Talk freely. </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-gray-400 text-xs mb-1.5">Roll Number / Username / Email</label>
+            <label className="block text-gray-400 text-xs mb-1.5">Roll Number</label>
             <input
               type="text"
               value={rollNumber}
@@ -433,7 +435,7 @@ export default function LoginPage() {
                 setRollNumber(e.target.value);
                 if (error) setError('');
               }}
-              placeholder="e.g., 25261A0512 or your old username/email"
+              placeholder="e.g. 25261A0512"
               className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
               required
               maxLength={80}
@@ -515,13 +517,13 @@ export default function LoginPage() {
               First time password: <span className="font-mono text-[#6366f1] bg-[#111] px-2 py-1 rounded">{DEFAULT_PASSWORD}</span>
             </p>
           </div>
-          
+
           <div className="text-center">
             <button
               onClick={() => router.push('/forgot-password')}
               className="text-gray-400 hover:text-white text-sm transition-colors"
             >
-              ← Forgot password?
+              Forgot password?
             </button>
           </div>
         </div>

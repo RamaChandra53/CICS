@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ROOMS } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import CreatePostForm from '@/components/CreatePostForm';
+import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 
 export default function RedditSidebar() {
   const pathname = usePathname();
@@ -136,7 +136,7 @@ export default function RedditSidebar() {
               </button>
             </div>
             <div className="p-4">
-              <CreatePostForm
+              <EnhancedCreatePostForm
                 profile={profile}
                 onPostCreated={() => {
                   setShowCreatePost(false);

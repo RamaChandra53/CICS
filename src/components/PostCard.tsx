@@ -24,11 +24,6 @@ const PostCard = memo(function PostCard({
   const displayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
   const room = ROOMS.find(r => r.id === post.room);
 
-  // Memoize vote handlers to prevent unnecessary re-renders
-  const handleVote = useCallback((e: React.MouseEvent, type: 'up' | 'down') => {
-    // Vote handling is done in VoteButtons component
-  }, []);
-
   // Share functionality
   const handleShare = useCallback(async () => {
     const postUrl = `${window.location.origin}/post/${post.id}`;

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Profile, Community } from '@/types';
+import { Profile, Community, ROOMS } from '@/types';
 import CollegeEmailVerificationModal from './CollegeEmailVerificationModal';
 
 import PostTypeSelector, { PostType as PostTypeEnum } from './PostTypeSelector';
@@ -12,12 +12,11 @@ import VideoPostForm from './VideoPostForm';
 import LinkPostForm from './LinkPostForm';
 import PollPostForm from './PollPostForm';
 
-import TagsInput from './TagsInput';
+
 import CommunitySelector from './CommunitySelector';
 
 interface EnhancedCreatePostFormProps {
   profile: Profile;
-  communities: Community[];
   defaultCommunity?: string;
   onPostCreated?: () => void;
   className?: string;
@@ -43,7 +42,6 @@ interface PostFormData {
 
 const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   profile,
-  communities,
   defaultCommunity = '',
   onPostCreated,
   className = '',
@@ -55,6 +53,38 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   const [error, setError] = useState('');
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [displayMode, setDisplayMode] = useState<'full' | 'partial' | 'anonymous'>('full');
+  const [localCommunities, setLocalCommunities] = useState<Community[]>([]);
+
+  React.useEffect(() => {
+    const fetchCommunities = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('communities')
+          .select('id, name, slug, description, icon, type, member_count, created_at')
+          .order('member_count', { ascending: false });
+
+        if (error || !data || data.length === 0) {
+          // Fallback to ROOMS if database returns empty or error
+          const fallbackCommunities: Community[] = ROOMS.map((room) => ({
+            id: room.id,
+            name: room.label,
+            slug: room.id,
+            description: room.description,
+            icon: room.icon,
+            type: 'open',
+            member_count: 0,
+            created_at: new Date().toISOString()
+          }));
+          setLocalCommunities(fallbackCommunities);
+        } else {
+          setLocalCommunities(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch communities for form:', err);
+      }
+    };
+    fetchCommunities();
+  }, [supabase]);
 
   const [formData, setFormData] = useState<PostFormData>({
     postType: 'text',
@@ -257,18 +287,35 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         downvotes: 0,
       };
 
-      // Insert post using regular client (RLS should allow authenticated users)
-      const { error: insertError } = await supabase
-        .from('posts')
-        .insert(postData);
+      // If we have files to upload, we must wait for them and the subsequent insert to complete
+      const hasUploads = (formData.postType === 'image' && formData.images.length > 0) || 
+                         (formData.postType === 'video' && formData.videoFile);
 
-      if (insertError) {
-        throw new Error(insertError.message || 'Failed to create post');
+      if (hasUploads) {
+        // Await the insert if we are already waiting for uploads
+        const { error: insertError } = await supabase.from('posts').insert(postData);
+        if (insertError) throw new Error(insertError.message || 'Failed to create post');
+        
+        resetForm();
+        setExpanded(false);
+        onPostCreated?.();
+        setLoading(false);
+      } else {
+        // Optimistic UI for text/link/polls - close form instantly, let DB insert in background
+        resetForm();
+        setExpanded(false);
+        setLoading(false);
+        
+        supabase.from('posts').insert(postData).then(({ error: insertError }) => {
+          if (insertError) {
+            console.error('Failed to create post in background:', insertError.message);
+          } else {
+            // Only trigger the callback after the post is safely in the database, 
+            // so the parent feed fetches the fresh data.
+            onPostCreated?.();
+          }
+        });
       }
-
-      resetForm();
-      setExpanded(false);
-      onPostCreated?.();
     } catch (err: unknown) {
       console.error('Post creation error:', err);
 
@@ -277,8 +324,9 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
       } else {
         setError('Failed to create post. Please try again.');
       }
-    } finally {
-      setLoading(false);
+      if (loading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -404,23 +452,13 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
 
           <div className="mb-6">
             <CommunitySelector
-              communities={communities}
+              communities={localCommunities}
               selectedCommunity={formData.community}
               onCommunityChange={(community) => updateFormData({ community })}
             />
           </div>
 
           {renderPostTypeForm()}
-
-          <div className="mb-6">
-            <TagsInput
-              tags={formData.tags}
-              onChange={(tags) => updateFormData({ tags })}
-              placeholder="Add relevant tags..."
-              maxTags={10}
-              showCategories={true}
-            />
-          </div>
 
           {formData.community !== 'confessions' && (
             <div className="mb-6">
