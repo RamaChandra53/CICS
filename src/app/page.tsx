@@ -161,14 +161,31 @@ async function getSignInEmailCandidates(
     candidates.add(toLegacyUsernameEmail(trimmedIdentifier));
   }
 
-  const escapedIdentifier = trimmedIdentifier.replaceAll(',', '\\,');
-  const escapedUpper = normalizedUpperIdentifier.replaceAll(',', '\\,');
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('username, roll_number, email')
-    .or(`username.eq.${escapedIdentifier},roll_number.eq.${escapedUpper},email.eq.${loweredIdentifier}`);
+  const profileRecords = new Map<string, ProfileLoginRecord>();
+  const profileQueries: Array<Promise<{ data: ProfileLoginRecord[] | null }>> = [
+    supabase
+      .from('profiles')
+      .select('username, roll_number, email')
+      .eq('username', trimmedIdentifier),
+    supabase
+      .from('profiles')
+      .select('username, roll_number, email')
+      .eq('roll_number', normalizedUpperIdentifier),
+    supabase
+      .from('profiles')
+      .select('username, roll_number, email')
+      .eq('email', loweredIdentifier),
+  ];
 
-  for (const profile of ((profiles ?? []) as ProfileLoginRecord[])) {
+  const profileResults = await Promise.all(profileQueries);
+  for (const result of profileResults) {
+    for (const profile of result.data ?? []) {
+      const dedupeKey = `${profile.username ?? ''}|${profile.roll_number ?? ''}|${profile.email ?? ''}`;
+      profileRecords.set(dedupeKey, profile);
+    }
+  }
+
+  for (const profile of profileRecords.values()) {
     if (profile.email) {
       candidates.add(profile.email.toLowerCase());
     }
@@ -363,7 +380,7 @@ export default function LoginPage() {
 
       // Update year dynamically on login when a valid roll number is available
       const effectiveRollNumber =
-        (existingProfile && 'roll_number' in existingProfile ? existingProfile.roll_number : null) ??
+        existingProfile?.roll_number ??
         (parsedRoll ? normalizedUpperIdentifier : null);
       const parsedEffectiveRoll = effectiveRollNumber ? parseRollNumber(effectiveRollNumber) : null;
       if (effectiveRollNumber && parsedEffectiveRoll) {
@@ -378,16 +395,16 @@ export default function LoginPage() {
             section: isAlumni ? null : parsedEffectiveRoll.section
           })
           .eq('id', userId);
+        
+        // Update community memberships dynamically when roll number is valid
+        void updateDynamicCommunities(
+          supabase,
+          userId,
+          effectiveRollNumber
+        ).catch((communityError) => {
+          console.error('Community sync failed:', communityError);
+        });
       }
-
-      // Update community memberships dynamically
-      void updateDynamicCommunities(
-        supabase,
-        userId,
-        (effectiveRollNumber ?? normalizedUpperIdentifier)
-      ).catch((communityError) => {
-        console.error('Community sync failed:', communityError);
-      });
 
       router.push(finalShouldRequirePasswordReset ? '/set-password' : '/feed');
     } catch (err: unknown) {
@@ -416,7 +433,7 @@ export default function LoginPage() {
                 setRollNumber(e.target.value);
                 if (error) setError('');
               }}
-              placeholder="eg: 25261A0512 or your old username/email"
+              placeholder="e.g., 25261A0512 or your old username/email"
               className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
               required
               maxLength={80}
