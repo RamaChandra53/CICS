@@ -12,7 +12,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import RedditNavbar from '@/components/RedditNavbar';
 import RedditSidebar from '@/components/RedditSidebar';
 import RedditRightPanel from '@/components/RedditRightPanel';
-import RedditMobileNav from '@/components/RedditMobileNav';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
@@ -455,11 +454,11 @@ export default function RoomPage() {
   if (error && !community) {
     return (
       <ErrorBoundary>
-        <div className="min-h-screen bg-[#0b1416]">
+        <div className="min-h-screen bg-[#0b0f12]">
           <RedditNavbar />
-          <div className="flex pt-12">
+          <div className="flex pt-0 md:pt-14">
             <RedditSidebar />
-            <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+            <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
               <ErrorMessage
                 title="Community not found"
                 message={error || `The community r/${roomName} doesn't exist.`}
@@ -470,7 +469,6 @@ export default function RoomPage() {
               <RedditRightPanel />
             </div>
           </div>
-          <RedditMobileNav />
         </div>
       </ErrorBoundary>
     );
@@ -479,18 +477,17 @@ export default function RoomPage() {
   if (loading) {
     return (
       <ErrorBoundary>
-        <div className="min-h-screen bg-[#0b1416]">
+        <div className="min-h-screen bg-[#0b0f12]">
           <RedditNavbar />
-          <div className="flex pt-12">
+          <div className="flex pt-0 md:pt-14">
             <RedditSidebar />
-            <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+            <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
               <PostLoadingSkeleton count={3} />
             </main>
             <div className="hidden xl:block w-80 p-4">
               <RedditRightPanel />
             </div>
           </div>
-          <RedditMobileNav />
         </div>
       </ErrorBoundary>
     );
@@ -498,30 +495,30 @@ export default function RoomPage() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#0b1416]">
+      <div className="min-h-screen bg-[#0b0f12]">
         <RedditNavbar />
-        <div className="flex pt-12">
+        <div className="flex pt-0 md:pt-14">
           <RedditSidebar />
           
           {/* Main Content */}
-          <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+          <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
             {/* Subtle loading indicator for community switching */}
             {switching && (
               <div className="h-1 bg-indigo-500 animate-pulse w-full mb-4" />
             )}
             {/* Community Header */}
-            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-4 mb-4">
+            <div className="bg-[#15181c] border border-[#252a31] rounded-2xl p-4 mb-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 bg-[#343536] rounded-full flex items-center justify-center text-2xl">
+                  <div className="w-12 h-12 bg-[#1f2329] rounded-full flex items-center justify-center text-2xl">
                     {community?.icon ?? '💬'}
                   </div>
                   <div>
-                    <h1 className="text-[16px] font-bold text-[#d7dadc] flex items-center gap-2">
+                    <h1 className="text-base font-semibold text-slate-100 flex items-center gap-2">
                       r/{community?.slug}
                     </h1>
-                    <p className="text-[#818384] text-[12px] mt-1">{community?.description ?? 'Community feed'}</p>
-                    <p className="text-[#818384] text-[12px] mt-1">
+                    <p className="text-slate-400 text-xs mt-1">{community?.description ?? 'Community feed'}</p>
+                    <p className="text-slate-400 text-xs mt-1">
                       {community?.member_count ?? 0} member{(community?.member_count ?? 0) === 1 ? '' : 's'}
                     </p>
                   </div>
@@ -530,21 +527,21 @@ export default function RoomPage() {
                   <button
                     onClick={handleMembershipToggle}
                     disabled={joinLoading || community.slug === 'campus'}
-                    className="bg-[#0079d3] hover:bg-[#1a76d3] text-white text-xs px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="h-9 rounded-full bg-indigo-600 px-4 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {joinLoading ? '...' : community.slug === 'campus' ? 'Required' : isMember ? 'Joined' : 'Join'}
                   </button>
                 )}
               </div>
               {error && (
-                <p className="text-[#ff4500] text-xs mt-3 bg-red-900/20 border border-red-800/40 rounded-lg p-2">
+                <p className="text-red-300 text-xs mt-3 bg-red-900/20 border border-red-800/40 rounded-lg p-2">
                   {error}
                 </p>
               )}
             </div>
 
             {/* Tag Filter */}
-            <div className="bg-[#1a1a1b] border border-[#343536] rounded-[4px] p-4 mb-4">
+            <div className="bg-[#15181c] border border-[#252a31] rounded-2xl p-4 mb-4">
               <TagFilter
                 selectedTags={selectedTags}
                 onTagsChange={setSelectedTags}
@@ -554,7 +551,7 @@ export default function RoomPage() {
 
             {/* Create Post */}
             {authProfile && supportsPosting && (
-              <div className="glass rounded-xl p-4 mb-6 neon-glow">
+              <div id="create-post" className="mb-4">
                 <EnhancedCreatePostForm
                   profile={authProfile}
                   defaultCommunity={postRoom === 'campus' ? 'college' : postRoom}
@@ -582,7 +579,7 @@ export default function RoomPage() {
                 icon={<div className="text-4xl">💬</div>}
               />
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {posts.map((post) => (
                   <PostCard
                     key={post.id}
@@ -593,14 +590,14 @@ export default function RoomPage() {
                 ))}
 
                 {postsLoading && posts.length > 0 && (
-                  <div className="py-4 text-center text-xs text-gray-400">Loading more posts...</div>
+                  <div className="py-4 text-center text-xs text-slate-400">Loading more posts...</div>
                 )}
 
                 {hasMore && !postsLoading && (
                   <div className="flex justify-center py-4">
                     <button
                       onClick={loadMore}
-                      className="rounded-lg border border-gray-700 px-4 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
+                      className="h-10 rounded-full border border-[#252a31] px-5 text-xs text-slate-200 transition-colors hover:border-indigo-400/60 hover:text-indigo-200"
                     >
                       Load more posts
                     </button>
@@ -615,9 +612,6 @@ export default function RoomPage() {
             <RedditRightPanel currentRoom={roomName} />
           </div>
         </div>
-        
-        {/* Mobile Navigation */}
-        <RedditMobileNav />
       </div>
     </ErrorBoundary>
   );

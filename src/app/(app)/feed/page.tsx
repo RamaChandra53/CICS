@@ -7,12 +7,11 @@ import { createClient } from '@/lib/supabase';
 import { Post, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import RedditNavbar from '@/components/RedditNavbar';
 import RedditSidebar from '@/components/RedditSidebar';
 import RedditRightPanel from '@/components/RedditRightPanel';
-import RedditMobileNav from '@/components/RedditMobileNav';
 import ErrorBoundaryFunctional from '@/components/ErrorBoundaryFunctional';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
@@ -21,12 +20,21 @@ import SkeletonFeed from '@/components/ui/SkeletonFeed';
 
 const PAGE_SIZE = 15;
 const FEED_ROOMS = ['campus', 'college'] as const;
+const BASE_COMMUNITY_CHIPS = [
+  { id: 'all', label: 'All' },
+  { id: 'general', label: 'General' },
+  { id: 'confessions', label: 'Confessions' },
+  { id: 'rants', label: 'Rants' },
+  { id: 'random', label: 'Random' },
+  { id: 'placements', label: 'Placements' },
+];
 
 type VoteType = 'up' | 'down';
 
 export default function FeedPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, profile: authProfile, loading: authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +43,40 @@ export default function FeedPage() {
   const [postsLoading, setPostsLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [activeChip, setActiveChip] = useState('all');
+
+  const communityChips = useMemo(() => {
+    if (communities.length === 0) return BASE_COMMUNITY_CHIPS;
+    const labelMap = new Map(communities.map((community) => [community.slug, community.name]));
+    const hasMatchingChip = BASE_COMMUNITY_CHIPS.some((chip) => labelMap.has(chip.id));
+    if (!hasMatchingChip) return BASE_COMMUNITY_CHIPS;
+    return BASE_COMMUNITY_CHIPS.map((chip) => ({
+      ...chip,
+      label: labelMap.get(chip.id) ?? chip.label,
+    }));
+  }, [communities]);
+
+  const visiblePosts = useMemo(() => {
+    const roomFilterMap: Record<string, string | null> = {
+      all: null,
+      general: 'campus',
+      confessions: 'confessions',
+      rants: 'rants',
+      random: 'random',
+      placements: 'placements',
+    };
+    const roomFilter = roomFilterMap[activeChip] ?? null;
+    if (!roomFilter) return posts;
+    return posts.filter((post) => post.room === roomFilter);
+  }, [activeChip, posts]);
+
+  const composeParam = searchParams.get('compose');
+
+  useEffect(() => {
+    if (composeParam !== '1') return;
+    const target = document.getElementById('create-post');
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [composeParam]);
 
 
   const fetchCommunities = useCallback(async () => {
@@ -198,34 +240,55 @@ export default function FeedPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-bg-primary gradient-bg">
+      <div className="min-h-screen bg-[#0b0f12]">
         <RedditNavbar />
-        <div className="flex pt-14">
+        <div className="flex pt-0 md:pt-14">
           <RedditSidebar />
-          <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+          <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
             <SkeletonFeed count={5} />
           </main>
           <div className="hidden xl:block w-80 p-4">
             <RedditRightPanel />
           </div>
         </div>
-        <RedditMobileNav />
       </div>
     );
   }
 
   return (
     <ErrorBoundaryFunctional>
-      <div className="min-h-screen bg-bg-primary gradient-bg">
+      <div className="min-h-screen bg-[#0b0f12]">
         <RedditNavbar />
-        <div className="flex pt-14">
+        <div className="flex pt-0 md:pt-14">
           <RedditSidebar />
           
           {/* Main Content */}
-          <main className="flex-1 max-w-[740px] mx-auto px-4 py-6">
+          <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
+            <div className="mb-4 overflow-x-auto">
+              <div className="flex gap-2 pb-1">
+                {communityChips.map((chip) => {
+                  const isActive = activeChip === chip.id;
+                  return (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setActiveChip(chip.id)}
+                      className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-colors ${
+                        isActive
+                          ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-200'
+                          : 'border-[#252a31] bg-[#15181c] text-slate-400'
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Create Post Box */}
             {authProfile && (
-              <div className="glass rounded-xl p-4 mb-6 neon-glow">
+              <div id="create-post" className="mb-4">
                   <EnhancedCreatePostForm
                     profile={authProfile}
                     defaultCommunity="campus"
@@ -246,7 +309,7 @@ export default function FeedPage() {
               />
             ) : postsLoading && posts.length === 0 ? (
               <PostLoadingSkeleton count={2} />
-            ) : posts.length === 0 ? (
+            ) : visiblePosts.length === 0 ? (
               <EmptyState
                 title="No posts yet"
                 description="Be the first to share something with the campus!"
@@ -259,8 +322,8 @@ export default function FeedPage() {
                 }
               />
             ) : (
-              <div className="space-y-4">
-                {posts.map((post, index) => (
+              <div className="space-y-3">
+                {visiblePosts.map((post, index) => (
                     <div 
                       key={post.id} 
                       className="transform transition-all duration-500"
@@ -280,7 +343,7 @@ export default function FeedPage() {
                     <button
                       onClick={loadMore}
                       disabled={postsLoading}
-                      className="px-6 py-3 bg-accent-primary/20 hover:bg-accent-primary/30 text-accent-primary rounded-lg font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed border border-accent-primary/30"
+                      className="h-11 rounded-full border border-indigo-500/30 px-6 text-sm font-medium text-indigo-300 transition-colors hover:border-indigo-400/60 hover:text-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {postsLoading ? 'Loading...' : 'Load More Posts'}
                     </button>
@@ -295,9 +358,6 @@ export default function FeedPage() {
             <RedditRightPanel currentRoom="campus" />
           </div>
         </div>
-        
-        {/* Mobile Navigation */}
-        <RedditMobileNav />
       </div>
     </ErrorBoundaryFunctional>
   );

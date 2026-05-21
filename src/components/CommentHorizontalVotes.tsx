@@ -118,52 +118,47 @@ export default function CommentHorizontalVotes({
   const score = upvotes - downvotes;
 
   return (
-    <div className="flex items-center gap-2">
-      {/* Combined vote button */}
-      <div className="flex items-center gap-0.5 rounded-full bg-[#282828] px-1.5 py-0.5">
-        {/* Upvote arrow */}
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex h-8 items-center gap-0.5 rounded-full border border-[#252a31] bg-[#0f1318] px-2">
         <button
           onClick={(e) => handleVote(e, 'up')}
           disabled={voting || !userId}
-          className={`p-0.5 text-white transition-colors ${
-            userVote === 'up' 
-              ? 'text-orange-500' 
-              : 'hover:text-orange-400'
+          className={`flex h-6 w-6 items-center justify-center rounded-full text-white transition-colors ${
+            userVote === 'up' ? 'text-indigo-300' : 'hover:text-indigo-200'
           } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Upvote"
         >
-          <span className="text-xs">▲</span>
+          <span className="text-[10px]">▲</span>
         </button>
-        
-        {/* Score */}
-        <span className={`text-xs font-medium ${
-          userVote === 'up' ? 'text-orange-500' : 
-          userVote === 'down' ? 'text-blue-500' : 
-          'text-white'
-        }`}>
+
+        <span
+          className={`text-[11px] font-semibold ${
+            userVote === 'up'
+              ? 'text-indigo-300'
+              : userVote === 'down'
+              ? 'text-red-300'
+              : 'text-slate-200'
+          }`}
+        >
           {score}
         </span>
-        
-        {/* Downvote arrow */}
+
         <button
           onClick={(e) => handleVote(e, 'down')}
           disabled={voting || !userId}
-          className={`p-0.5 text-white transition-colors ${
-            userVote === 'down' 
-              ? 'text-blue-500' 
-              : 'hover:text-blue-400'
+          className={`flex h-6 w-6 items-center justify-center rounded-full text-white transition-colors ${
+            userVote === 'down' ? 'text-red-300' : 'hover:text-slate-200'
           } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Downvote"
         >
-          <span className="text-xs">▼</span>
+          <span className="text-[10px]">▼</span>
         </button>
       </div>
 
-      {/* Reply button */}
       {onReply && (
         <button
           onClick={onReply}
-          className="rounded-full bg-[#282828] px-2 py-1 text-xs text-white hover:bg-[#383838] transition-colors"
+          className="h-8 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
         >
           Reply
         </button>

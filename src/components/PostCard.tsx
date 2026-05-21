@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Post } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { ROOMS } from '@/types';
+import HorizontalVoteButtons from './HorizontalVoteButtons';
 import VoteButtons from './VoteButtons';
 
 interface PostCardProps {
@@ -97,15 +98,17 @@ const PostCard = memo(function PostCard({
   };
 
   const displayInfo = getDisplayInfo();
+  const content = post.content ?? '';
+  const [headline, ...bodyLines] = content.split('\n');
+  const body = bodyLines.join('\n').trim();
 
   return (
-    <div className="glass rounded-xl overflow-hidden transform transition-all duration-300 hover:scale-[1.02] hover:shadow-neon group">
-      <div className="flex">
-        {/* Vote Column */}
-        <div className="w-12 bg-bg-secondary/50 flex flex-col items-center py-3 border-r border-border-primary">
-          <VoteButtons 
-            postId={post.id} 
-            initialUpvotes={post.upvotes} 
+    <div className="rounded-2xl border border-[#252a31] bg-[#15181c] p-4">
+      <div className="md:flex md:gap-4">
+        <div className="hidden md:flex md:w-12 md:justify-center">
+          <VoteButtons
+            postId={post.id}
+            initialUpvotes={post.upvotes}
             initialDownvotes={post.downvotes}
             currentUserId={currentUserId}
             initialUserVote={initialUserVote}
@@ -113,81 +116,88 @@ const PostCard = memo(function PostCard({
           />
         </div>
 
-        {/* Content Column */}
-        <div className="flex-1 p-4">
-          {/* Community and Meta */}
-          <div className="flex items-center text-xs text-text-muted mb-2">
-            <Link 
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
+            <Link
               href={`/room/${room?.id || 'campus'}`}
-              className="font-bold text-accent-primary hover:text-accent-secondary transition-colors cursor-pointer neon-text"
+              className="font-semibold text-slate-200 hover:text-indigo-300 transition-colors"
             >
               campus/{room?.label || 'general'}
             </Link>
-            <span className="mx-2 text-text-muted/50">•</span>
-            <span className="text-text-muted">Posted by 
-              <span className={`ml-1 font-medium ${displayInfo.showVerified ? 'text-accent-primary' : 'text-text-secondary'}`}>
-                {displayInfo.displayName}
-              </span>
-            </span>
+            <span className="text-slate-600">•</span>
+            <span className="text-slate-300">{displayInfo.displayName}</span>
             {displayInfo.showVerified && (
-              <span className="text-warning ml-1" title="Verified User">✓</span>
+              <span className="text-[10px] font-semibold text-indigo-300">✓</span>
             )}
-            <span className="mx-2 text-text-muted/50">•</span>
-            <span className="text-text-muted">{formatTimeAgo(post.created_at)}</span>
+            <span className="text-slate-600">•</span>
+            <span>{formatTimeAgo(post.created_at)}</span>
           </div>
 
-          {/* Post Title */}
-          <Link href={`/post/${post.id}`} className="block group">
-            <h3 className="text-text-primary text-lg font-semibold mb-2 group-hover:text-accent-primary transition-colors line-clamp-2">
-              {post.content.split('\n')[0].substring(0, 150)}
-              {post.content.split('\n')[0].length > 150 && '...'}
+          <Link href={`/post/${post.id}`} className="block">
+            <h3 className="mt-2 text-base font-semibold text-slate-100 leading-snug">
+              {headline.substring(0, 150)}
+              {headline.length > 150 && '...'}
             </h3>
           </Link>
 
-          {/* Post Body Preview */}
-          {post.content.includes('\n') && (
-            <p className="text-text-secondary text-sm mb-3 line-clamp-3 font-mono bg-bg-secondary/30 rounded-lg p-2">
-              {post.content.split('\n').slice(1).join('\n').substring(0, 300)}
-              {post.content.split('\n').slice(1).join('\n').length > 300 && '...'}
+          {body && (
+            <p className="mt-2 text-sm text-slate-200 leading-relaxed line-clamp-3">
+              {body.substring(0, 300)}
+              {body.length > 300 && '...'}
             </p>
           )}
 
-          {/* Post Image */}
           {post.image_url && (
-            <div className="mb-3 rounded-xl overflow-hidden transform transition-transform duration-300 group-hover:scale-[1.02]">
-              <img 
-                src={post.image_url} 
-                alt="Post image" 
-                className="w-full object-cover rounded-xl"
+            <div className="mt-3 overflow-hidden rounded-2xl border border-[#252a31]">
+              <img
+                src={post.image_url}
+                alt="Post image"
+                className="w-full object-cover"
                 loading="lazy"
               />
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center gap-4 text-xs text-text-muted mt-3 pt-3 border-t border-border-primary">
-            <button aria-label="View comments" className="flex items-center gap-1 hover:text-accent-primary transition-all duration-300 transform hover:scale-110">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
-              </svg>
-              <span>{post.comment_count || 0} Comments</span>
-            </button>
-            <button 
-              onClick={handleShare}
-              aria-label="Share post"
-              className="flex items-center gap-1 hover:text-accent-primary transition-all duration-300 transform hover:scale-110"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
-              </svg>
-              <span>Share</span>
-            </button>
-            <button aria-label="Report post" className="flex items-center gap-1 hover:text-error transition-all duration-300 transform hover:scale-110">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
-              </svg>
-              <span>Report</span>
-            </button>
+          <div className="mt-3">
+            <div className="md:hidden">
+              <HorizontalVoteButtons
+                postId={post.id}
+                initialUpvotes={post.upvotes}
+                initialDownvotes={post.downvotes}
+                commentCount={post.comment_count || 0}
+                postContent={content}
+              />
+            </div>
+
+            <div className="hidden md:flex items-center gap-3 border-t border-[#252a31] pt-3 text-xs text-slate-400">
+              <Link
+                href={`/post/${post.id}`}
+                className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-indigo-300"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
+                </svg>
+                <span>{post.comment_count || 0}</span>
+              </Link>
+              <button
+                onClick={handleShare}
+                className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-indigo-300"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
+                </svg>
+                Share
+              </button>
+              <button
+                aria-label="Report post"
+                className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-red-300"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
+                </svg>
+                Report
+              </button>
+            </div>
           </div>
         </div>
       </div>
