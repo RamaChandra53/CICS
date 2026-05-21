@@ -306,7 +306,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         setExpanded(false);
         setLoading(false);
         
-        supabase.from('posts').insert(postData).then(({ error: insertError }) => {
+        supabase.from('posts').insert(postData).then(({ error: insertError }: { error: { message: string } | null }) => {
           if (insertError) {
             console.error('Failed to create post in background:', insertError.message);
           } else {
