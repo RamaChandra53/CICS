@@ -13,6 +13,14 @@ function toInternalEmail(rollNumber: string) {
   return `${rollNumber.trim().toUpperCase()}@cics.local`;
 }
 
+function toLegacyUsernameEmail(username: string) {
+  return `${username.trim().toLowerCase()}@cics.local`;
+}
+
+function looksLikeRollNumber(value: string) {
+  return /^[A-Za-z0-9]{10}$/.test(value.trim());
+}
+
 function getReadableErrorMessage(err: unknown) {
   if (err instanceof Error) return err.message;
   if (typeof err === 'object' && err !== null) {
@@ -136,6 +144,62 @@ async function updateDynamicCommunities(
   }
 }
 
+async function getSignInEmailCandidates(
+  supabase: ReturnType<typeof createClient>,
+  identifier: string,
+  normalizedUpperIdentifier: string
+) {
+  type ProfileLoginRecord = { username: string | null; roll_number: string | null; email: string | null };
+  const candidates = new Set<string>();
+  const trimmedIdentifier = identifier.trim();
+  const loweredIdentifier = trimmedIdentifier.toLowerCase();
+
+  if (trimmedIdentifier.includes('@')) {
+    candidates.add(loweredIdentifier);
+  } else {
+    candidates.add(toInternalEmail(normalizedUpperIdentifier));
+    candidates.add(toLegacyUsernameEmail(trimmedIdentifier));
+  }
+
+  const profileRecords = new Map<string, ProfileLoginRecord>();
+  const profileQueries: Array<Promise<{ data: ProfileLoginRecord[] | null }>> = [
+    supabase
+      .from('profiles')
+      .select('username, roll_number, email')
+      .eq('username', trimmedIdentifier),
+    supabase
+      .from('profiles')
+      .select('username, roll_number, email')
+      .eq('roll_number', normalizedUpperIdentifier),
+    supabase
+      .from('profiles')
+      .select('username, roll_number, email')
+      .eq('email', loweredIdentifier),
+  ];
+
+  const profileResults = await Promise.all(profileQueries);
+  for (const result of profileResults) {
+    for (const profile of result.data ?? []) {
+      const dedupeKey = `${profile.username ?? ''}|${profile.roll_number ?? ''}|${profile.email ?? ''}`;
+      profileRecords.set(dedupeKey, profile);
+    }
+  }
+
+  for (const profile of profileRecords.values()) {
+    if (profile.email) {
+      candidates.add(profile.email.toLowerCase());
+    }
+    if (profile.roll_number) {
+      candidates.add(toInternalEmail(profile.roll_number));
+    }
+    if (profile.username) {
+      candidates.add(toLegacyUsernameEmail(profile.username));
+    }
+  }
+
+  return Array.from(candidates);
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -143,10 +207,13 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [password, setPassword] = useState('');
-  const isFirstTimeAttempt = password === DEFAULT_PASSWORD;
-  const parsedRoll = parseRollNumber(rollNumber);
-  const showInvalidRollMessage = isFirstTimeAttempt && rollNumber.trim().length > 0 && !parsedRoll;
-  const isSubmitDisabled = loading || (isFirstTimeAttempt && !parsedRoll);
+  const normalizedIdentifier = rollNumber.trim();
+  const parsedRoll = parseRollNumber(normalizedIdentifier);
+  const isRollLikeInput = looksLikeRollNumber(normalizedIdentifier);
+  const isFirstTimeAttempt = password === DEFAULT_PASSWORD && parsedRoll !== null;
+  const shouldValidateRollForDefaultPassword = password === DEFAULT_PASSWORD && isRollLikeInput;
+  const showInvalidRollMessage = shouldValidateRollForDefaultPassword && normalizedIdentifier.length > 0 && !parsedRoll;
+  const isSubmitDisabled = loading || (shouldValidateRollForDefaultPassword && !parsedRoll);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,45 +242,64 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const normalizedRollNumber = rollNumber.trim().toUpperCase();
-      if (!normalizedRollNumber || !password) {
-        throw new Error('Please enter roll number and password.');
+      const normalizedUpperIdentifier = rollNumber.trim().toUpperCase();
+      if (!normalizedUpperIdentifier || !password) {
+        throw new Error('Please enter your roll number, username, or email and password.');
       }
-      if (isFirstTimeAttempt && !parsedRoll) {
+      if (shouldValidateRollForDefaultPassword && !parsedRoll) {
         throw new Error(INVALID_ROLL_MESSAGE);
       }
       const parsedRollForSignup = parsedRoll;
 
-      const email = toInternalEmail(normalizedRollNumber);
       let userId: string | null = null;
       let createdNewAccount = false;
+      let signInSucceeded = false;
+      let lastSignInErrorMessage = 'Invalid credentials.';
 
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const emailCandidates = await getSignInEmailCandidates(
+        supabase,
+        normalizedIdentifier,
+        normalizedUpperIdentifier
+      );
 
-      if (signInError) {
+      for (const candidateEmail of emailCandidates) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: candidateEmail,
+          password,
+        });
+
+        if (!signInError && signInData.user) {
+          userId = signInData.user.id;
+          signInSucceeded = true;
+          break;
+        }
+        if (signInError?.message) {
+          lastSignInErrorMessage = signInError.message;
+        }
+      }
+
+      if (!signInSucceeded) {
         if (!isFirstTimeAttempt) {
-          throw new Error('Invalid roll number or password.');
+          throw new Error('Invalid roll number, username/email, or password.');
         }
 
         const { data: existingRollProfile, error: existingRollError } = await supabase
           .from('profiles')
           .select('id')
-          .eq('roll_number', normalizedRollNumber)
+          .eq('roll_number', normalizedUpperIdentifier)
           .maybeSingle();
         if (existingRollError) throw existingRollError;
         if (existingRollProfile) {
           throw new Error('This roll number is already registered. Try logging in instead.');
         }
 
+        const email = toInternalEmail(normalizedUpperIdentifier);
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password: DEFAULT_PASSWORD,
           options: {
             data: {
-              roll_number: normalizedRollNumber,
+              roll_number: normalizedUpperIdentifier,
               is_first_login: true,
               year: parsedRollForSignup!.year,
               branch: parsedRollForSignup!.branch,
@@ -222,7 +308,7 @@ export default function LoginPage() {
           },
         });
         if (signUpError) {
-          throw new Error('Invalid roll number or password.');
+          throw new Error(lastSignInErrorMessage || 'Invalid roll number or password.');
         }
         createdNewAccount = true;
 
@@ -238,17 +324,14 @@ export default function LoginPage() {
         } else {
           userId = signUpData.user?.id ?? null;
         }
-      } else {
-        userId = signInData.user?.id ?? null;
       }
-
       if (!userId) {
         throw new Error('Unable to complete sign in. Please try again.');
       }
 
       const { data: existingProfile } = await supabase
         .from('profiles')
-        .select('is_first_login')
+        .select('is_first_login, roll_number, username')
         .eq('id', userId)
         .maybeSingle();
       const existingFirstLoginState = existingProfile?.is_first_login;
@@ -260,10 +343,12 @@ export default function LoginPage() {
 
       const profilePayload: Record<string, string | boolean> = {
         id: userId,
-        username: normalizedRollNumber,
-        roll_number: normalizedRollNumber,
         is_anonymous: false,
       };
+      if (createdNewAccount) {
+        profilePayload.username = normalizedUpperIdentifier;
+        profilePayload.roll_number = normalizedUpperIdentifier;
+      }
       if (existingFirstLoginState != null) {
         profilePayload.is_first_login = existingFirstLoginState;
       } else if (inferredFirstLoginState) {
@@ -293,28 +378,33 @@ export default function LoginPage() {
       const finalShouldRequirePasswordReset =
         persistedProfile?.is_first_login ?? shouldRequirePasswordReset;
 
-      // Update year dynamically on every login
-      const currentYear = getCurrentYear(normalizedRollNumber);
-      const isAlumni = currentYear === 'Alumni';
-      
-      // Update profile with current year
-      await supabase
-        .from('profiles')
-        .update({ 
-          year: isAlumni ? null : currentYear,
-          branch: parsedRollForSignup?.branch,
-          section: isAlumni ? null : parsedRollForSignup?.section
-        })
-        .eq('id', userId);
+      // Update year dynamically on login when a valid roll number is available
+      const effectiveRollNumber =
+        existingProfile?.roll_number ??
+        (parsedRoll ? normalizedUpperIdentifier : null);
+      const parsedEffectiveRoll = effectiveRollNumber ? parseRollNumber(effectiveRollNumber) : null;
+      if (effectiveRollNumber && parsedEffectiveRoll) {
+        const currentYear = getCurrentYear(effectiveRollNumber);
+        const isAlumni = currentYear === 'Alumni';
 
-      // Update community memberships dynamically
-      void updateDynamicCommunities(
-        supabase,
-        userId,
-        normalizedRollNumber
-      ).catch((communityError) => {
-        console.error('Community sync failed:', communityError);
-      });
+        await supabase
+          .from('profiles')
+          .update({
+            year: isAlumni ? null : currentYear,
+            branch: parsedEffectiveRoll.branch,
+            section: isAlumni ? null : parsedEffectiveRoll.section
+          })
+          .eq('id', userId);
+        
+        // Update community memberships dynamically when roll number is valid
+        void updateDynamicCommunities(
+          supabase,
+          userId,
+          effectiveRollNumber
+        ).catch((communityError) => {
+          console.error('Community sync failed:', communityError);
+        });
+      }
 
       router.push(finalShouldRequirePasswordReset ? '/set-password' : '/feed');
     } catch (err: unknown) {
@@ -335,18 +425,18 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-gray-400 text-xs mb-1.5">Roll Number</label>
+            <label className="block text-gray-400 text-xs mb-1.5">Roll Number / Username / Email</label>
             <input
               type="text"
               value={rollNumber}
               onChange={e => {
-                setRollNumber(e.target.value.toUpperCase());
+                setRollNumber(e.target.value);
                 if (error) setError('');
               }}
-              placeholder="eg: 25261A0512"
+              placeholder="e.g., 25261A0512 or your old username/email"
               className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
               required
-              maxLength={10}
+              maxLength={80}
             />
           </div>
 
