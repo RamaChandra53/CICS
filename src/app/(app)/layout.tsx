@@ -10,6 +10,8 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, profile, loading } = useAuth();
+  const mobileHeaderOffset = 'pt-12';
+  const mobileNavOffset = 'pb-24';
 
   useEffect(() => {
     if (!loading) {
@@ -77,7 +79,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="md:ml-60 pb-24 md:pb-0 pt-12 md:pt-0 min-h-screen">
+      <main className={`md:ml-60 ${mobileNavOffset} md:pb-0 ${mobileHeaderOffset} md:pt-0 min-h-screen`}>
         {children}
       </main>
       <BottomNav />

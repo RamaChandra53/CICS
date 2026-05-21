@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase';
 import { Post, Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import RedditNavbar from '@/components/RedditNavbar';
 import RedditSidebar from '@/components/RedditSidebar';
@@ -34,6 +34,7 @@ type VoteType = 'up' | 'down';
 export default function FeedPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, profile: authProfile, loading: authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +67,14 @@ export default function FeedPage() {
     if (!roomFilter) return posts;
     return posts.filter((post) => post.room === roomFilter);
   }, [activeChip, posts]);
+
+  const composeParam = searchParams.get('compose');
+
+  useEffect(() => {
+    if (composeParam !== '1') return;
+    const target = document.getElementById('create-post');
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [composeParam]);
 
 
   const fetchCommunities = useCallback(async () => {
@@ -253,8 +262,8 @@ export default function FeedPage() {
           
           {/* Main Content */}
           <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
-            <div className="-mx-3 mb-4 overflow-x-auto px-3">
-              <div className="flex gap-2">
+            <div className="mb-4 overflow-x-auto">
+              <div className="flex gap-2 pb-1">
                 {communityChips.map((chip) => {
                   const isActive = activeChip === chip.id;
                   return (
