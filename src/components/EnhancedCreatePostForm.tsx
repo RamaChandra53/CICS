@@ -418,31 +418,21 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
           setExpanded(true);
           setError('');
         }}
-        className={`flex items-center gap-4 p-4 glass border border-[#343536] rounded-2xl cursor-pointer hover:bg-[#2a2a2b] transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${className}`}
+        className={`flex items-center gap-3 rounded-2xl border border-[#252a31] bg-[#15181c] px-3 py-3 cursor-pointer transition-colors hover:border-indigo-500/40 ${className}`}
       >
-        <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg animate-pulse-slow">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#252a31] bg-[#0f1318] text-indigo-300">
           <svg
-            className="w-6 h-6 text-white"
+            className="h-5 w-5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M12 4v16m8-8H4"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m7-7H5" />
           </svg>
         </div>
         <div className="flex-1">
-          <input
-            type="text"
-            placeholder="Share your thoughts with the community..."
-            className="w-full bg-transparent text-[#d7dadc] placeholder-gray-500 outline-none cursor-pointer font-medium text-lg"
-            readOnly
-          />
-          <p className="text-gray-500 text-sm mt-1 font-light">Click to create a post • Support for text, images, videos, links & polls</p>
+          <p className="text-sm font-medium text-slate-200">Share something with campus...</p>
+          <p className="text-xs text-slate-500">Confessions, rants, placements, questions</p>
         </div>
       </div>
     );
@@ -452,12 +442,12 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
     <>
       <form
         onSubmit={(e) => handleSubmit(e)}
-        className={`glass rounded-2xl border border-[#343536] shadow-xl ${className}`}
+        className={`rounded-2xl border border-[#252a31] bg-[#15181c] ${className}`}
       >
-        <div className="p-6">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-white mb-2 font-['Space_Grotesk']">Create Your Post</h2>
-            <p className="text-gray-400 text-sm">Share your ideas with the community</p>
+        <div className="p-4">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-white">Create post</h2>
+            <p className="text-xs text-slate-400">Share your ideas with the community</p>
           </div>
 
           <div className="mb-6">
@@ -479,42 +469,35 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
 
           {formData.community !== 'confessions' && (
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-3 font-['Space_Grotesk']">Post Identity</label>
-              <div className="flex items-center gap-3 flex-wrap">
+              <label className="block text-sm font-medium text-slate-300 mb-3">Post identity</label>
+              <div className="flex flex-wrap items-center gap-2">
                 {(['full', 'partial', 'anonymous'] as const).map((mode) => {
-                  const isAnonBlocked = mode === 'anonymous' && !profile.is_email_verified && requiresEmailForAnonymous(formData.community);
+                  const isAnonBlocked =
+                    mode === 'anonymous' &&
+                    !profile.is_email_verified &&
+                    requiresEmailForAnonymous(formData.community);
                   return (
                     <button
                       key={mode}
                       type="button"
                       onClick={() => handleDisplayModeChange(mode)}
                       disabled={isAnonBlocked}
-                      className={`flex items-center gap-3 text-sm px-4 py-3 rounded-xl border transition-all duration-300 font-medium font-['Space_Grotesk'] ${
+                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                         displayMode === mode
-                          ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white border-transparent shadow-lg shadow-purple-500/25 transform scale-105'
+                          ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
                           : isAnonBlocked
-                          ? 'bg-gray-900/30 text-gray-600 border-gray-700 cursor-not-allowed opacity-50'
-                          : 'bg-gray-800/50 text-gray-300 border-gray-600 hover:bg-gray-700/50 hover:text-white hover:border-gray-500 hover:transform hover:scale-105'
+                          ? 'border-[#252a31] text-slate-600 opacity-50'
+                          : 'border-[#252a31] text-slate-300 hover:text-slate-100'
                       }`}
                     >
-                      <span
-                        className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-                          displayMode === mode
-                            ? 'bg-white shadow-lg'
-                            : isAnonBlocked
-                              ? 'bg-gray-500'
-                              : 'bg-gray-400'
-                        }`}
-                      />
-                      <span className="font-medium">{getDisplayModeLabel(mode)}</span>
-                      {isAnonBlocked && (
-                        <span className="text-xs ml-1">🔒</span>
-                      )}
+                      <span>{getDisplayModeLabel(mode)}</span>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-xs text-gray-500 mt-2">Choose how your identity appears. Verification is only needed for anonymous posts in higher-trust spaces.</p>
+              <p className="text-xs text-slate-500 mt-2">
+                Choose how your identity appears. Verification is only needed for anonymous posts in higher-trust spaces.
+              </p>
             </div>
           )}
 
@@ -530,15 +513,15 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-gray-800/40 px-6 py-4 bg-gray-900/30 backdrop-blur-sm rounded-b-2xl">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 border-t border-[#252a31] px-4 py-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <button
               type="button"
               onClick={() => {
                 setExpanded(false);
                 setError('');
               }}
-              className="text-gray-400 hover:text-white text-sm px-5 py-2.5 rounded-lg transition-all duration-200 hover:bg-gray-800/50 font-medium font-['Space_Grotesk']"
+              className="h-11 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white md:h-10"
             >
               Cancel
             </button>
@@ -547,7 +530,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
               type="button"
               onClick={() => handleSubmit(undefined, true)}
               disabled={loading}
-              className="text-gray-400 hover:text-white text-sm px-5 py-2.5 rounded-lg transition-all duration-200 hover:bg-gray-800/50 disabled:opacity-50 disabled:cursor-not-allowed font-medium font-['Space_Grotesk']"
+              className="h-11 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed md:h-10"
             >
               {loading ? 'Saving...' : 'Save Draft'}
             </button>
@@ -556,11 +539,11 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-400 hover:via-purple-400 hover:to-pink-400 text-white text-sm font-semibold px-8 py-3 rounded-xl transition-all duration-300 shadow-lg shadow-purple-500/25 disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transform hover:scale-105 hover:shadow-xl font-['Space_Grotesk']"
+            className="h-11 w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 disabled:shadow-none md:w-auto md:px-8"
           >
             {loading ? (
-              <span className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+              <span className="flex items-center justify-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>

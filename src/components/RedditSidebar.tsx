@@ -30,7 +30,7 @@ export default function RedditSidebar() {
   };
 
   return (
-    <div className="fixed left-0 top-12 bottom-0 w-60 bg-[#1a1a1b] border-r border-[#343536] overflow-y-auto">
+    <div className="hidden md:block fixed left-0 top-14 bottom-0 w-60 bg-[#1a1a1b] border-r border-[#343536] overflow-y-auto">
       <div className="p-2">
         {/* MY COMMUNITIES Section */}
         <div className="mb-2">
@@ -122,9 +122,9 @@ export default function RedditSidebar() {
       
       {/* Create Post Modal */}
       {showCreatePost && profile && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1a1b] border border-[#343536] rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-[#343536] flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 md:p-4">
+          <div className="bg-[#15181c] border border-[#252a31] w-full h-full md:h-auto md:max-h-[90vh] md:max-w-2xl overflow-y-auto md:rounded-2xl">
+            <div className="p-4 border-b border-[#252a31] flex items-center justify-between">
               <h2 className="text-white font-semibold">Create Post</h2>
               <button
                 onClick={() => setShowCreatePost(false)}

@@ -67,17 +67,17 @@ function CommentItem({
   };
 
   return (
-    <div className={depth > 0 ? 'ml-4 border-l-2 border-[#343536] pl-4' : ''}>
-      <div className="mb-1 flex gap-2.5">
+    <div className={depth > 0 ? 'ml-3 border-l border-[#252a31] pl-3 md:ml-4 md:pl-4' : ''}>
+      <div className="mb-2 flex gap-2.5">
         <div
-          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs ${displayInfo.avatarBg}`}
+          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs ${displayInfo.avatarBg}`}
         >
           {displayInfo.avatar}
         </div>
 
         <div className="flex-1">
-          <div className="mb-1 flex items-center gap-1.5">
-            <span className="text-sm font-medium text-white">{displayInfo.displayName}</span>
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-semibold text-white">{displayInfo.displayName}</span>
 
             {displayInfo.showVerified && (
               <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-semibold text-white">
@@ -85,10 +85,10 @@ function CommentItem({
               </span>
             )}
 
-            <span className="text-xs text-gray-600">{formatTimeAgo(comment.created_at)}</span>
+            <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
           </div>
 
-          <p className="text-sm leading-relaxed text-gray-300">{comment.content}</p>
+          <p className="text-sm leading-relaxed text-slate-200">{comment.content}</p>
 
           {/* Horizontal vote bar */}
           <div className="mt-2">
@@ -108,14 +108,14 @@ function CommentItem({
                 placeholder="Write a reply..."
                 rows={2}
                 autoFocus
-                className="w-full resize-none rounded-xl border border-gray-700 bg-[#111] px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-indigo-500 focus:outline-none"
+                className="w-full resize-none rounded-xl border border-[#252a31] bg-[#0f1318] px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
               />
 
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setReplyAnon(false)}
-                  className={`rounded-lg px-2 py-1 text-xs ${
+                  className={`rounded-lg px-3 py-2 text-xs ${
                     !replyAnon ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'
                   }`}
                 >
@@ -125,7 +125,7 @@ function CommentItem({
                 <button
                   type="button"
                   onClick={() => setReplyAnon(true)}
-                  className={`rounded-lg px-2 py-1 text-xs ${
+                  className={`rounded-lg px-3 py-2 text-xs ${
                     replyAnon ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'
                   }`}
                 >
@@ -135,7 +135,7 @@ function CommentItem({
                 <button
                   onClick={handleReply}
                   disabled={submitting || !replyContent.trim()}
-                  className="rounded-lg bg-indigo-600 px-3 py-1 text-xs text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                  className="w-full sm:w-auto rounded-lg bg-indigo-600 px-4 py-2 text-xs text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
                 >
                   {submitting ? 'Posting...' : 'Reply'}
                 </button>
@@ -447,58 +447,54 @@ export default function PostPage() {
         };
 
   const room = ROOMS.find((r) => r.id === post.room);
+  const [postHeadline, ...postBodyLines] = post.content.split('\n');
+  const postBody = postBodyLines.join('\n').trim();
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
+    <div className="mx-auto w-full px-3 pb-24 pt-4 md:max-w-2xl md:px-6 md:pt-6">
       <button
         onClick={() => router.back()}
-        className="mb-5 flex items-center gap-2 text-sm text-gray-400 transition-colors hover:text-white"
+        className="mb-4 flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
       >
         ← Back
       </button>
 
-      <div className="mb-5 rounded-2xl border border-gray-800/60 bg-[#1a1a1a] p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm ${postDisplayInfo.avatarBg}`}
-            >
-              {postDisplayInfo.avatar}
-            </div>
-
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-medium text-white">{postDisplayInfo.displayName}</span>
-
-                {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
-                  <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                    ✓ verified
-                  </span>
-                )}
-              </div>
-
-              <p className="text-xs text-gray-500">{formatTimeAgo(post.created_at)}</p>
-            </div>
-          </div>
-
-          {room && (
-            <span className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] text-gray-400">
-              {room.icon} {room.label}
-            </span>
+      <div className="mb-5 rounded-2xl border border-[#252a31] bg-[#15181c] p-4">
+        <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
+          <Link
+            href={`/room/${room?.id || 'campus'}`}
+            className="font-semibold text-slate-200 hover:text-indigo-300 transition-colors"
+          >
+            campus/{room?.label || 'general'}
+          </Link>
+          <span className="text-slate-600">•</span>
+          <span className="text-slate-300">{postDisplayInfo.displayName}</span>
+          {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
+            <span className="text-[10px] font-semibold text-indigo-300">✓</span>
           )}
+          <span className="text-slate-600">•</span>
+          <span>{formatTimeAgo(post.created_at)}</span>
         </div>
 
-        <p className="text-[15px] leading-relaxed text-gray-100">{post.content}</p>
+        <h1 className="mt-3 text-base font-semibold text-slate-100 leading-snug">
+          {postHeadline}
+        </h1>
+
+        {postBody && (
+          <p className="mt-2 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
+            {postBody}
+          </p>
+        )}
 
         {post.image_url && (
           <img
             src={post.image_url}
             alt="Post image"
-            className="mt-4 max-h-96 w-full rounded-xl object-cover"
+            className="mt-4 max-h-96 w-full rounded-2xl border border-[#252a31] object-cover"
           />
         )}
 
-        <div className="mt-4 border-t border-gray-800/40 pt-4">
+        <div className="mt-4 border-t border-[#252a31] pt-4">
           <HorizontalVoteButtons
             postId={post.id}
             initialUpvotes={post.upvotes ?? 0}
@@ -509,29 +505,29 @@ export default function PostPage() {
         </div>
       </div>
 
-      <h2 className="mb-4 font-semibold text-white">
-        💬 {flatComments.length} Comment{flatComments.length !== 1 ? 's' : ''}
+      <h2 className="mb-4 text-sm font-semibold text-slate-200">
+        {flatComments.length} Comment{flatComments.length !== 1 ? 's' : ''}
       </h2>
 
       {profile && (
-        <div className="mb-5 rounded-2xl border border-gray-800/60 bg-[#1a1a1a] p-4">
+        <div className="mb-5 rounded-2xl border border-[#252a31] bg-[#15181c] p-4">
           <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             placeholder="Write a comment..."
             rows={2}
-            className="w-full resize-none bg-transparent text-sm text-white placeholder-gray-600 focus:outline-none"
+            className="w-full min-h-[96px] resize-none rounded-xl border border-[#252a31] bg-[#0f1318] px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
           />
 
           {error && (
-            <p className="mb-2 rounded-lg border border-red-800/40 bg-red-900/20 p-2 text-xs text-red-400">
+            <p className="mt-2 rounded-lg border border-red-800/40 bg-red-900/20 p-2 text-xs text-red-400">
               {error}
             </p>
           )}
 
-          <div className="flex items-center justify-between border-t border-gray-800/40 pt-3">
-            <div className="flex items-center gap-1">
-              <span className="mr-1 text-xs text-gray-500">Post as:</span>
+          <div className="mt-3 flex flex-col gap-3 border-t border-[#252a31] pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-xs text-slate-400">Post as:</span>
 
               {(['full', 'partial', 'anonymous'] as const).map((mode) => (
                 <button
@@ -539,12 +535,12 @@ export default function PostPage() {
                   type="button"
                   onClick={() => handleCommentDisplayModeChange(mode)}
                   disabled={!profile?.is_email_verified && mode !== 'full'}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all duration-200 ${
                     commentDisplayMode === mode
-                      ? 'border-[#6366f1] bg-[#6366f1] text-white'
+                      ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
                       : profile?.is_email_verified || mode === 'full'
-                      ? 'border-gray-700 bg-transparent text-gray-500 hover:border-gray-600 hover:text-gray-300'
-                      : 'cursor-not-allowed border-gray-800 bg-transparent text-gray-600 opacity-50'
+                      ? 'border-[#252a31] text-slate-400 hover:text-slate-200'
+                      : 'cursor-not-allowed border-[#252a31] text-slate-600 opacity-50'
                   }`}
                 >
                   <span>{getCommentDisplayModeLabel(mode)}</span>
@@ -555,7 +551,7 @@ export default function PostPage() {
             <button
               onClick={() => handleAddComment()}
               disabled={submitting || !newComment.trim()}
-              className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-xs font-medium text-white shadow-lg shadow-indigo-500/25 transition-all duration-200 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:shadow-none"
+              className="h-11 w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 md:w-auto md:px-6"
             >
               {submitting ? 'Posting...' : 'Comment'}
             </button>
@@ -588,7 +584,7 @@ export default function PostPage() {
           <div className="flex justify-center py-4">
             <button
               onClick={loadMoreComments}
-              className="rounded-lg border border-gray-700 px-4 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
+              className="h-10 rounded-full border border-[#252a31] px-5 text-xs text-slate-200 transition-colors hover:border-indigo-400/60 hover:text-indigo-200"
             >
               Load more comments
             </button>

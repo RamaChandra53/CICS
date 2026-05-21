@@ -33,7 +33,7 @@ export default function RedditNavbar() {
   }, []);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-14 glass border-b border-border-primary z-50 backdrop-blur-xl">
+    <nav className="hidden md:flex fixed top-0 left-0 right-0 h-14 glass border-b border-border-primary z-50 backdrop-blur-xl">
       <div className="flex items-center justify-between h-full px-6">
         {/* Left: Logo */}
         <div className="flex items-center">

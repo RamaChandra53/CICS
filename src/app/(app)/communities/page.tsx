@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { ROOMS } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import RedditNavbar from '@/components/RedditNavbar';
-import RedditMobileNav from '@/components/RedditMobileNav';
 
 export default function CommunitiesPage() {
   const router = useRouter();
@@ -28,11 +27,11 @@ export default function CommunitiesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f]">
+    <div className="min-h-screen bg-[#0b0f12]">
       <RedditNavbar />
-      
-      <main className="pt-16 pb-20 px-4">
-        <h1 className="text-2xl font-bold text-white mb-6">Communities</h1>
+
+      <main className="pt-2 md:pt-16 pb-24 px-3 md:px-6">
+        <h1 className="text-xl md:text-2xl font-bold text-white mb-6">Communities</h1>
         
         {/* MY COMMUNITIES Section */}
         <div className="mb-6">
@@ -40,16 +39,16 @@ export default function CommunitiesPage() {
             MY COMMUNITIES
           </div>
           
-          <div className="bg-[#1a1a1b] border border-[#343536] rounded-xl overflow-hidden">
+          <div className="bg-[#15181c] border border-[#252a31] rounded-2xl overflow-hidden">
             {ROOMS.slice(0, 5).map((room, index) => (
               <Link
                 key={room.id}
                 href={`/room/${room.id}`}
-                className={`flex items-center gap-3 p-4 transition-colors hover:bg-[#2d2d2e] ${
-                  index !== 0 ? 'border-t border-[#343536]' : ''
+                className={`flex items-center gap-3 p-4 transition-colors hover:bg-[#1f2329] ${
+                  index !== 0 ? 'border-t border-[#252a31]' : ''
                 }`}
               >
-                <div className="w-10 h-10 bg-[#2d2d2e] rounded-full flex items-center justify-center text-xl">
+                <div className="w-10 h-10 bg-[#1f2329] rounded-full flex items-center justify-center text-xl">
                   {getRoomIcon(room.id)}
                 </div>
                 <div>
@@ -67,16 +66,16 @@ export default function CommunitiesPage() {
             ALL COMMUNITIES
           </div>
           
-          <div className="bg-[#1a1a1b] border border-[#343536] rounded-xl overflow-hidden">
+          <div className="bg-[#15181c] border border-[#252a31] rounded-2xl overflow-hidden">
             {ROOMS.slice(5).map((room, index) => (
               <Link
                 key={room.id}
                 href={`/room/${room.id}`}
-                className={`flex items-center gap-3 p-4 transition-colors hover:bg-[#2d2d2e] ${
-                  index !== 0 ? 'border-t border-[#343536]' : ''
+                className={`flex items-center gap-3 p-4 transition-colors hover:bg-[#1f2329] ${
+                  index !== 0 ? 'border-t border-[#252a31]' : ''
                 }`}
               >
-                <div className="w-10 h-10 bg-[#2d2d2e] rounded-full flex items-center justify-center text-xl">
+                <div className="w-10 h-10 bg-[#1f2329] rounded-full flex items-center justify-center text-xl">
                   {getRoomIcon(room.id)}
                 </div>
                 <div>
@@ -88,8 +87,6 @@ export default function CommunitiesPage() {
           </div>
         </div>
       </main>
-      
-      <RedditMobileNav />
     </div>
   );
 }

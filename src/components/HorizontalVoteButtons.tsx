@@ -217,40 +217,36 @@ export default function HorizontalVoteButtons({
   const score = upvotes - downvotes;
 
   return (
-    <div className="flex items-center gap-3">
-      {/* Combined vote button */}
-      <div className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1">
-        {/* Upvote arrow */}
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex h-9 items-center gap-1 rounded-full border border-[#252a31] bg-[#0f1318] px-2">
         <button
           onClick={(e) => handleVote(e, 'up')}
           disabled={voting || !userId}
-          className={`p-1 text-white transition-colors ${
-            userVote === 'up' 
-              ? 'text-orange-500' 
-              : 'hover:text-orange-400'
+          className={`flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors ${
+            userVote === 'up' ? 'text-indigo-300' : 'hover:text-indigo-200'
           } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Upvote"
         >
           <span className="text-xs">▲</span>
         </button>
-        
-        {/* Score */}
-        <span className={`text-xs font-medium ${
-          userVote === 'up' ? 'text-orange-500' : 
-          userVote === 'down' ? 'text-blue-500' : 
-          'text-white'
-        }`}>
+
+        <span
+          className={`text-xs font-semibold ${
+            userVote === 'up'
+              ? 'text-indigo-300'
+              : userVote === 'down'
+              ? 'text-red-300'
+              : 'text-slate-200'
+          }`}
+        >
           {score}
         </span>
-        
-        {/* Downvote arrow */}
+
         <button
           onClick={(e) => handleVote(e, 'down')}
           disabled={voting || !userId}
-          className={`p-1 text-white transition-colors ${
-            userVote === 'down' 
-              ? 'text-blue-500' 
-              : 'hover:text-blue-400'
+          className={`flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors ${
+            userVote === 'down' ? 'text-red-300' : 'hover:text-slate-200'
           } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Downvote"
         >
@@ -258,30 +254,35 @@ export default function HorizontalVoteButtons({
         </button>
       </div>
 
-      {/* Actions */}
       {showActions && (
         <>
-          <button aria-label="View comments" className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <button
+            aria-label="View comments"
+            className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
             </svg>
-            <span className="text-xs">{commentCount} Comments</span>
+            <span>{commentCount}</span>
           </button>
-          <button 
+          <button
             onClick={handleShare}
             aria-label="Share post"
-            className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors"
+            className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
             </svg>
-            <span className="text-xs">Share</span>
+            Share
           </button>
-          <button aria-label="Report post" className="flex items-center gap-1 rounded-full bg-[#282828] px-2 py-1 text-white hover:bg-[#383838] transition-colors">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <button
+            aria-label="More actions"
+            className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-red-300"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
             </svg>
-            <span className="text-xs">Report</span>
+            More
           </button>
         </>
       )}
