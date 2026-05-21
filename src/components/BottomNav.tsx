@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { id: 'home', href: '/feed', label: 'Home' },
   { id: 'communities', href: '/communities', label: 'Communities' },
-  { id: 'post', href: '/feed#create-post', label: 'Post' },
+  { id: 'post', href: '/feed', label: 'Post' },
   { id: 'notifications', href: '/notifications', label: 'Notifications' },
   { id: 'profile', href: '/profile', label: 'Profile' },
 ];
@@ -35,8 +35,9 @@ export default function BottomNav() {
             <Link
               key={item.id}
               href={item.href}
-              onClick={() => {
+              onClick={(event) => {
                 if (item.id !== 'post' || pathname !== '/feed') return;
+                event.preventDefault();
                 const target = document.getElementById('create-post');
                 target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}

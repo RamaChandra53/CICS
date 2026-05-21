@@ -20,6 +20,14 @@ import SkeletonFeed from '@/components/ui/SkeletonFeed';
 
 const PAGE_SIZE = 15;
 const FEED_ROOMS = ['campus', 'college'] as const;
+const BASE_COMMUNITY_CHIPS = [
+  { id: 'all', label: 'All' },
+  { id: 'general', label: 'General' },
+  { id: 'confessions', label: 'Confessions' },
+  { id: 'rants', label: 'Rants' },
+  { id: 'random', label: 'Random' },
+  { id: 'placements', label: 'Placements' },
+];
 
 type VoteType = 'up' | 'down';
 
@@ -36,19 +44,10 @@ export default function FeedPage() {
   const [hasMore, setHasMore] = useState(true);
   const [activeChip, setActiveChip] = useState('all');
 
-  const baseCommunityChips = [
-    { id: 'all', label: 'All' },
-    { id: 'general', label: 'General' },
-    { id: 'confessions', label: 'Confessions' },
-    { id: 'rants', label: 'Rants' },
-    { id: 'random', label: 'Random' },
-    { id: 'placements', label: 'Placements' },
-  ];
-
   const communityChips = useMemo(() => {
-    if (communities.length === 0) return baseCommunityChips;
+    if (communities.length === 0) return BASE_COMMUNITY_CHIPS;
     const labelMap = new Map(communities.map((community) => [community.slug, community.name]));
-    return baseCommunityChips.map((chip) => ({
+    return BASE_COMMUNITY_CHIPS.map((chip) => ({
       ...chip,
       label: labelMap.get(chip.id) ?? chip.label,
     }));
