@@ -447,7 +447,8 @@ export default function PostPage() {
         };
 
   const room = ROOMS.find((r) => r.id === post.room);
-  const [postHeadline, ...postBodyLines] = post.content.split('\n');
+  const postContent = post.content ?? '';
+  const [postHeadline, ...postBodyLines] = postContent.split('\n');
   const postBody = postBodyLines.join('\n').trim();
 
   return (
@@ -501,6 +502,7 @@ export default function PostPage() {
             initialDownvotes={post.downvotes ?? 0}
             commentCount={flatComments.length}
             showActions={true}
+            postContent={postContent}
           />
         </div>
       </div>

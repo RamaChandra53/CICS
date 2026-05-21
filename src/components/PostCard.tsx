@@ -98,7 +98,8 @@ const PostCard = memo(function PostCard({
   };
 
   const displayInfo = getDisplayInfo();
-  const [headline, ...bodyLines] = post.content.split('\n');
+  const content = post.content ?? '';
+  const [headline, ...bodyLines] = content.split('\n');
   const body = bodyLines.join('\n').trim();
 
   return (
@@ -164,7 +165,7 @@ const PostCard = memo(function PostCard({
                 initialUpvotes={post.upvotes}
                 initialDownvotes={post.downvotes}
                 commentCount={post.comment_count || 0}
-                postContent={post.content}
+                postContent={content}
               />
             </div>
 
@@ -187,11 +188,14 @@ const PostCard = memo(function PostCard({
                 </svg>
                 Share
               </button>
-              <button className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-red-300">
+              <button
+                aria-label="Report post"
+                className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-red-300"
+              >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
                 </svg>
-                More
+                Report
               </button>
             </div>
           </div>

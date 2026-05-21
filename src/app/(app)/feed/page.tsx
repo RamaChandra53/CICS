@@ -29,14 +29,14 @@ export default function FeedPage() {
   const { user, profile: authProfile, loading: authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [, setCommunities] = useState<Community[]>([]);
+  const [communities, setCommunities] = useState<Community[]>([]);
   const [postsError, setPostsError] = useState('');
   const [postsLoading, setPostsLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [activeChip, setActiveChip] = useState('all');
 
-  const communityChips = [
+  const baseCommunityChips = [
     { id: 'all', label: 'All' },
     { id: 'general', label: 'General' },
     { id: 'confessions', label: 'Confessions' },
@@ -44,6 +44,15 @@ export default function FeedPage() {
     { id: 'random', label: 'Random' },
     { id: 'placements', label: 'Placements' },
   ];
+
+  const communityChips = useMemo(() => {
+    if (communities.length === 0) return baseCommunityChips;
+    const labelMap = new Map(communities.map((community) => [community.slug, community.name]));
+    return baseCommunityChips.map((chip) => ({
+      ...chip,
+      label: labelMap.get(chip.id) ?? chip.label,
+    }));
+  }, [communities]);
 
 
   const fetchCommunities = useCallback(async () => {

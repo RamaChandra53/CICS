@@ -276,13 +276,13 @@ export default function HorizontalVoteButtons({
             Share
           </button>
           <button
-            aria-label="More actions"
+            aria-label="Report post"
             className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-red-300"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
             </svg>
-            More
+            Report
           </button>
         </>
       )}

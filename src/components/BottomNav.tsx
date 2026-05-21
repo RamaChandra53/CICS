@@ -35,6 +35,12 @@ export default function BottomNav() {
             <Link
               key={item.id}
               href={item.href}
+              onClick={(event) => {
+                if (item.id !== 'post' || pathname !== '/feed') return;
+                event.preventDefault();
+                const target = document.getElementById('create-post');
+                target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
               className={`flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors ${
                 isActive ? 'text-indigo-400' : 'text-slate-400'
               }`}
