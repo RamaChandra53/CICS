@@ -13,6 +13,7 @@ interface PostCardProps {
   showRoom?: boolean;
   currentUserId?: string | null;
   initialUserVote?: 'up' | 'down' | null;
+  onPostUpdate?: (postId: string, updates: { upvotes?: number; downvotes?: number; user_vote?: 'up' | 'down' | null }) => void;
 }
 
 const PostCard = memo(function PostCard({
@@ -20,6 +21,7 @@ const PostCard = memo(function PostCard({
   showRoom = false,
   currentUserId,
   initialUserVote,
+  onPostUpdate,
 }: PostCardProps) {
   const author = post.profiles;
   const displayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
@@ -113,6 +115,7 @@ const PostCard = memo(function PostCard({
             currentUserId={currentUserId}
             initialUserVote={initialUserVote}
             skipSync={currentUserId !== undefined}
+            onPostUpdate={onPostUpdate}
           />
         </div>
 
@@ -169,6 +172,7 @@ const PostCard = memo(function PostCard({
                 currentUserId={currentUserId}
                 initialUserVote={initialUserVote}
                 skipSync={currentUserId !== undefined}
+                onPostUpdate={onPostUpdate}
               />
             </div>
 
