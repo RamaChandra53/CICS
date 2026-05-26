@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Community } from '@/types';
+import { Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -14,9 +14,8 @@ import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import SkeletonFeed from '@/components/ui/SkeletonFeed';
+import useFeedPosts from '@/hooks/useFeedPosts';
 
-const PAGE_SIZE = 15;
-const FEED_ROOMS = ['campus', 'college'] as const;
 const BASE_COMMUNITY_CHIPS = [
   { id: 'all', label: 'All' },
   { id: 'general', label: 'General' },
@@ -26,20 +25,12 @@ const BASE_COMMUNITY_CHIPS = [
   { id: 'placements', label: 'Placements' },
 ];
 
-type VoteType = 'up' | 'down';
-
 export default function FeedPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, profile: authProfile, loading: authLoading } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
   const [communities, setCommunities] = useState<Community[]>([]);
-  const [postsError, setPostsError] = useState('');
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const [activeChip, setActiveChip] = useState('all');
 
   const communityChips = useMemo(() => {
@@ -53,19 +44,19 @@ export default function FeedPage() {
     }));
   }, [communities]);
 
-  const visiblePosts = useMemo(() => {
-    const roomFilterMap: Record<string, string | null> = {
-      all: null,
-      general: 'campus',
-      confessions: 'confessions',
-      rants: 'rants',
-      random: 'random',
-      placements: 'placements',
-    };
-    const roomFilter = roomFilterMap[activeChip] ?? null;
-    if (!roomFilter) return posts;
-    return posts.filter((post) => post.room === roomFilter);
-  }, [activeChip, posts]);
+  const {
+    posts,
+    isInitialLoading,
+    isRefreshing,
+    isLoadingMore,
+    error,
+    errorContext,
+    hasMore,
+    refresh,
+    loadMore,
+    retry,
+    updatePostOptimistically,
+  } = useFeedPosts(activeChip);
 
   const composeParam = searchParams.get('compose');
 
@@ -95,147 +86,18 @@ export default function FeedPage() {
     }
   }, [supabase]);
 
-  const fetchPosts = useCallback(
-    async (pageToLoad = 0, options?: { reset?: boolean }) => {
-      try {
-        setPostsLoading(true);
-        setPostsError('');
-
-        const targetPage = options?.reset ? 0 : pageToLoad;
-        const { data, error } = await supabase
-          .from('posts')
-          .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
-          )
-          .in('room', FEED_ROOMS)
-          .order('created_at', { ascending: false })
-          .range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
-
-        if (error) {
-          console.error('Error fetching feed posts:', error);
-          setPostsError(error.message || 'Failed to fetch feed posts');
-          return;
-        }
-
-        const postsData = (data as Post[]) ?? [];
-
-        if (postsData.length === 0) {
-          if (targetPage === 0) {
-            setPosts([]);
-          }
-          setHasMore(false);
-          return;
-        }
-
-        const postIds = postsData.map((post) => post.id);
-        let voteMap = new Map<string, VoteType>();
-
-        if (user?.id && postIds.length > 0) {
-          const { data: votes, error: votesError } = await supabase
-            .from('post_votes')
-            .select('post_id, vote_type')
-            .eq('user_id', user.id)
-            .in('post_id', postIds);
-
-          if (votesError) {
-            console.error('Error fetching post votes:', votesError);
-          } else {
-            const votesData = (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
-            voteMap = new Map(
-              votesData.map((vote) => [vote.post_id, vote.vote_type])
-            );
-          }
-        }
-
-        const normalized = postsData.map((post) => ({
-          ...post,
-          profiles: post.profiles ?? null,
-          comment_count: 0,
-          user_vote: voteMap.get(post.id) ?? null,
-        }));
-
-        if (options?.reset || targetPage === 0) {
-          setPosts(normalized);
-        } else {
-          setPosts((prev) => [...prev, ...normalized]);
-        }
-
-        setHasMore(postsData.length === PAGE_SIZE);
-      } catch (error) {
-        console.error('Unexpected error fetching feed posts:', error);
-        setPostsError(
-          error instanceof Error ? error.message : 'Something went wrong while fetching feed posts'
-        );
-      } finally {
-        setPostsLoading(false);
-      }
-    },
-    [supabase, user?.id]
-  );
-
-  const loadMore = useCallback(() => {
-    if (!postsLoading && hasMore) {
-      const nextPage = page + 1;
-      setPage(nextPage);
-      fetchPosts(nextPage);
-    }
-  }, [page, postsLoading, hasMore, fetchPosts]);
-
   useEffect(() => {
-    const init = async () => {
-      if (authLoading) return;
-      
-      if (!user) {
-        router.push('/');
-        return;
-      }
+    if (authLoading) return;
 
-      try {
-        setPage(0);
-        setHasMore(true);
+    if (!user) {
+      router.push('/');
+      return;
+    }
 
-        await Promise.all([fetchCommunities(), fetchPosts(0, { reset: true })]);
-      } catch (error) {
-        console.error('Feed initialization error:', error);
-        
-        // If there's a database error, try to load with minimal data
-        if (error instanceof Error) {
-          console.error('Error details:', error.message);
-          setPostsError(`Failed to load feed: ${error.message}. Please refresh the page.`);
-        } else {
-          setPostsError('Failed to load feed. Please refresh the page.');
-        }
-        
-        // Set empty state to allow UI to render
-        setPosts([]);
-        setCommunities([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
+    fetchCommunities();
+  }, [authLoading, user, router, fetchCommunities]);
 
-    // Real-time subscription
-    const channel = supabase
-      .channel('feed-posts')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'posts',
-        filter: 'room=in.(campus,college)',
-      }, () => {
-        setPage(0);
-        setHasMore(true);
-        fetchPosts(0, { reset: true });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, router, authLoading, user, fetchPosts, fetchCommunities]);
-
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6">
         <SkeletonFeed count={5} />
@@ -276,26 +138,26 @@ export default function FeedPage() {
                 profile={authProfile}
                 defaultCommunity="campus"
                 onPostCreated={() => {
-                  setPage(0);
-                  setHasMore(true);
-                  fetchPosts(0, { reset: true });
+                refresh();
                 }}
               />
           </div>
         )}
 
         {/* Posts */}
-        {postsError ? (
+        {error && posts.length === 0 ? (
           <ErrorMessage
-            message={postsError}
-            onRetry={() => fetchPosts(0, { reset: true })}
+            title="Couldn't load posts."
+            message="Couldn't load posts."
+            onRetry={retry}
+            retryText="Try again"
           />
-        ) : postsLoading && posts.length === 0 ? (
-          <PostLoadingSkeleton count={2} />
-        ) : visiblePosts.length === 0 ? (
+        ) : isInitialLoading && posts.length === 0 ? (
+          <PostLoadingSkeleton count={3} />
+        ) : posts.length === 0 ? (
           <EmptyState
-            title="No posts yet"
-            description="Be the first to share something with the campus!"
+            title="No posts here yet."
+            description="Start the first discussion."
             icon={
               <div className="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <svg className="w-8 h-8 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -303,15 +165,35 @@ export default function FeedPage() {
                 </svg>
               </div>
             }
+            action={{
+              label: 'Create a post',
+              onClick: () => {
+                const target = document.getElementById('create-post');
+                target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              },
+            }}
           />
         ) : (
           <div className="space-y-3">
-            {visiblePosts.map((post) => (
+            {error && errorContext === 'refresh' && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+                Couldn’t refresh. Showing saved posts.
+              </div>
+            )}
+
+            {isRefreshing && (
+              <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-xs text-indigo-200">
+                Refreshing feed...
+              </div>
+            )}
+
+            {posts.map((post) => (
                 <div key={post.id}>
                   <PostCard
                     post={post}
                     currentUserId={user?.id ?? null}
                     initialUserVote={post.user_vote ?? null}
+                    onPostUpdate={updatePostOptimistically}
                   />
                 </div>
             ))}
@@ -321,11 +203,17 @@ export default function FeedPage() {
               <div className="flex justify-center py-4">
                 <button
                   onClick={loadMore}
-                  disabled={postsLoading}
+                  disabled={isLoadingMore}
                   className="h-11 rounded-full border border-indigo-500/30 px-6 text-sm font-medium text-indigo-300 transition-colors hover:border-indigo-400/60 hover:text-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {postsLoading ? 'Loading...' : 'Load More Posts'}
+                  {isLoadingMore ? 'Loading...' : 'Load More Posts'}
                 </button>
+              </div>
+            )}
+
+            {error && errorContext === 'loadMore' && (
+              <div className="text-center text-xs text-amber-200">
+                Couldn’t load more posts. Try again in a moment.
               </div>
             )}
           </div>
