@@ -7,7 +7,6 @@ const navItems = [
   { id: 'home', href: '/feed', label: 'Home' },
   { id: 'communities', href: '/communities', label: 'Communities' },
   { id: 'post', href: '/feed?compose=1', label: 'Post' },
-  { id: 'notifications', href: '/notifications', label: 'Notifications' },
   { id: 'profile', href: '/profile', label: 'Profile' },
 ];
 
@@ -26,8 +25,6 @@ export default function BottomNav() {
               ? pathname === '/feed'
               : item.id === 'communities'
               ? pathname.startsWith('/communities') || pathname.startsWith('/room')
-              : item.id === 'notifications'
-              ? pathname.startsWith('/notifications')
               : item.id === 'profile'
               ? pathname.startsWith('/profile')
               : false;
@@ -45,8 +42,7 @@ export default function BottomNav() {
                   router.push('/feed?compose=1');
                   return;
                 }
-                const target = document.getElementById('create-post');
-                target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                window.dispatchEvent(new Event('open-create-post'));
               }}
               className={`flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-medium transition-colors ${
                 isActive ? 'text-indigo-400' : 'text-slate-400'
@@ -70,12 +66,6 @@ export default function BottomNav() {
                 <svg className={iconClassName} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M12 8v8M8 12h8" />
-                </svg>
-              )}
-              {item.id === 'notifications' && (
-                <svg className={iconClassName} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
-                  <path d="M13.73 21a2 2 0 01-3.46 0" />
                 </svg>
               )}
               {item.id === 'profile' && (

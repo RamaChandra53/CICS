@@ -1,11 +1,10 @@
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Post } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { ROOMS } from '@/types';
-import HorizontalVoteButtons from './HorizontalVoteButtons';
 import VoteButtons from './VoteButtons';
 
 interface PostCardProps {
@@ -26,6 +25,7 @@ const PostCard = memo(function PostCard({
   const author = post.profiles;
   const displayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
   const room = ROOMS.find(r => r.id === post.room);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   // Share functionality
   const handleShare = useCallback(async () => {
@@ -105,21 +105,9 @@ const PostCard = memo(function PostCard({
   const body = bodyLines.join('\n').trim();
 
   return (
-    <div className="rounded-2xl border border-[#252a31] bg-[#15181c] p-4">
-      <div className="md:flex md:gap-4">
-        <div className="hidden md:flex md:w-12 md:justify-center">
-          <VoteButtons
-            postId={post.id}
-            initialUpvotes={post.upvotes}
-            initialDownvotes={post.downvotes}
-            currentUserId={currentUserId}
-            initialUserVote={initialUserVote}
-            skipSync={currentUserId !== undefined}
-            onPostUpdate={onPostUpdate}
-          />
-        </div>
-
-        <div className="flex-1">
+    <div className="relative w-full rounded-2xl border border-[#252a31] bg-[#15181c] p-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_44px] gap-3">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
             <Link
               href={`/room/${room?.id || 'campus'}`}
@@ -136,15 +124,15 @@ const PostCard = memo(function PostCard({
             <span>{formatTimeAgo(post.created_at)}</span>
           </div>
 
-          <Link href={`/post/${post.id}`} className="block">
-            <h3 className="mt-2 text-base font-semibold text-slate-100 leading-snug">
+          <Link href={`/post/${post.id}`} className="block min-w-0">
+            <h3 className="mt-2 text-base font-semibold text-slate-100 leading-snug break-words">
               {headline.substring(0, 150)}
               {headline.length > 150 && '...'}
             </h3>
           </Link>
 
           {body && (
-            <p className="mt-2 text-sm text-slate-200 leading-relaxed line-clamp-3">
+            <p className="mt-2 text-sm text-slate-200 leading-relaxed line-clamp-3 break-words">
               {body.substring(0, 300)}
               {body.length > 300 && '...'}
             </p>
@@ -161,51 +149,58 @@ const PostCard = memo(function PostCard({
             </div>
           )}
 
-          <div className="mt-3">
-            <div className="md:hidden">
-              <HorizontalVoteButtons
-                postId={post.id}
-                initialUpvotes={post.upvotes}
-                initialDownvotes={post.downvotes}
-                commentCount={post.comment_count || 0}
-                postContent={content}
-                currentUserId={currentUserId}
-                initialUserVote={initialUserVote}
-                skipSync={currentUserId !== undefined}
-                onPostUpdate={onPostUpdate}
-              />
-            </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] text-slate-300">
+            <button
+              type="button"
+              onClick={() => {
+                // TODO: Persist bookmarks when backend support is available.
+                setIsBookmarked((prev) => !prev);
+              }}
+              className={`flex h-10 items-center justify-center gap-1 rounded-full border px-2 font-medium transition-colors ${
+                isBookmarked
+                  ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-200'
+                  : 'border-[#252a31] bg-[#0f1318] text-slate-300 hover:text-indigo-200'
+              }`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-7-4-7 4V5z" />
+              </svg>
+              <span className="truncate">Bookmark</span>
+            </button>
 
-            <div className="hidden md:flex items-center gap-3 border-t border-[#252a31] pt-3 text-xs text-slate-400">
-              <Link
-                href={`/post/${post.id}`}
-                className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-indigo-300"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
-                </svg>
-                <span>{post.comment_count || 0}</span>
-              </Link>
-              <button
-                onClick={handleShare}
-                className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-indigo-300"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
-                </svg>
-                Share
-              </button>
-              <button
-                aria-label="Report post"
-                className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-red-300"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
-                </svg>
-                Report
-              </button>
-            </div>
+            <Link
+              href={`/post/${post.id}`}
+              className="flex h-10 items-center justify-center gap-1 rounded-full border border-[#252a31] bg-[#0f1318] px-2 font-medium text-slate-300 transition-colors hover:text-indigo-200"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
+              </svg>
+              <span className="truncate">Comment</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleShare}
+              className="flex h-10 items-center justify-center gap-1 rounded-full border border-[#252a31] bg-[#0f1318] px-2 font-medium text-slate-300 transition-colors hover:text-indigo-200"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
+              </svg>
+              <span className="truncate">Share</span>
+            </button>
           </div>
+        </div>
+
+        <div className="flex shrink-0 justify-end">
+          <VoteButtons
+            postId={post.id}
+            initialUpvotes={post.upvotes}
+            initialDownvotes={post.downvotes}
+            currentUserId={currentUserId}
+            initialUserVote={initialUserVote}
+            skipSync={currentUserId !== undefined}
+            onPostUpdate={onPostUpdate}
+          />
         </div>
       </div>
     </div>

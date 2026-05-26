@@ -205,11 +205,11 @@ export default function VoteButtons({
   };
 
   return (
-    <div className="flex flex-col items-center gap-1" style={{ width: '40px' }}>
+    <div className="flex w-11 flex-col items-center gap-1">
       <button
         onClick={(e) => handleVote(e, 'up')}
         disabled={voting || !userId}
-        className="text-slate-500 transition-colors duration-200 hover:text-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors duration-200 hover:text-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Upvote"
       >
         <span
@@ -230,7 +230,7 @@ export default function VoteButtons({
       <button
         onClick={(e) => handleVote(e, 'down')}
         disabled={voting || !userId}
-        className="text-slate-500 transition-colors duration-200 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors duration-200 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Downvote"
       >
         <span

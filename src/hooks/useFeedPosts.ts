@@ -30,22 +30,18 @@ const PAGE_SIZE = 15;
 const CACHE_TTL_MS = 45_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 
-const COMMUNITY_ROOM_MAP: Record<string, string[] | null> = {
+const COMMUNITY_FILTERS: Record<string, string[] | null> = {
   all: null,
-  general: ['campus', 'college'],
+  general: ['campus', 'college', 'general'],
   confessions: ['confessions'],
   rants: ['rants'],
   random: ['random'],
-  placements: ['placements'],
+  placements: ['placements', 'placement-talk'],
 };
 
-const logDebug = (message: string, meta?: Record<string, unknown>) => {
+const logDev = (message: string, ...args: unknown[]) => {
   if (process.env.NODE_ENV === 'development') {
-    if (meta) {
-      console.debug(`[feed] ${message}`, meta);
-    } else {
-      console.debug(`[feed] ${message}`);
-    }
+    console.log(message, ...args);
   }
 };
 
@@ -83,13 +79,13 @@ const mergePosts = (existing: Post[], incoming: Post[]) => {
 };
 
 const getRoomFilters = (community: string) => {
-  if (community in COMMUNITY_ROOM_MAP) {
-    return COMMUNITY_ROOM_MAP[community];
+  if (community in COMMUNITY_FILTERS) {
+    return COMMUNITY_FILTERS[community];
   }
   return [community];
 };
 
-export default function useFeedPosts(selectedCommunity: FeedCommunity) {
+export default function useFeedPosts(initialCommunity: FeedCommunity = 'all') {
   const supabase = useMemo(() => createClient(), []);
   const { user, loading: authLoading } = useAuth();
   const userId = user?.id ?? null;
@@ -101,6 +97,7 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorContext, setErrorContext] = useState<ErrorContext>(null);
+  const [selectedCommunity, setSelectedCommunity] = useState<FeedCommunity>(initialCommunity);
 
   const latestRequestId = useRef(0);
   const activeCommunityRef = useRef<FeedCommunity>(selectedCommunity);
@@ -132,20 +129,15 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
     []
   );
 
-  const applyCache = useCallback(
-    (community: FeedCommunity) => {
-      const cacheEntry = feedCache[community];
-      if (!cacheEntry) {
-        logDebug('cache miss', { community });
-        return null;
-      }
-      logDebug('cache hit', { community });
-      setPosts(cacheEntry.posts);
-      setHasMore(cacheEntry.hasMore);
-      return cacheEntry;
-    },
-    []
-  );
+  const applyCache = useCallback((community: FeedCommunity) => {
+    const cacheEntry = feedCache[community];
+    if (!cacheEntry) {
+      return null;
+    }
+    setPosts(cacheEntry.posts);
+    setHasMore(cacheEntry.hasMore);
+    return cacheEntry;
+  }, []);
 
   const fetchPostsPage = useCallback(
     async (community: FeedCommunity, pageToLoad: number, mode: Exclude<ErrorContext, null>) => {
@@ -173,7 +165,9 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
       setError(null);
       setErrorContext(null);
 
-      logDebug('fetch started', { community, page: pageToLoad, mode, requestId });
+      if (pageToLoad === 0) {
+        logDev('[feed] loading community:', community);
+      }
 
       const isCurrent = () =>
         mountedRef.current &&
@@ -251,7 +245,7 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
         }));
 
         if (!isCurrent()) {
-          logDebug('stale response ignored', { community, page: pageToLoad, mode, requestId });
+          logDev('[feed] stale request ignored');
           return;
         }
 
@@ -271,15 +265,14 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
         setError(null);
         setErrorContext(null);
 
-        logDebug('fetch finished', { community, page: pageToLoad, mode, count: normalized.length });
+        logDev('[feed] loaded posts:', merged.length);
       } catch (err: unknown) {
         if (!isCurrent()) {
-          logDebug('stale error ignored', { community, page: pageToLoad, mode, requestId });
+          logDev('[feed] stale request ignored');
           return;
         }
 
         if (err instanceof Error && err.name === 'AbortError') {
-          logDebug('request aborted', { community, page: pageToLoad, mode });
           return;
         }
 
@@ -287,7 +280,6 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
           err instanceof Error && err.message ? err.message : 'Failed to load posts.';
         setError(message);
         setErrorContext(mode);
-        logDebug('fetch error', { community, page: pageToLoad, mode, message });
       } finally {
         if (!isCurrent()) {
           return;
@@ -320,6 +312,10 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
   useEffect(() => {
     if (authLoading) return;
 
+    activeCommunityRef.current = selectedCommunity;
+    latestRequestId.current += 1;
+    abortControllerRef.current?.abort();
+
     const cacheEntry = applyCache(selectedCommunity);
     const hasCache = !!cacheEntry;
 
@@ -347,6 +343,10 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
   }, [selectedCommunity, applyCache, fetchPostsPage, authLoading]);
 
   useEffect(() => {
+    setSelectedCommunity(initialCommunity);
+  }, [initialCommunity]);
+
+  useEffect(() => {
     if (authLoading) return;
     if (lastUserIdRef.current !== userId) {
       lastUserIdRef.current = userId;
@@ -364,6 +364,8 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
     error,
     errorContext,
     hasMore,
+    selectedCommunity,
+    setSelectedCommunity,
     refresh,
     loadMore,
     retry,

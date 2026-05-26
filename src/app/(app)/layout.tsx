@@ -50,25 +50,6 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
             CICS
           </Link>
           <div className="flex items-center gap-2">
-            <button
-              aria-label="Notifications (unread)"
-              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#252a31] bg-[#15181c] text-slate-300"
-            >
-              <svg
-                className="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
-                <path d="M13.73 21a2 2 0 01-3.46 0" />
-              </svg>
-              <span className="sr-only">Unread notifications</span>
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-indigo-400" />
-            </button>
             <Link
               href="/profile"
               aria-label="Profile"

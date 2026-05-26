@@ -31,7 +31,7 @@ export default function FeedPage() {
   const searchParams = useSearchParams();
   const { user, profile: authProfile, loading: authLoading } = useAuth();
   const [communities, setCommunities] = useState<Community[]>([]);
-  const [activeChip, setActiveChip] = useState('all');
+  const [composeSignal, setComposeSignal] = useState(0);
 
   const communityChips = useMemo(() => {
     if (communities.length === 0) return BASE_COMMUNITY_CHIPS;
@@ -56,15 +56,28 @@ export default function FeedPage() {
     loadMore,
     retry,
     updatePostOptimistically,
-  } = useFeedPosts(activeChip);
+    selectedCommunity,
+    setSelectedCommunity,
+  } = useFeedPosts('all');
 
   const composeParam = searchParams.get('compose');
 
-  useEffect(() => {
-    if (composeParam !== '1') return;
+  const openComposer = useCallback(() => {
+    setComposeSignal((prev) => prev + 1);
     const target = document.getElementById('create-post');
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [composeParam]);
+  }, []);
+
+  useEffect(() => {
+    if (composeParam !== '1') return;
+    openComposer();
+  }, [composeParam, openComposer]);
+
+  useEffect(() => {
+    const handleOpen = () => openComposer();
+    window.addEventListener('open-create-post', handleOpen);
+    return () => window.removeEventListener('open-create-post', handleOpen);
+  }, [openComposer]);
 
 
   const fetchCommunities = useCallback(async () => {
@@ -112,12 +125,12 @@ export default function FeedPage() {
         <div className="mb-4 overflow-x-auto scrollbar-hide">
           <div className="flex gap-2 pb-1">
             {communityChips.map((chip) => {
-              const isActive = activeChip === chip.id;
+              const isActive = selectedCommunity === chip.id;
               return (
                 <button
                   key={chip.id}
                   type="button"
-                  onClick={() => setActiveChip(chip.id)}
+                  onClick={() => setSelectedCommunity(chip.id)}
                   className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-colors ${
                     isActive
                       ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-200'
@@ -137,8 +150,9 @@ export default function FeedPage() {
               <EnhancedCreatePostForm
                 profile={authProfile}
                 defaultCommunity="campus"
+                openSignal={composeSignal}
                 onPostCreated={() => {
-                refresh();
+                  refresh();
                 }}
               />
           </div>
@@ -147,13 +161,16 @@ export default function FeedPage() {
         {/* Posts */}
         {error && posts.length === 0 ? (
           <ErrorMessage
-            title="Couldn't load posts."
-            message="Couldn't load posts."
+            title="Couldn’t load posts."
+            message="Couldn’t load posts."
             onRetry={retry}
             retryText="Try again"
           />
         ) : isInitialLoading && posts.length === 0 ? (
-          <PostLoadingSkeleton count={3} />
+          <div className="space-y-3">
+            <div className="text-xs text-slate-400">Loading posts...</div>
+            <PostLoadingSkeleton count={3} />
+          </div>
         ) : posts.length === 0 ? (
           <EmptyState
             title="No posts here yet."
@@ -167,10 +184,7 @@ export default function FeedPage() {
             }
             action={{
               label: 'Create a post',
-              onClick: () => {
-                const target = document.getElementById('create-post');
-                target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              },
+              onClick: openComposer,
             }}
           />
         ) : (
@@ -188,14 +202,14 @@ export default function FeedPage() {
             )}
 
             {posts.map((post) => (
-                <div key={post.id}>
-                  <PostCard
-                    post={post}
-                    currentUserId={user?.id ?? null}
-                    initialUserVote={post.user_vote ?? null}
-                    onPostUpdate={updatePostOptimistically}
-                  />
-                </div>
+              <div key={post.id}>
+                <PostCard
+                  post={post}
+                  currentUserId={user?.id ?? null}
+                  initialUserVote={post.user_vote ?? null}
+                  onPostUpdate={updatePostOptimistically}
+                />
+              </div>
             ))}
             
             {/* Load More Button */}
