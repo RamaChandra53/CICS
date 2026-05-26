@@ -10,6 +10,9 @@ interface HorizontalVoteButtonsProps {
   commentCount?: number;
   showActions?: boolean;
   postContent?: string;
+  initialUserVote?: 'up' | 'down' | null;
+  currentUserId?: string | null;
+  skipSync?: boolean;
 }
 
 type VoteType = 'up' | 'down';
@@ -21,6 +24,9 @@ export default function HorizontalVoteButtons({
   commentCount = 0,
   showActions = true,
   postContent = '',
+  initialUserVote,
+  currentUserId,
+  skipSync = false,
 }: HorizontalVoteButtonsProps) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -116,6 +122,13 @@ export default function HorizontalVoteButtons({
 
   const loadVote = useCallback(async () => {
     try {
+      if (currentUserId !== undefined) {
+        setUserId(currentUserId);
+        setUserVote(initialUserVote ?? null);
+        await syncVoteState(currentUserId);
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -132,11 +145,18 @@ export default function HorizontalVoteButtons({
     } catch (err: unknown) {
       console.error('Vote loading error:', err);
     }
-  }, [supabase, syncVoteState]);
+  }, [supabase, syncVoteState, currentUserId, initialUserVote]);
 
   useEffect(() => {
+    if (skipSync) return;
     loadVote();
-  }, [loadVote]);
+  }, [loadVote, skipSync]);
+
+  useEffect(() => {
+    if (!skipSync) return;
+    setUserId(currentUserId ?? null);
+    setUserVote(initialUserVote ?? null);
+  }, [currentUserId, initialUserVote, skipSync]);
 
   const handleVote = async (e: React.MouseEvent, type: VoteType) => {
     e.preventDefault();
@@ -203,7 +223,9 @@ export default function HorizontalVoteButtons({
         if (error) throw error;
       }
 
-      await syncVoteState(userId);
+      if (!skipSync) {
+        await syncVoteState(userId);
+      }
     } catch (err: unknown) {
       setUserVote(prevUserVote);
       setUpvotes(prevUpvotes);

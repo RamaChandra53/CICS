@@ -67,7 +67,7 @@ function CommentItem({
   };
 
   return (
-    <div className={depth > 0 ? 'ml-3 border-l border-[#252a31] pl-3 md:ml-4 md:pl-4' : ''}>
+    <div className={depth > 0 ? `${depth <= 3 ? 'ml-3 md:ml-4' : 'ml-0'} border-l border-[#252a31] pl-3 md:pl-4` : ''}>
       <div className="mb-2 flex gap-2.5">
         <div
           className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs ${displayInfo.avatarBg}`}
@@ -503,6 +503,7 @@ export default function PostPage() {
             commentCount={flatComments.length}
             showActions={true}
             postContent={postContent}
+            currentUserId={user?.id ?? null}
           />
         </div>
       </div>

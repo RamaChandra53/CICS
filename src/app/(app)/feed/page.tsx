@@ -9,9 +9,6 @@ import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import RedditNavbar from '@/components/RedditNavbar';
-import RedditSidebar from '@/components/RedditSidebar';
-import RedditRightPanel from '@/components/RedditRightPanel';
 import ErrorBoundaryFunctional from '@/components/ErrorBoundaryFunctional';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
@@ -240,124 +237,99 @@ export default function FeedPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0b0f12]">
-        <RedditNavbar />
-        <div className="flex pt-0 md:pt-14">
-          <RedditSidebar />
-          <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
-            <SkeletonFeed count={5} />
-          </main>
-          <div className="hidden xl:block w-80 p-4">
-            <RedditRightPanel />
-          </div>
-        </div>
+      <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6">
+        <SkeletonFeed count={5} />
       </div>
     );
   }
 
   return (
     <ErrorBoundaryFunctional>
-      <div className="min-h-screen bg-[#0b0f12]">
-        <RedditNavbar />
-        <div className="flex pt-0 md:pt-14">
-          <RedditSidebar />
-          
-          {/* Main Content */}
-          <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
-            <div className="mb-4 overflow-x-auto">
-              <div className="flex gap-2 pb-1">
-                {communityChips.map((chip) => {
-                  const isActive = activeChip === chip.id;
-                  return (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      onClick={() => setActiveChip(chip.id)}
-                      className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-colors ${
-                        isActive
-                          ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-200'
-                          : 'border-[#252a31] bg-[#15181c] text-slate-400'
-                      }`}
-                    >
-                      {chip.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Create Post Box */}
-            {authProfile && (
-              <div id="create-post" className="mb-4">
-                  <EnhancedCreatePostForm
-                    profile={authProfile}
-                    defaultCommunity="campus"
-                    onPostCreated={() => {
-                      setPage(0);
-                      setHasMore(true);
-                      fetchPosts(0, { reset: true });
-                    }}
-                  />
-              </div>
-            )}
-
-            {/* Posts */}
-            {postsError ? (
-              <ErrorMessage
-                message={postsError}
-                onRetry={() => fetchPosts(0, { reset: true })}
-              />
-            ) : postsLoading && posts.length === 0 ? (
-              <PostLoadingSkeleton count={2} />
-            ) : visiblePosts.length === 0 ? (
-              <EmptyState
-                title="No posts yet"
-                description="Be the first to share something with the campus!"
-                icon={
-                  <div className="w-16 h-16 bg-gradient-accent rounded-2xl flex items-center justify-center mx-auto mb-6 animate-glow">
-                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                  </div>
-                }
-              />
-            ) : (
-              <div className="space-y-3">
-                {visiblePosts.map((post, index) => (
-                    <div 
-                      key={post.id} 
-                      className="transform transition-all duration-500"
-                      style={{animationDelay: `${index * 100}ms`}}
-                    >
-                      <PostCard
-                        post={post}
-                        currentUserId={user?.id ?? null}
-                        initialUserVote={post.user_vote ?? null}
-                      />
-                    </div>
-                ))}
-                
-                {/* Load More Button */}
-                {hasMore && (
-                  <div className="flex justify-center py-4">
-                    <button
-                      onClick={loadMore}
-                      disabled={postsLoading}
-                      className="h-11 rounded-full border border-indigo-500/30 px-6 text-sm font-medium text-indigo-300 transition-colors hover:border-indigo-400/60 hover:text-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {postsLoading ? 'Loading...' : 'Load More Posts'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </main>
-
-          {/* Right Sidebar */}
-          <div className="hidden xl:block w-80 p-4">
-            <RedditRightPanel currentRoom="campus" />
+      <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6">
+        {/* Community Chips */}
+        <div className="mb-4 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-2 pb-1">
+            {communityChips.map((chip) => {
+              const isActive = activeChip === chip.id;
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => setActiveChip(chip.id)}
+                  className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-200'
+                      : 'border-[#252a31] bg-[#15181c] text-slate-400'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
           </div>
         </div>
+
+        {/* Create Post Box */}
+        {authProfile && (
+          <div id="create-post" className="mb-4">
+              <EnhancedCreatePostForm
+                profile={authProfile}
+                defaultCommunity="campus"
+                onPostCreated={() => {
+                  setPage(0);
+                  setHasMore(true);
+                  fetchPosts(0, { reset: true });
+                }}
+              />
+          </div>
+        )}
+
+        {/* Posts */}
+        {postsError ? (
+          <ErrorMessage
+            message={postsError}
+            onRetry={() => fetchPosts(0, { reset: true })}
+          />
+        ) : postsLoading && posts.length === 0 ? (
+          <PostLoadingSkeleton count={2} />
+        ) : visiblePosts.length === 0 ? (
+          <EmptyState
+            title="No posts yet"
+            description="Be the first to share something with the campus!"
+            icon={
+              <div className="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <svg className="w-8 h-8 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </div>
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            {visiblePosts.map((post) => (
+                <div key={post.id}>
+                  <PostCard
+                    post={post}
+                    currentUserId={user?.id ?? null}
+                    initialUserVote={post.user_vote ?? null}
+                  />
+                </div>
+            ))}
+            
+            {/* Load More Button */}
+            {hasMore && (
+              <div className="flex justify-center py-4">
+                <button
+                  onClick={loadMore}
+                  disabled={postsLoading}
+                  className="h-11 rounded-full border border-indigo-500/30 px-6 text-sm font-medium text-indigo-300 transition-colors hover:border-indigo-400/60 hover:text-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {postsLoading ? 'Loading...' : 'Load More Posts'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </ErrorBoundaryFunctional>
   );

@@ -438,123 +438,165 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
     );
   }
 
-  return (
-    <>
-      <form
-        onSubmit={(e) => handleSubmit(e)}
-        className={`rounded-2xl border border-[#252a31] bg-[#15181c] ${className}`}
-      >
-        <div className="p-4">
-          <div className="mb-5">
+  const formContent = (
+    <form
+      onSubmit={(e) => handleSubmit(e)}
+      className={`rounded-2xl border border-[#252a31] bg-[#15181c] ${className}`}
+    >
+      <div className="p-4">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
             <h2 className="text-lg font-semibold text-white">Create post</h2>
             <p className="text-xs text-slate-400">Share your ideas with the community</p>
           </div>
-
-          <div className="mb-6">
-            <PostTypeSelector
-              selectedType={formData.postType}
-              onTypeChange={(type) => updateFormData({ postType: type })}
-            />
-          </div>
-
-          <div className="mb-6">
-            <CommunitySelector
-              communities={localCommunities}
-              selectedCommunity={formData.community}
-              onCommunityChange={(community) => updateFormData({ community })}
-            />
-          </div>
-
-          {renderPostTypeForm()}
-
-          {formData.community !== 'confessions' && (
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-slate-300 mb-3">Post identity</label>
-              <div className="flex flex-wrap items-center gap-2">
-                {(['full', 'partial', 'anonymous'] as const).map((mode) => {
-                  const isAnonBlocked =
-                    mode === 'anonymous' &&
-                    !profile.is_email_verified &&
-                    requiresEmailForAnonymous(formData.community);
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => handleDisplayModeChange(mode)}
-                      disabled={isAnonBlocked}
-                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                        displayMode === mode
-                          ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
-                          : isAnonBlocked
-                          ? 'border-[#252a31] text-slate-600 opacity-50'
-                          : 'border-[#252a31] text-slate-300 hover:text-slate-100'
-                      }`}
-                    >
-                      <span>{getDisplayModeLabel(mode)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-slate-500 mt-2">
-                Choose how your identity appears. Verification is only needed for anonymous posts in higher-trust spaces.
-              </p>
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-900/20 border border-red-800/40 rounded-xl backdrop-blur-sm">
-              <div className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-red-400 text-sm font-medium">{error}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-3 border-t border-[#252a31] px-4 py-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <button
-              type="button"
-              onClick={() => {
-                setExpanded(false);
-                setError('');
-              }}
-              className="h-11 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white md:h-10"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSubmit(undefined, true)}
-              disabled={loading}
-              className="h-11 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed md:h-10"
-            >
-              {loading ? 'Saving...' : 'Save Draft'}
-            </button>
-          </div>
-
           <button
-            type="submit"
-            disabled={loading}
-            className="h-11 w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 disabled:shadow-none md:w-auto md:px-8"
+            type="button"
+            onClick={() => {
+              setExpanded(false);
+              setError('');
+            }}
+            className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border border-[#252a31] text-slate-400 hover:text-white"
+            aria-label="Close"
           >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Posting...
-              </span>
-            ) : (
-              'Post Now'
-            )}
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
-      </form>
+
+        <div className="mb-6">
+          <PostTypeSelector
+            selectedType={formData.postType}
+            onTypeChange={(type) => updateFormData({ postType: type })}
+          />
+        </div>
+
+        <div className="mb-6">
+          <CommunitySelector
+            communities={localCommunities}
+            selectedCommunity={formData.community}
+            onCommunityChange={(community) => updateFormData({ community })}
+          />
+        </div>
+
+        {renderPostTypeForm()}
+
+        {formData.community !== 'confessions' && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-300 mb-3">Post identity</label>
+            <div className="flex flex-wrap items-center gap-2">
+              {(['full', 'partial', 'anonymous'] as const).map((mode) => {
+                const isAnonBlocked =
+                  mode === 'anonymous' &&
+                  !profile.is_email_verified &&
+                  requiresEmailForAnonymous(formData.community);
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => handleDisplayModeChange(mode)}
+                    disabled={isAnonBlocked}
+                    className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                      displayMode === mode
+                        ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
+                        : isAnonBlocked
+                        ? 'border-[#252a31] text-slate-600 opacity-50'
+                        : 'border-[#252a31] text-slate-300 hover:text-slate-100'
+                    }`}
+                  >
+                    <span>{getDisplayModeLabel(mode)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Choose how your identity appears. Verification is only needed for anonymous posts in higher-trust spaces.
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-900/20 border border-red-800/40 rounded-xl backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-red-400 text-sm font-medium">{error}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-[#252a31] px-4 py-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(false);
+              setError('');
+            }}
+            className="hidden md:block h-10 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSubmit(undefined, true)}
+            disabled={loading}
+            className="h-11 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed md:h-10"
+          >
+            {loading ? 'Saving...' : 'Save Draft'}
+          </button>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="h-11 w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 disabled:shadow-none md:w-auto md:px-8"
+        >
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              Posting...
+            </span>
+          ) : (
+            'Post Now'
+          )}
+        </button>
+      </div>
+    </form>
+  );
+
+  return (
+    <>
+      {/* Mobile: bottom sheet overlay */}
+      <div className="md:hidden fixed inset-0 z-50 flex flex-col">
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/60"
+          onClick={() => {
+            setExpanded(false);
+            setError('');
+          }}
+        />
+        {/* Sheet */}
+        <div className="relative mt-auto max-h-[92vh] overflow-y-auto rounded-t-2xl bg-[#0b0f12] border-t border-[#252a31]">
+          {/* Drag indicator */}
+          <div className="sticky top-0 z-10 flex justify-center py-2 bg-[#0b0f12] rounded-t-2xl">
+            <div className="h-1 w-10 rounded-full bg-slate-600" />
+          </div>
+          {formContent}
+        </div>
+      </div>
+
+      {/* Desktop: inline form */}
+      <div className="hidden md:block">
+        {formContent}
+      </div>
 
       <CollegeEmailVerificationModal
         isOpen={showVerificationModal}
@@ -564,6 +606,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
       />
     </>
   );
+
 };
 
 export default EnhancedCreatePostForm;

@@ -207,14 +207,14 @@ export default function VoteButtons({
       <button
         onClick={(e) => handleVote(e, 'up')}
         disabled={voting || !userId}
-        className="text-[#878a8c] transition-colors duration-200 hover:text-[#ff4500] disabled:cursor-not-allowed disabled:opacity-50"
+        className="text-slate-500 transition-colors duration-200 hover:text-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Upvote"
       >
         <span
           className={
             userVote === 'up'
-              ? 'text-[#ff4500] text-xl leading-none'
-              : 'text-[#878a8c] text-xl leading-none'
+              ? 'text-indigo-400 text-xl leading-none'
+              : 'text-slate-500 text-xl leading-none'
           }
         >
           ▲
@@ -228,14 +228,14 @@ export default function VoteButtons({
       <button
         onClick={(e) => handleVote(e, 'down')}
         disabled={voting || !userId}
-        className="text-[#878a8c] transition-colors duration-200 hover:text-[#7193ff] disabled:cursor-not-allowed disabled:opacity-50"
+        className="text-slate-500 transition-colors duration-200 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Downvote"
       >
         <span
           className={
             userVote === 'down'
-              ? 'text-[#7193ff] text-xl leading-none'
-              : 'text-[#878a8c] text-xl leading-none'
+              ? 'text-red-400 text-xl leading-none'
+              : 'text-slate-500 text-xl leading-none'
           }
         >
           ▼

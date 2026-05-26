@@ -166,6 +166,9 @@ const PostCard = memo(function PostCard({
                 initialDownvotes={post.downvotes}
                 commentCount={post.comment_count || 0}
                 postContent={content}
+                currentUserId={currentUserId}
+                initialUserVote={initialUserVote}
+                skipSync={currentUserId !== undefined}
               />
             </div>
 
