@@ -41,7 +41,11 @@ function CommentItem({
   const [replyMode, setReplyMode] = useState<IdentityMode>('pseudo');
   const [submitting, setSubmitting] = useState(false);
 
-  const displayInfo = getPostIdentityDisplay(author, comment.display_mode as IdentityMode);
+  const displayInfo = getPostIdentityDisplay(
+    author,
+    comment.display_mode as IdentityMode,
+    comment.is_anon_comment
+  );
 
   const handleReply = async () => {
     if (!replyContent.trim()) return;
@@ -173,6 +177,7 @@ export default function PostPage() {
   const [commentDisplayMode, setCommentDisplayMode] = useState<DisplayMode>('pseudo');
   const [showTrustModal, setShowTrustModal] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentsError, setCommentsError] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -217,6 +222,7 @@ export default function PostPage() {
   const fetchComments = useCallback(
     async (pageToLoad = 0, options?: { reset?: boolean }) => {
       setCommentsLoading(true);
+      setCommentsError('');
 
       const targetPage = options?.reset ? 0 : pageToLoad;
       const { data, error: commentsError } = await supabase
@@ -230,6 +236,7 @@ export default function PostPage() {
 
       if (commentsError) {
         console.error('Error fetching comments:', commentsError);
+        setCommentsError(commentsError.message || 'Failed to load comments.');
         setCommentsLoading(false);
         return;
       }
@@ -414,7 +421,7 @@ export default function PostPage() {
   const author = post.profiles;
   const postDisplayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
 
-  const postDisplayInfo = getPostIdentityDisplay(author, postDisplayMode);
+  const postDisplayInfo = getPostIdentityDisplay(author, postDisplayMode, post.is_anon_post);
 
   const room = ROOMS.find((r) => r.id === post.room);
   const postContent = post.content ?? '';
@@ -562,6 +569,12 @@ export default function PostPage() {
         </div>
       )}
 
+      {commentsError && (
+        <div className="mb-4 rounded-lg border border-red-800/40 bg-red-900/20 p-3 text-xs text-red-400">
+          {commentsError}
+        </div>
+      )}
+
       <div className="space-y-4">
         {commentsLoading && flatComments.length === 0 ? (
           <div className="py-8 text-center">
@@ -594,7 +607,7 @@ export default function PostPage() {
           </div>
         )}
 
-        {flatComments.length === 0 && !commentsLoading && (
+        {flatComments.length === 0 && !commentsLoading && !commentsError && (
           <div className="py-8 text-center">
             <p className="text-sm text-gray-400">No comments yet. Be the first!</p>
           </div>

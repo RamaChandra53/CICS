@@ -43,7 +43,7 @@ export type Post = {
   image_url: string | null;
   video_url: string | null;
   link_url: string | null;
-  link_metadata: any | null;
+  link_metadata: Record<string, unknown> | null;
   poll_options: string[] | null;
   poll_expires_at: string | null;
   is_anon_post: boolean;

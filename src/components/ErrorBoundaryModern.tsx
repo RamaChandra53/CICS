@@ -38,7 +38,7 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="text-4xl mb-4">⚠️</div>
             <h1 className="text-[#d7dadc] text-xl font-bold mb-2">Something went wrong</h1>
             <p className="text-gray-400 text-sm mb-6">
-              We encountered an unexpected error. This has been logged and we'll work to fix it.
+              We encountered an unexpected error. This has been logged and we&apos;ll work to fix it.
             </p>
             <div className="space-y-3">
               <button

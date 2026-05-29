@@ -122,7 +122,18 @@ export function validatePseudoUsername(username: string): string | null {
  * Falls back to 'CampusUser' + random digits if generation completely fails.
  */
 export async function ensureUniquePseudoUsername(
-  supabase: { from: (table: string) => any }
+  supabase: {
+    from: (table: 'profiles') => {
+      select: (columns: 'id') => {
+        eq: (column: 'pseudo_username', value: string) => {
+          maybeSingle: () => Promise<{
+            data: { id: string } | null;
+            error: { message?: string } | null;
+          }>;
+        };
+      };
+    };
+  }
 ): Promise<string> {
   const MAX_ATTEMPTS = 20;
 

@@ -97,9 +97,10 @@ export function getIdentityModeAccess(
  */
 export function getPostIdentityDisplay(
   profile: Partial<Profile> | null | undefined,
-  displayMode: string | null | undefined
+  displayMode: string | null | undefined,
+  isAnonymous?: boolean
 ): IdentityDisplay {
-  const mode = normalizeDisplayMode(displayMode, profile);
+  const mode = normalizeDisplayMode(displayMode, isAnonymous);
 
   switch (mode) {
     case 'anonymous':
@@ -230,14 +231,15 @@ export function getIdentityModeHelper(mode: IdentityMode): string {
  */
 function normalizeDisplayMode(
   displayMode: string | null | undefined,
-  profile: Partial<Profile> | null | undefined
+  isAnonymous?: boolean
 ): IdentityMode {
   if (displayMode === 'pseudo') return 'pseudo';
   if (displayMode === 'anonymous') return 'anonymous';
   if (displayMode === 'partial') return 'partial';
   if (displayMode === 'full') return 'full';
 
-  // Legacy fallback: if no display_mode, check is_anon_post on profile
-  // (This shouldn't happen with the current schema but handles edge cases)
+  // Legacy fallback: if no display_mode, honor the explicit anonymous flag
+  if (isAnonymous) return 'anonymous';
+
   return 'pseudo';
 }

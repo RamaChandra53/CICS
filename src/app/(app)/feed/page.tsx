@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase';
 import { Community } from '@/types';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import ErrorBoundaryFunctional from '@/components/ErrorBoundaryFunctional';
 import ErrorMessage from '@/components/ui/ErrorMessage';
@@ -25,9 +25,13 @@ const BASE_COMMUNITY_CHIPS = [
 
 export default function FeedPage() {
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, profile: authProfile, loading: authLoading } = useAuth();
+  const {
+    user,
+    profile: authProfile,
+    loading: authLoading,
+    profileLoading,
+  } = useAuth();
 
   const [communities, setCommunities] = useState<Community[]>([]);
   const [authReady, setAuthReady] = useState(false);
@@ -87,19 +91,15 @@ export default function FeedPage() {
 
   // Initialize: auth check + fetch communities + trigger initial feed load
   useEffect(() => {
-    if (authLoading) return;
-
-    if (!user) {
-      router.push('/');
-      return;
-    }
+    if (authLoading || profileLoading) return;
+    if (!user) return;
 
     setAuthReady(true);
     fetchCommunities();
     // Initial feed load is triggered by useFeedPosts when selectedCommunity is set
     // We need to trigger the first load explicitly
     refresh();
-  }, [authLoading, user, router, fetchCommunities, refresh]);
+  }, [authLoading, profileLoading, user, fetchCommunities, refresh]);
 
   // Real-time subscription for new posts
   useEffect(() => {

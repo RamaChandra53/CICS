@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
@@ -9,28 +9,83 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, profile, loading } = useAuth();
+  const {
+    user,
+    session,
+    profile,
+    loading,
+    profileLoading,
+    error,
+    errorScope,
+    reloadAuth,
+  } = useAuth();
   const mobileHeaderOffset = 'pt-12';
   const mobileNavOffset = 'pb-24';
+  const [showTimeout, setShowTimeout] = useState(false);
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.replace('/');
-        return;
-      }
-
-      if (profile?.is_first_login) {
-        router.replace('/set-password');
-        return;
-      }
+    if (loading || profileLoading) {
+      setShowTimeout(false);
+      const timeoutId = window.setTimeout(() => {
+        setShowTimeout(true);
+      }, 10000);
+      return () => window.clearTimeout(timeoutId);
     }
-  }, [user, profile, loading, router]);
 
-  if (loading) {
+    setShowTimeout(false);
+    return undefined;
+  }, [loading, profileLoading]);
+
+  useEffect(() => {
+    if (loading || profileLoading) return;
+    if (error && errorScope === 'session') return;
+
+    if (!user || !session) {
+      router.replace('/');
+      return;
+    }
+
+    if (profile?.is_first_login) {
+      router.replace('/set-password');
+      return;
+    }
+  }, [user, session, profile, loading, profileLoading, error, router]);
+
+  if (loading || profileLoading) {
     return (
       <div className="min-h-screen bg-[#0b0f12] flex items-center justify-center">
-        <div className="text-gray-400 text-sm">Loading...</div>
+        <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          <p>Loading your campus feed...</p>
+          {showTimeout && (
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-xs text-gray-500">Still loading. Try refreshing.</p>
+              <button
+                onClick={() => reloadAuth()}
+                className="h-9 rounded-lg border border-[#252a31] px-4 text-xs text-slate-300 transition-colors hover:text-white"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (error && errorScope === 'session') {
+    return (
+      <div className="min-h-screen bg-[#0b0f12] flex items-center justify-center px-4">
+        <div className="rounded-2xl border border-red-800/40 bg-red-900/20 p-6 text-center max-w-sm w-full">
+          <h2 className="mb-2 text-base font-semibold text-red-200">Couldn&apos;t load your session</h2>
+          <p className="mb-4 text-xs text-red-300">{error}</p>
+          <button
+            onClick={() => reloadAuth()}
+            className="h-10 w-full rounded-lg bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -60,6 +115,19 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className={`md:ml-60 ${mobileNavOffset} md:pb-0 ${mobileHeaderOffset} md:pt-0 min-h-screen`}>
+        {error && errorScope === 'profile' && (
+          <div className="mx-3 mt-3 rounded-xl border border-yellow-800/40 bg-yellow-900/20 px-4 py-3 text-xs text-yellow-300 md:mx-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>{error}</span>
+              <button
+                onClick={() => reloadAuth()}
+                className="h-8 rounded-lg border border-yellow-700/40 px-3 text-[11px] text-yellow-200 transition-colors hover:text-white"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
         {children}
       </main>
       <BottomNav />

@@ -369,7 +369,7 @@ export default function ProfilePage() {
               {authProfile.pseudo_username_status === 'pending' && (
                 <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-2 mb-3">
                   <p className="text-yellow-400 text-xs">
-                    ⏳ Username change to "{authProfile.pending_pseudo_username}" is pending review
+                    ⏳ Username change to &quot;{authProfile.pending_pseudo_username}&quot; is pending review
                   </p>
                 </div>
               )}

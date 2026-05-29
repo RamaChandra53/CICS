@@ -23,7 +23,7 @@ function getReadableErrorMessage(err: unknown) {
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
-  const [searchParams, setSearchParams] = useState<any>(null);
+  const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null);
   const supabase = createClient();
   const [step, setStep] = useState<'details' | 'otp' | 'newPassword'>('details');
   const [loading, setLoading] = useState(false);

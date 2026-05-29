@@ -119,6 +119,14 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
     setFormData((prev) => ({ ...prev, ...updates }));
   };
 
+  const handleCommunityChange = (community: string) => {
+    updateFormData({ community });
+
+    const nextMode = getEffectiveDefaultMode(community, profile);
+    setDisplayMode(nextMode);
+    updateFormData({ isAnonymous: nextMode === 'anonymous' });
+  };
+
   const handleDisplayModeChange = (mode: IdentityMode) => {
     const access = getIdentityModeAccess(profile);
 
@@ -282,35 +290,13 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         downvotes: 0,
       };
 
-      // If we have files to upload, we must wait for them and the subsequent insert to complete
-      const hasUploads = (formData.postType === 'image' && formData.images.length > 0) || 
-                         (formData.postType === 'video' && formData.videoFile);
+      const { error: insertError } = await supabase.from('posts').insert(postData);
+      if (insertError) throw new Error(insertError.message || 'Failed to create post');
 
-      if (hasUploads) {
-        // Await the insert if we are already waiting for uploads
-        const { error: insertError } = await supabase.from('posts').insert(postData);
-        if (insertError) throw new Error(insertError.message || 'Failed to create post');
-        
-        resetForm();
-        setExpanded(false);
-        onPostCreated?.();
-        setLoading(false);
-      } else {
-        // Optimistic UI for text/link/polls - close form instantly, let DB insert in background
-        resetForm();
-        setExpanded(false);
-        setLoading(false);
-        
-        supabase.from('posts').insert(postData).then(({ error: insertError }: { error: { message: string } | null }) => {
-          if (insertError) {
-            console.error('Failed to create post in background:', insertError.message);
-          } else {
-            // Only trigger the callback after the post is safely in the database, 
-            // so the parent feed fetches the fresh data.
-            onPostCreated?.();
-          }
-        });
-      }
+      resetForm();
+      setExpanded(false);
+      onPostCreated?.();
+      setLoading(false);
     } catch (err: unknown) {
       console.error('Post creation error:', err);
 
@@ -453,7 +439,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
           <CommunitySelector
             communities={localCommunities}
             selectedCommunity={formData.community}
-            onCommunityChange={(community) => updateFormData({ community })}
+            onCommunityChange={handleCommunityChange}
           />
         </div>
 

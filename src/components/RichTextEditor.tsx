@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import type { ReactQuillProps } from 'react-quill';
 
 // Dynamically import ReactQuill to avoid SSR issues
-const ReactQuill = dynamic(() => import('react-quill'), {
+const ReactQuill = dynamic(async () => (await import('react-quill')).default, {
   ssr: false,
   loading: () => <div className="animate-pulse bg-bg-secondary rounded-lg h-32"></div>
-}) as any;
+}) as React.ComponentType<ReactQuillProps>;
 
 interface RichTextEditorProps {
   value: string;
@@ -41,7 +42,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           shiftKey: false,
           altKey: false,
           metaKey: false,
-          handler: function(this: any, range: any, context: any) {
+          handler: function(
+            this: { quill: { format: (format: string, value: boolean) => void } },
+            _range: unknown,
+            context: { format: Record<string, boolean> }
+          ) {
             this.quill.format('bold', !context.format.bold);
           }
         },
@@ -51,7 +56,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           shiftKey: false,
           altKey: false,
           metaKey: false,
-          handler: function(this: any, range: any, context: any) {
+          handler: function(
+            this: { quill: { format: (format: string, value: boolean) => void } },
+            _range: unknown,
+            context: { format: Record<string, boolean> }
+          ) {
             this.quill.format('italic', !context.format.italic);
           }
         }

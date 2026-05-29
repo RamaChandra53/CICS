@@ -26,7 +26,7 @@ const PostCard = memo(function PostCard({
   const room = ROOMS.find(r => r.id === post.room);
 
   // Use centralized identity display utility — never shows roll numbers
-  const displayInfo = getPostIdentityDisplay(post.profiles, post.display_mode);
+  const displayInfo = getPostIdentityDisplay(post.profiles, post.display_mode, post.is_anon_post);
 
   // Bookmark local-only state
   // TODO: Wire to bookmark/save backend when persistence is implemented

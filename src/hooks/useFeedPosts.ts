@@ -87,7 +87,7 @@ export function useFeedPosts(userId: string | null | undefined): UseFeedPostsRet
         const { data, error: fetchError } = await supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, full_name, is_verified, is_email_verified, year, branch, pseudo_username, real_display_name)'
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, full_name, is_verified, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
           )
           .in('room', rooms)
           .order('created_at', { ascending: false })
@@ -102,13 +102,14 @@ export function useFeedPosts(userId: string | null | undefined): UseFeedPostsRet
           return;
         }
 
-        const postsData = (data as Post[]) ?? [];
+        const postsData =
+          (data as Array<Post & { comment_count?: Array<{ count: number }> }>) ?? [];
 
         // Render posts IMMEDIATELY — don't wait for votes
         const normalized = postsData.map((post) => ({
           ...post,
           profiles: post.profiles ?? null,
-          comment_count: 0,
+          comment_count: post.comment_count?.[0]?.count ?? 0,
           user_vote: null as 'up' | 'down' | null,
         }));
 

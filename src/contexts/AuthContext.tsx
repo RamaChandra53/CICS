@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
@@ -11,10 +11,15 @@ const PROFILE_SELECT =
 
 interface AuthContextType {
   user: { id: string } | null;
+  session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  profileLoading: boolean;
+  error: string | null;
+  errorScope: 'session' | 'profile' | null;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  reloadAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,62 +66,187 @@ async function backfillPseudoUsername(
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<{ id: string } | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorScope, setErrorScope] = useState<'session' | 'profile' | null>(null);
+  const isInitializingRef = useRef(true);
+  const authRequestInFlightRef = useRef<Promise<void> | null>(null);
+
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number, message: string): Promise<T> => {
+    let timeoutId: number | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error(message)), ms);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+  };
+
+  const isAuthLockError = (value: unknown) => {
+    if (!value) return false;
+    const message = value instanceof Error ? value.message : String((value as { message?: unknown }).message ?? value);
+    return message.includes('lock:') || message.includes('NavigatorLockAcquireTimeoutError');
+  };
+
+  const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select(PROFILE_SELECT)
-      .eq('id', userId)
-      .single();
+    setProfileLoading(true);
+    setError(null);
+    setErrorScope(null);
+    try {
+      let profileResult:
+        | { data: Profile | null; error: { message?: string } | null }
+        | null = null;
 
-    if (!profileData) return null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          profileResult = await withTimeout<{
+            data: Profile | null;
+            error: { message?: string } | null;
+          }>(
+            supabase
+              .from('profiles')
+              .select(PROFILE_SELECT)
+              .eq('id', userId)
+              .single() as Promise<{ data: Profile | null; error: { message?: string } | null }>,
+            15000,
+            'Profile request timed out'
+          );
+          break;
+        } catch (fetchError) {
+          if (!isAuthLockError(fetchError) && attempt === 2) {
+            throw fetchError;
+          }
+          if (attempt < 2) {
+            await delay(400 * (attempt + 1));
+          }
+        }
+      }
 
-    // Backfill pseudo_username if missing
-    const finalProfile = await backfillPseudoUsername(supabase, profileData as Profile);
-    return finalProfile;
+      if (!profileResult) {
+        throw new Error('Profile request failed');
+      }
+
+      const { data: profileData, error: profileError } = profileResult;
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      if (!profileData) return null;
+
+      // Backfill pseudo_username if missing
+      const finalProfile = await backfillPseudoUsername(supabase, profileData as Profile);
+      return finalProfile;
+    } catch (fetchError) {
+      console.error('Profile fetch error:', fetchError);
+      setError('Unable to load your profile. Please try again.');
+      setErrorScope('profile');
+      return null;
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const loadAuthState = async () => {
+    if (authRequestInFlightRef.current) {
+      await authRequestInFlightRef.current;
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setErrorScope(null);
+    const requestPromise = (async () => {
+      try {
+        let sessionResult:
+          | { data: { session: Session | null }; error: { message?: string } | null }
+          | null = null;
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            sessionResult = await withTimeout<{
+              data: { session: Session | null };
+              error: { message?: string } | null;
+            }>(
+              supabase.auth.getSession() as Promise<{
+                data: { session: Session | null };
+                error: { message?: string } | null;
+              }>,
+              15000,
+              'Session request timed out'
+            );
+            break;
+          } catch (sessionError) {
+            if (!isAuthLockError(sessionError) && attempt === 2) {
+              throw sessionError;
+            }
+            if (attempt < 2) {
+              await delay(400 * (attempt + 1));
+            }
+          }
+        }
+
+        if (!sessionResult) {
+          throw new Error('Session request failed');
+        }
+
+        const { data: { session }, error } = sessionResult;
+
+        if (error && error.message?.includes('Refresh Token Not Found')) {
+          console.warn('Session expired, clearing auth state');
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          return;
+        }
+
+        setSession(session ?? null);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser ? { id: currentUser.id } : null);
+
+        if (currentUser) {
+          const profileData = await fetchProfile(currentUser.id);
+          setProfile(profileData);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        if (error instanceof Error && error.message.includes('Refresh Token')) {
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+        }
+        setError('Unable to verify your session. Please try again.');
+        setErrorScope('session');
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    authRequestInFlightRef.current = requestPromise;
+    await requestPromise;
+    authRequestInFlightRef.current = null;
   };
 
   useEffect(() => {
     let mounted = true;
     
     const initializeAuth = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        
-        if (!mounted) return;
-        
-        // Handle refresh token errors gracefully
-        if (error && error.message?.includes('Refresh Token Not Found')) {
-          console.warn('Session expired, clearing auth state');
-          await supabase.auth.signOut();
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
-          return;
-        }
-        
-        if (user) {
-          setUser(user);
-          const profileData = await fetchProfile(user.id);
-          if (mounted && profileData) {
-            setProfile(profileData);
-          }
-        }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
-        // Clear auth state on any auth error
-        if (error instanceof Error && error.message.includes('Refresh Token')) {
-          await supabase.auth.signOut();
-          setUser(null);
-          setProfile(null);
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
+      await loadAuthState();
+      isInitializingRef.current = false;
     };
 
     initializeAuth();
@@ -124,10 +254,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event: AuthChangeEvent, session: Session | null) => {
         if (!mounted) return;
-        
-        const currentUser = session?.user || null;
-        setUser(currentUser);
-        
+        if (isInitializingRef.current) return;
+        if (authRequestInFlightRef.current) return;
+
+        setLoading(true);
+        setError(null);
+        setErrorScope(null);
+        setSession(session ?? null);
+
+        const currentUser = session?.user ?? null;
+        setUser(currentUser ? { id: currentUser.id } : null);
+
         if (currentUser) {
           const profileData = await fetchProfile(currentUser.id);
           if (mounted) {
@@ -136,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
         }
-        
+
         setLoading(false);
       }
     );
@@ -156,6 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setProfile(null);
+    setSession(null);
   };
 
   const refreshProfile = async () => {
@@ -166,8 +304,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const reloadAuth = async () => {
+    await loadAuthState();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        loading,
+        profileLoading,
+        error,
+        errorScope,
+        signOut,
+        refreshProfile,
+        reloadAuth,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
