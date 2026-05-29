@@ -14,9 +14,20 @@ export type Profile = {
   college_email: string | null;
   is_email_verified: boolean;
   created_at: string;
+  // Identity system v4
+  real_display_name: string | null;
+  pseudo_username: string | null;
+  pending_pseudo_username: string | null;
+  pseudo_username_status: 'approved' | 'pending' | 'rejected';
+  pseudo_username_requested_at: string | null;
+  pseudo_username_rejection_reason: string | null;
+  pseudo_username_last_changed_at: string | null;
+  show_roll_number_publicly: boolean;
 };
 
 export type PostType = 'text' | 'image' | 'video' | 'poll' | 'link';
+
+export type DisplayMode = 'full' | 'partial' | 'anonymous' | 'pseudo';
 
 export type Post = {
   id: string;
@@ -36,7 +47,7 @@ export type Post = {
   poll_options: string[] | null;
   poll_expires_at: string | null;
   is_anon_post: boolean;
-  display_mode: 'full' | 'partial' | 'anonymous';
+  display_mode: DisplayMode;
   year_tag: string | null;
   branch_tag: string | null;
   section_tag: string | null;
@@ -56,7 +67,7 @@ export type Comment = {
   parent_comment_id: string | null;
   content: string;
   is_anon_comment: boolean;
-  display_mode: 'full' | 'partial' | 'anonymous';
+  display_mode: DisplayMode;
   created_at: string;
   profiles?: Profile | null;
   replies?: Comment[];

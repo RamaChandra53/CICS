@@ -6,13 +6,14 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post } from '@/types';
 import PostCard from '@/components/PostCard';
-import EmailVerificationModal from '@/components/EmailVerificationModal';
+import TrustUnlockModal from '@/components/TrustUnlockModal';
 import { useRouter } from 'next/navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/contexts/AuthContext';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
+import { validatePseudoUsername } from '@/lib/usernameGenerator';
 
 const PAGE_SIZE = 10;
 
@@ -21,14 +22,21 @@ type VoteType = 'up' | 'down';
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
-  const { user, profile: authProfile, loading: authLoading, signOut } = useAuth();
+  const { user, profile: authProfile, loading: authLoading, signOut, refreshProfile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showTrustModal, setShowTrustModal] = useState(false);
   const [postsError, setPostsError] = useState('');
   const [postsLoading, setPostsLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+
+  // Username edit state
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [usernameSubmitting, setUsernameSubmitting] = useState(false);
+  const [usernameSuccess, setUsernameSuccess] = useState('');
 
   const fetchUserPosts = useCallback(
     async (userId: string, pageToLoad = 0, options?: { reset?: boolean }) => {
@@ -40,7 +48,7 @@ export default function ProfilePage() {
         const { data, error } = await supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch), comment_count:comments(count)'
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
           )
           .eq('author_id', userId)
           .order('created_at', { ascending: false })
@@ -109,9 +117,9 @@ export default function ProfilePage() {
       }
 
       try {
-        // Add timeout to prevent infinite loading
+        // Add timeout to prevent infinite loading, increased to 30s for cold starts
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Profile initialization timeout')), 10000)
+          setTimeout(() => reject(new Error('Profile initialization timeout')), 30000)
         );
 
         const initPromise = async () => {
@@ -125,7 +133,11 @@ export default function ProfilePage() {
         console.error('Profile initialization error:', error);
         if (error instanceof Error && error.message === 'Profile initialization timeout') {
           console.error('Profile page initialization timed out');
+          setPostsError('Loading timed out. The server might be waking up or network is slow. Please refresh.');
+        } else {
+          setPostsError('An unexpected error occurred while loading your profile.');
         }
+        setPostsLoading(false);
       } finally {
         setLoading(false);
       }
@@ -142,8 +154,92 @@ export default function ProfilePage() {
   }, [postsLoading, hasMore, user, page, fetchUserPosts]);
 
   const handleVerificationSuccess = () => {
-    // Profile verification status is handled by AuthContext
-    // The authProfile will be updated automatically through the context
+    // Refresh the profile in AuthContext to get updated verification status
+    refreshProfile();
+  };
+
+  const handleEditNicknameClick = () => {
+    const isVerified = authProfile?.is_email_verified || authProfile?.is_verified;
+    if (!isVerified) {
+      setShowTrustModal(true);
+      return;
+    }
+    // Don't allow editing if a change is already pending
+    if (authProfile?.pseudo_username_status === 'pending') return;
+
+    // Enforce 30-day cooldown
+    if (authProfile?.pseudo_username_last_changed_at) {
+      const lastChanged = new Date(authProfile.pseudo_username_last_changed_at);
+      const cooldownEnd = new Date(lastChanged.getTime() + 30 * 24 * 60 * 60 * 1000);
+      if (new Date() < cooldownEnd) {
+        const nextDate = cooldownEnd.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        setUsernameError(`You can request a new nickname after ${nextDate} (30-day cooldown).`);
+        return;
+      }
+    }
+
+    setNewUsername('');
+    setUsernameError('');
+    setUsernameSuccess('');
+    setIsEditingUsername(true);
+  };
+
+  const handleUsernameSubmit = async () => {
+    if (!authProfile) return;
+
+    const trimmed = newUsername.trim();
+    const validationError = validatePseudoUsername(trimmed);
+    if (validationError) {
+      setUsernameError(validationError);
+      return;
+    }
+
+    // Don't allow submitting the same username
+    if (trimmed === authProfile.pseudo_username) {
+      setUsernameError('This is already your current nickname.');
+      return;
+    }
+
+    setUsernameSubmitting(true);
+    setUsernameError('');
+
+    try {
+      // Check uniqueness
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('pseudo_username', trimmed)
+        .neq('id', authProfile.id)
+        .maybeSingle();
+
+      if (existing) {
+        setUsernameError('This nickname is already taken. Try another.');
+        return;
+      }
+
+      // Submit as pending change request
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          pending_pseudo_username: trimmed,
+          pseudo_username_status: 'pending',
+          pseudo_username_requested_at: new Date().toISOString(),
+          pseudo_username_rejection_reason: null,
+        })
+        .eq('id', authProfile.id);
+
+      if (updateError) throw updateError;
+
+      setIsEditingUsername(false);
+      setUsernameSuccess('Nickname change request submitted for review!');
+      setTimeout(() => setUsernameSuccess(''), 5000);
+      refreshProfile();
+    } catch (err) {
+      console.error('Username change error:', err);
+      setUsernameError('Failed to submit change request. Please try again.');
+    } finally {
+      setUsernameSubmitting(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -178,58 +274,131 @@ export default function ProfilePage() {
     <ErrorBoundary>
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Profile card */}
-        <div className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-6 mb-6">
+        {/* Profile card — pseudo username focused */}
+        <div className="bg-[#15181c] border border-[#252a31] rounded-2xl p-6 mb-6">
           <div className="flex items-start gap-4">
             {/* Avatar */}
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl shrink-0 ${
-              authProfile.is_anonymous ? 'bg-gray-700' : 'bg-indigo-600/30'
-            }`}>
-              {authProfile.is_anonymous ? '👻' : (authProfile.username?.[0]?.toUpperCase() ?? '?')}
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl shrink-0 bg-emerald-600/30">
+              {authProfile.pseudo_username?.[0]?.toUpperCase() || '?'}
             </div>
 
             {/* Info */}
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-white font-bold text-xl">{authProfile.username}</h1>
-                {authProfile.is_verified && (
-                  <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                <h1 className="text-white font-bold text-xl">{authProfile.pseudo_username || 'CampusUser'}</h1>
+                {(authProfile.is_email_verified || authProfile.is_verified) && (
+                  <span className="bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full font-semibold">
                     ✓ verified
                   </span>
                 )}
-                {authProfile.is_anonymous && (
-                  <span className="bg-gray-700 text-gray-400 text-xs px-2 py-0.5 rounded-full">
-                    Anonymous
-                  </span>
-                )}
-                {authProfile.is_email_verified && (
-                  <span className="bg-green-600 text-white text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                    ✉️ Email Verified
-                  </span>
+                {authProfile.pseudo_username_status !== 'pending' && (
+                  <button
+                    onClick={handleEditNicknameClick}
+                    className="text-slate-500 hover:text-indigo-400 transition-colors ml-1"
+                    aria-label="Edit nickname"
+                    title={authProfile.is_email_verified || authProfile.is_verified ? 'Edit nickname' : 'Verify to edit nickname'}
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
                 )}
               </div>
 
-              {authProfile.full_name && (
-                <p className="text-gray-400 text-sm mb-1">{authProfile.full_name}</p>
+              <p className="text-slate-400 text-xs mb-3">Campus nickname — people recognize you without knowing who you are</p>
+
+              {/* Username edit form */}
+              {isEditingUsername && (
+                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3">
+                  <label className="text-xs text-slate-400 mb-1.5 block">New nickname</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={(e) => {
+                        setNewUsername(e.target.value);
+                        if (usernameError) setUsernameError('');
+                      }}
+                      placeholder="e.g. CosmicFox"
+                      maxLength={18}
+                      autoFocus
+                      className="flex-1 h-9 rounded-lg border border-[#252a31] bg-[#0b0f12] px-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/60"
+                    />
+                    <button
+                      onClick={handleUsernameSubmit}
+                      disabled={usernameSubmitting || !newUsername.trim()}
+                      className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 shrink-0"
+                    >
+                      {usernameSubmitting ? 'Saving…' : 'Request'}
+                    </button>
+                    <button
+                      onClick={() => setIsEditingUsername(false)}
+                      className="h-9 rounded-lg border border-[#252a31] px-3 text-xs text-slate-400 hover:text-white transition-colors shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {usernameError && (
+                    <p className="mt-1.5 text-xs text-red-400">{usernameError}</p>
+                  )}
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    3–18 chars, letters & numbers only. Changes require admin approval.
+                  </p>
+                </div>
               )}
 
-              {/* Email Verification Status */}
+              {/* Username error outside edit form (e.g. cooldown message) */}
+              {!isEditingUsername && usernameError && (
+                <div className="mb-3 rounded-lg border border-yellow-800/40 bg-yellow-900/20 p-2">
+                  <p className="text-yellow-400 text-xs">{usernameError}</p>
+                </div>
+              )}
+
+              {/* Username change success message */}
+              {usernameSuccess && (
+                <div className="mb-3 rounded-lg border border-emerald-800/40 bg-emerald-900/20 p-2">
+                  <p className="text-emerald-400 text-xs">✓ {usernameSuccess}</p>
+                </div>
+              )}
+
+              {authProfile.real_display_name && (
+                <p className="text-slate-300 text-sm mb-1">{authProfile.real_display_name}</p>
+              )}
+
+              {/* Pseudo username status */}
+              {authProfile.pseudo_username_status === 'pending' && (
+                <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-2 mb-3">
+                  <p className="text-yellow-400 text-xs">
+                    ⏳ Username change to "{authProfile.pending_pseudo_username}" is pending review
+                  </p>
+                </div>
+              )}
+              {authProfile.pseudo_username_status === 'rejected' && authProfile.pseudo_username_rejection_reason && (
+                <div className="bg-red-900/20 border border-red-800/40 rounded-lg p-2 mb-3">
+                  <p className="text-red-400 text-xs">
+                    Username change rejected: {authProfile.pseudo_username_rejection_reason}
+                  </p>
+                </div>
+              )}
+
+              {/* Trust status */}
               <div className="mt-2 mb-3">
                 {authProfile.is_email_verified ? (
-                  <div className="bg-green-900/20 border border-green-800/40 rounded-lg p-2">
-                    <p className="text-green-400 text-xs flex items-center gap-1">
-                      ✅ Your MGIT email is verified - you can post anonymously!
+                  <div className="bg-emerald-900/20 border border-emerald-800/40 rounded-lg p-2">
+                    <p className="text-emerald-400 text-xs flex items-center gap-1">
+                      ✅ Student verified — anonymous posting, partial identity, and nickname editing unlocked
                     </p>
                   </div>
                 ) : (
-                  <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-2">
-                    <p className="text-yellow-400 text-xs mb-2">
-                      ⚠️ Verify your MGIT email to unlock anonymous posting
+                  <div className="bg-[#1f2329] border border-[#252a31] rounded-lg p-2">
+                    <p className="text-slate-400 text-xs mb-2">
+                      🔒 Verify your MGIT email to unlock anonymous posting, partial identity, and custom nickname
                     </p>
                     <button
-                      onClick={() => setShowVerificationModal(true)}
+                      onClick={() => setShowTrustModal(true)}
                       className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
                     >
-                      Verify Email Now
+                      Verify Student Account
                     </button>
                   </div>
                 )}
@@ -238,7 +407,7 @@ export default function ProfilePage() {
               {!authProfile.is_anonymous && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   {authProfile.year ? (
-                    <span className="bg-gray-800 text-gray-400 text-xs px-2.5 py-1 rounded-full">
+                    <span className="bg-[#1f2329] text-slate-400 text-xs px-2.5 py-1 rounded-full">
                       📅 {authProfile.year} Year
                     </span>
                   ) : (
@@ -247,18 +416,13 @@ export default function ProfilePage() {
                     </span>
                   )}
                   {authProfile.branch && (
-                    <span className="bg-gray-800 text-gray-400 text-xs px-2.5 py-1 rounded-full">
+                    <span className="bg-[#1f2329] text-slate-400 text-xs px-2.5 py-1 rounded-full">
                       💻 {authProfile.branch}
                     </span>
                   )}
                   {authProfile.section && authProfile.year && (
-                    <span className="bg-gray-800 text-gray-400 text-xs px-2.5 py-1 rounded-full">
+                    <span className="bg-[#1f2329] text-slate-400 text-xs px-2.5 py-1 rounded-full">
                       👥 Section {authProfile.section}
-                    </span>
-                  )}
-                  {authProfile.roll_number && (
-                    <span className="bg-gray-800 text-gray-400 text-xs px-2.5 py-1 rounded-full">
-                      🪪 {authProfile.roll_number}
                     </span>
                   )}
                 </div>
@@ -266,8 +430,27 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-gray-800/40 flex items-center justify-between">
-            <span className="text-gray-500 text-sm">
+          {/* Account Details — roll number only here */}
+          {authProfile.roll_number && (
+            <details className="mt-4 pt-4 border-t border-[#252a31]">
+              <summary className="text-slate-500 text-xs cursor-pointer hover:text-slate-300 transition-colors">
+                Account Details
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="bg-[#1f2329] text-slate-500 text-xs px-2.5 py-1 rounded-full">
+                  🪪 {authProfile.roll_number}
+                </span>
+                {authProfile.email && (
+                  <span className="bg-[#1f2329] text-slate-500 text-xs px-2.5 py-1 rounded-full">
+                    📧 {authProfile.email}
+                  </span>
+                )}
+              </div>
+            </details>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-[#252a31] flex items-center justify-between">
+            <span className="text-slate-500 text-sm">
               {posts.length} post{posts.length !== 1 ? 's' : ''}
             </span>
             <button
@@ -280,7 +463,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Posts */}
-        <h2 className="text-gray-400 text-sm font-medium mb-3">Your Posts</h2>
+        <h2 className="text-slate-400 text-sm font-medium mb-3">Your Posts</h2>
         {postsError ? (
           <ErrorMessage
             message={postsError}
@@ -307,14 +490,14 @@ export default function ProfilePage() {
             ))}
 
             {postsLoading && posts.length > 0 && (
-              <div className="py-4 text-center text-xs text-gray-400">Loading more posts...</div>
+              <div className="py-4 text-center text-xs text-slate-400">Loading more posts...</div>
             )}
 
             {hasMore && !postsLoading && (
               <div className="flex justify-center py-4">
                 <button
                   onClick={loadMore}
-                  className="rounded-lg border border-gray-700 px-4 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
+                  className="rounded-lg border border-[#252a31] px-4 py-2 text-xs text-slate-300 transition-colors hover:border-indigo-400/60 hover:text-white"
                 >
                   Load more posts
                 </button>
@@ -323,11 +506,11 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Email Verification Modal */}
-        <EmailVerificationModal
-          isOpen={showVerificationModal}
-          onClose={() => setShowVerificationModal(false)}
-          onSuccess={handleVerificationSuccess}
+        {/* Trust Unlock Modal */}
+        <TrustUnlockModal
+          isOpen={showTrustModal}
+          onClose={() => setShowTrustModal(false)}
+          onVerified={handleVerificationSuccess}
           userRollNumber={authProfile.roll_number || ''}
         />
       </div>

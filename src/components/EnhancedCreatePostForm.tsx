@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Profile, Community, ROOMS } from '@/types';
-import CollegeEmailVerificationModal from './CollegeEmailVerificationModal';
+import { Profile, Community, ROOMS, DisplayMode } from '@/types';
+import TrustUnlockModal from './TrustUnlockModal';
 
 import PostTypeSelector, { PostType as PostTypeEnum } from './PostTypeSelector';
 import TextPostForm from './TextPostForm';
@@ -14,13 +14,16 @@ import PollPostForm from './PollPostForm';
 
 
 import CommunitySelector from './CommunitySelector';
+import {
+  type IdentityMode,
+  getIdentityModeAccess,
+  getIdentityModeLabel,
+  getIdentityModeHelper,
+  getEffectiveDefaultMode,
+} from '@/lib/identityDisplay';
 
-const ANONYMOUS_ALLOWED_WITHOUT_EMAIL = ['confessions', 'rants', 'random'];
-const ANONYMOUS_REQUIRES_EMAIL = ['placements'];
-
-function requiresEmailForAnonymous(community: string) {
-  return ANONYMOUS_REQUIRES_EMAIL.includes(community);
-}
+/** Identity mode order in the selector UI */
+const IDENTITY_MODES: IdentityMode[] = ['pseudo', 'anonymous', 'partial', 'full'];
 
 interface EnhancedCreatePostFormProps {
   profile: Profile;
@@ -58,8 +61,10 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [displayMode, setDisplayMode] = useState<'full' | 'partial' | 'anonymous'>('full');
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(() =>
+    getEffectiveDefaultMode(defaultCommunity, profile)
+  );
+  const [showTrustModal, setShowTrustModal] = useState(false);
   const [localCommunities, setLocalCommunities] = useState<Community[]>([]);
 
   React.useEffect(() => {
@@ -114,48 +119,21 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
     setFormData((prev) => ({ ...prev, ...updates }));
   };
 
-  const handleDisplayModeChange = (mode: 'full' | 'partial' | 'anonymous') => {
-    // Full and partial modes are always allowed
-    if (mode !== 'anonymous') {
-      setDisplayMode(mode);
-      updateFormData({ isAnonymous: false });
+  const handleDisplayModeChange = (mode: IdentityMode) => {
+    const access = getIdentityModeAccess(profile);
+
+    // If mode requires verification and user isn't verified, show trust modal
+    if (access[mode].requiresVerification && !access[mode].available) {
+      setShowTrustModal(true);
       return;
     }
 
-    // Anonymous: check if community requires verification
-    if (!profile.is_email_verified && requiresEmailForAnonymous(formData.community)) {
-      setShowVerificationModal(true);
-      return; // Don't change mode
-    }
-
-    setDisplayMode('anonymous');
-    updateFormData({ isAnonymous: true });
+    setDisplayMode(mode);
+    updateFormData({ isAnonymous: mode === 'anonymous' });
   };
 
   const handleVerificationSuccess = () => {
     window.location.reload();
-  };
-
-  const getDisplayModeLabel = (mode: 'full' | 'partial' | 'anonymous') => {
-    switch (mode) {
-      case 'full':
-        return profile.roll_number
-          ? `${profile.roll_number} · ${profile.branch || 'Unknown'} · ${profile.year || 'Unknown'}`
-          : profile.username || 'Unknown';
-
-      case 'partial': {
-        const isVerified = profile.is_email_verified || profile.is_verified;
-        return profile.branch && profile.year
-          ? `${profile.branch}_${profile.year}${isVerified ? ' ✓' : ''}`
-          : isVerified ? 'Verified ✓' : (profile.branch || profile.year || 'Partial');
-      }
-
-      case 'anonymous':
-        return '👻 Anonymous';
-
-      default:
-        return profile.username || 'Unknown';
-    }
   };
 
   const validateForm = (): string | null => {
@@ -204,7 +182,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
       pollExpiresAt: null,
     });
 
-    setDisplayMode('full');
+    setDisplayMode(getEffectiveDefaultMode(defaultCommunity, profile));
   };
 
   const handleSubmit = async (
@@ -481,39 +459,37 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
 
         {renderPostTypeForm()}
 
-        {formData.community !== 'confessions' && (
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-300 mb-3">Post identity</label>
-            <div className="flex flex-wrap items-center gap-2">
-              {(['full', 'partial', 'anonymous'] as const).map((mode) => {
-                const isAnonBlocked =
-                  mode === 'anonymous' &&
-                  !profile.is_email_verified &&
-                  requiresEmailForAnonymous(formData.community);
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => handleDisplayModeChange(mode)}
-                    disabled={isAnonBlocked}
-                    className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                      displayMode === mode
-                        ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
-                        : isAnonBlocked
-                        ? 'border-[#252a31] text-slate-600 opacity-50'
-                        : 'border-[#252a31] text-slate-300 hover:text-slate-100'
-                    }`}
-                  >
-                    <span>{getDisplayModeLabel(mode)}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Choose how your identity appears. Verification is only needed for anonymous posts in higher-trust spaces.
-            </p>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-300 mb-3">Post identity</label>
+          <div className="flex flex-wrap items-center gap-2">
+            {IDENTITY_MODES.map((mode) => {
+              const access = getIdentityModeAccess(profile);
+              const isLocked = access[mode].requiresVerification && !access[mode].available;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handleDisplayModeChange(mode)}
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                    displayMode === mode
+                      ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
+                      : isLocked
+                      ? 'border-[#252a31] text-slate-500'
+                      : 'border-[#252a31] text-slate-300 hover:text-slate-100'
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    {isLocked && <span className="text-[10px]">🔒</span>}
+                    {getIdentityModeLabel(mode, profile)}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        )}
+          <p className="text-xs text-slate-500 mt-2">
+            {getIdentityModeHelper(displayMode)}
+          </p>
+        </div>
 
         {error && (
           <div className="mb-6 p-4 bg-red-900/20 border border-red-800/40 rounded-xl backdrop-blur-sm">
@@ -598,10 +574,10 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         {formContent}
       </div>
 
-      <CollegeEmailVerificationModal
-        isOpen={showVerificationModal}
-        onClose={() => setShowVerificationModal(false)}
-        onSuccess={handleVerificationSuccess}
+      <TrustUnlockModal
+        isOpen={showTrustModal}
+        onClose={() => setShowTrustModal(false)}
+        onVerified={handleVerificationSuccess}
         userRollNumber={profile.roll_number || ''}
       />
     </>

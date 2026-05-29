@@ -4,24 +4,79 @@ import { createContext, useContext, useEffect, useMemo, useState, ReactNode } fr
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
+import { ensureUniquePseudoUsername } from '@/lib/usernameGenerator';
 
 const PROFILE_SELECT =
-  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, college_email, is_email_verified';
+  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, college_email, is_email_verified, real_display_name, pseudo_username, pending_pseudo_username, pseudo_username_status, pseudo_username_requested_at, pseudo_username_rejection_reason, pseudo_username_last_changed_at, show_roll_number_publicly';
 
 interface AuthContextType {
   user: { id: string } | null;
   profile: Profile | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/**
+ * If the profile has no pseudo_username, generate one and persist it.
+ * This handles existing users who were created before the identity v4 migration.
+ */
+async function backfillPseudoUsername(
+  supabase: ReturnType<typeof createClient>,
+  profile: Profile
+): Promise<Profile> {
+  if (profile.pseudo_username) {
+    return profile;
+  }
+
+  try {
+    const pseudoUsername = await ensureUniquePseudoUsername(supabase);
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        pseudo_username: pseudoUsername,
+        pseudo_username_status: 'approved',
+      })
+      .eq('id', profile.id);
+
+    if (error) {
+      console.error('Failed to backfill pseudo_username:', error);
+      return profile;
+    }
+
+    return {
+      ...profile,
+      pseudo_username: pseudoUsername,
+      pseudo_username_status: 'approved' as const,
+    };
+  } catch (err) {
+    console.error('Error during pseudo_username backfill:', err);
+    return profile;
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<{ id: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select(PROFILE_SELECT)
+      .eq('id', userId)
+      .single();
+
+    if (!profileData) return null;
+
+    // Backfill pseudo_username if missing
+    const finalProfile = await backfillPseudoUsername(supabase, profileData as Profile);
+    return finalProfile;
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -44,15 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (user) {
           setUser(user);
-          
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select(PROFILE_SELECT)
-            .eq('id', user.id)
-            .single();
-            
+          const profileData = await fetchProfile(user.id);
           if (mounted && profileData) {
-            setProfile(profileData as Profile);
+            setProfile(profileData);
           }
         }
       } catch (error) {
@@ -80,14 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select(PROFILE_SELECT)
-            .eq('id', currentUser.id)
-            .single();
-            
+          const profileData = await fetchProfile(currentUser.id);
           if (mounted) {
-            setProfile(profileData as Profile);
+            setProfile(profileData);
           }
         } else {
           setProfile(null);
@@ -101,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
   const signOut = async () => {
@@ -113,8 +158,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
+  const refreshProfile = async () => {
+    if (!user) return;
+    const profileData = await fetchProfile(user.id);
+    if (profileData) {
+      setProfile(profileData);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

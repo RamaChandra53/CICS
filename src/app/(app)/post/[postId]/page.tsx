@@ -4,14 +4,21 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Comment, Profile, ROOMS } from '@/types';
+import { Post, Comment, Profile, ROOMS, DisplayMode } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import HorizontalVoteButtons from '@/components/HorizontalVoteButtons';
 import CommentHorizontalVotes from '@/components/CommentHorizontalVotes';
-import EmailVerificationModal from '@/components/EmailVerificationModal';
+import TrustUnlockModal from '@/components/TrustUnlockModal';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  getPostIdentityDisplay,
+  type IdentityMode,
+  getIdentityModeAccess,
+  getIdentityModeLabel,
+  getIdentityModeHelper,
+} from '@/lib/identityDisplay';
 
 const COMMENTS_PAGE_SIZE = 50;
 
@@ -19,48 +26,28 @@ function CommentItem({
   comment,
   onReply,
   depth = 0,
+  profile,
 }: {
   comment: Comment;
-  onReply: (commentId: string, content: string, isAnon: boolean) => Promise<void>;
+  onReply: (commentId: string, content: string, displayMode: IdentityMode) => Promise<void>;
   depth?: number;
+  profile: Profile | null;
 }) {
   const author = comment.profiles;
   const displayMode = comment.display_mode || (comment.is_anon_comment ? 'anonymous' : 'full');
 
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyContent, setReplyContent] = useState('');
-  const [replyAnon, setReplyAnon] = useState(false);
+  const [replyMode, setReplyMode] = useState<IdentityMode>('pseudo');
   const [submitting, setSubmitting] = useState(false);
 
-  const displayInfo =
-    displayMode === 'anonymous'
-      ? {
-          displayName: '👻 Anonymous',
-          avatar: '👻',
-          avatarBg: 'bg-gray-700 text-gray-400',
-          showVerified: false,
-        }
-      : displayMode === 'partial'
-      ? {
-          displayName: `${author?.branch || ''}_${author?.year || ''}`,
-          avatar: author?.branch?.[0] || '?',
-          avatarBg: 'bg-purple-600/30 text-purple-400',
-          showVerified: true,
-        }
-      : {
-          displayName: author?.roll_number
-            ? `${author.roll_number} · ${author?.branch || 'Unknown'} · ${author?.year || 'Unknown'}`
-            : author?.username ?? 'Anonymous',
-          avatar: author?.username?.[0]?.toUpperCase() ?? '?',
-          avatarBg: 'bg-indigo-600/30 text-indigo-400',
-          showVerified: author?.is_verified || false,
-        };
+  const displayInfo = getPostIdentityDisplay(author, comment.display_mode as IdentityMode);
 
   const handleReply = async () => {
     if (!replyContent.trim()) return;
 
     setSubmitting(true);
-    await onReply(comment.id, replyContent.trim(), replyAnon);
+    await onReply(comment.id, replyContent.trim(), replyMode);
     setReplyContent('');
     setReplyOpen(false);
     setSubmitting(false);
@@ -112,25 +99,31 @@ function CommentItem({
               />
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReplyAnon(false)}
-                  className={`rounded-lg px-3 py-2 text-xs ${
-                    !replyAnon ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'
-                  }`}
-                >
-                  You
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setReplyAnon(true)}
-                  className={`rounded-lg px-3 py-2 text-xs ${
-                    replyAnon ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'
-                  }`}
-                >
-                  👻 Anonymous
-                </button>
+                <span className="text-xs text-slate-500 mr-1">Reply as:</span>
+                {(['pseudo', 'anonymous', 'partial', 'full'] as IdentityMode[]).map((mode) => {
+                  const access = getIdentityModeAccess(profile);
+                  const isLocked = access[mode].requiresVerification && !access[mode].available;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => !isLocked && setReplyMode(mode)}
+                      className={`rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                        replyMode === mode
+                          ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
+                          : isLocked
+                          ? 'text-slate-600 cursor-not-allowed opacity-50'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title={isLocked ? 'Requires Student Verification' : ''}
+                    >
+                      <span className="flex items-center gap-1">
+                        {isLocked && <span className="text-[10px]">🔒</span>}
+                        {getIdentityModeLabel(mode, profile)}
+                      </span>
+                    </button>
+                  );
+                })}
 
                 <button
                   onClick={handleReply}
@@ -151,6 +144,7 @@ function CommentItem({
                   comment={reply}
                   onReply={onReply}
                   depth={depth + 1}
+                  profile={profile}
                 />
               ))}
             </div>
@@ -176,11 +170,13 @@ export default function PostPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
-  const [commentDisplayMode, setCommentDisplayMode] = useState<'full' | 'partial' | 'anonymous'>('full');
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [commentDisplayMode, setCommentDisplayMode] = useState<DisplayMode>('pseudo');
+  const [showTrustModal, setShowTrustModal] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [isCommentFocused, setIsCommentFocused] = useState(false);
 
   const buildCommentTree = useCallback((items: Comment[]) => {
     interface CommentNode extends Comment {
@@ -226,7 +222,7 @@ export default function PostPage() {
       const { data, error: commentsError } = await supabase
         .from('comments')
         .select(
-          'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, created_at, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
+          'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, created_at, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
         )
         .eq('post_id', postId)
         .order('created_at', { ascending: false })
@@ -252,23 +248,18 @@ export default function PostPage() {
     [supabase, postId, buildCommentTree]
   );
 
-  const handleCommentDisplayModeChange = (mode: 'full' | 'partial' | 'anonymous') => {
-    if (!profile?.is_email_verified && mode !== 'full') {
-      setShowVerificationModal(true);
+  const handleCommentDisplayModeChange = (mode: IdentityMode) => {
+    const access = getIdentityModeAccess(profile);
+    if (access[mode].requiresVerification && !access[mode].available) {
+      setShowTrustModal(true);
       return;
     }
-
     setCommentDisplayMode(mode);
   };
 
   const handleVerificationSuccess = () => {
     setProfile((prev) => (prev ? { ...prev, is_email_verified: true } : null));
-  };
-
-  const getCommentDisplayModeLabel = (mode: 'full' | 'partial' | 'anonymous') => {
-    if (mode === 'full') return profile?.username || 'Unknown';
-    if (mode === 'partial') return 'Verified ✓';
-    return '👻 Anonymous';
+    setShowTrustModal(false);
   };
 
   useEffect(() => {
@@ -289,7 +280,7 @@ export default function PostPage() {
         const { data: postData, error: postError } = await supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, year, branch)'
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
           )
           .eq('id', postId)
           .single();
@@ -347,14 +338,14 @@ export default function PostPage() {
   const handleAddComment = async (
     parentId?: string,
     content?: string,
-    isAnonArg?: boolean
+    replyDisplayMode?: IdentityMode
   ) => {
     if (!profile) return;
 
     const commentContent = content ?? newComment.trim();
     if (!commentContent) return;
 
-    const displayMode = isAnonArg ? 'anonymous' : commentDisplayMode;
+    const displayMode = replyDisplayMode || commentDisplayMode;
 
     setSubmitting(true);
     setError('');
@@ -373,7 +364,8 @@ export default function PostPage() {
 
       if (!parentId) {
         setNewComment('');
-        setCommentDisplayMode('full');
+        setCommentDisplayMode('pseudo');
+        setIsCommentFocused(false);
       }
 
       setCommentPage(0);
@@ -422,34 +414,14 @@ export default function PostPage() {
   const author = post.profiles;
   const postDisplayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
 
-  const postDisplayInfo =
-    postDisplayMode === 'anonymous'
-      ? {
-          displayName: '👻 Anonymous',
-          avatar: '👻',
-          avatarBg: 'bg-gray-700 text-gray-400',
-          showVerified: false,
-        }
-      : postDisplayMode === 'partial'
-      ? {
-          displayName: `${author?.branch || ''}_${author?.year || ''}`,
-          avatar: author?.branch?.[0] || '?',
-          avatarBg: 'bg-purple-600/30 text-purple-400',
-          showVerified: true,
-        }
-      : {
-          displayName: author?.roll_number 
-            ? `${author.roll_number} · ${author.branch || 'Unknown'} · ${author.year || 'Unknown'}`
-            : author?.username || 'Unknown',
-          avatar: author?.username?.[0]?.toUpperCase() ?? '?',
-          avatarBg: 'bg-indigo-600/30 text-indigo-400',
-          showVerified: author?.is_verified || false,
-        };
+  const postDisplayInfo = getPostIdentityDisplay(author, postDisplayMode);
 
   const room = ROOMS.find((r) => r.id === post.room);
   const postContent = post.content ?? '';
   const [postHeadline, ...postBodyLines] = postContent.split('\n');
   const postBody = postBodyLines.join('\n').trim();
+
+  const isExpanded = isCommentFocused || newComment.trim().length > 0;
 
   return (
     <div className="mx-auto w-full px-3 pb-24 pt-4 md:max-w-2xl md:px-6 md:pt-6">
@@ -513,13 +485,24 @@ export default function PostPage() {
       </h2>
 
       {profile && (
-        <div className="mb-5 rounded-2xl border border-[#252a31] bg-[#15181c] p-4">
+        <div 
+          className="mb-5 rounded-2xl border border-[#252a31] bg-[#15181c] p-4 transition-all duration-200"
+          onBlur={(e) => {
+            // Only collapse if clicking outside this component AND the input is empty
+            if (!e.currentTarget.contains(e.relatedTarget) && !newComment.trim()) {
+              setIsCommentFocused(false);
+            }
+          }}
+        >
           <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Write a comment..."
-            rows={2}
-            className="w-full min-h-[96px] resize-none rounded-xl border border-[#252a31] bg-[#0f1318] px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            onFocus={() => setIsCommentFocused(true)}
+            placeholder="Join the conversation..."
+            rows={isExpanded ? 3 : 1}
+            className={`w-full resize-none rounded-xl border border-[#252a31] bg-[#0f1318] px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none transition-all duration-200 ${
+              isExpanded ? 'min-h-[96px]' : 'min-h-[40px] overflow-hidden'
+            }`}
           />
 
           {error && (
@@ -528,37 +511,54 @@ export default function PostPage() {
             </p>
           )}
 
-          <div className="mt-3 flex flex-col gap-3 border-t border-[#252a31] pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-1 text-xs text-slate-400">Post as:</span>
+          {isExpanded && (
+            <div className="mt-3 flex flex-col gap-3 border-t border-[#252a31] pt-3 animate-in fade-in slide-in-from-top-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-xs text-slate-400">Post as:</span>
 
-              {(['full', 'partial', 'anonymous'] as const).map((mode) => (
+                {(['pseudo', 'anonymous', 'partial', 'full'] as IdentityMode[]).map((mode) => {
+                  const access = getIdentityModeAccess(profile);
+                  const isLocked = access[mode].requiresVerification && !access[mode].available;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => handleCommentDisplayModeChange(mode)}
+                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                        commentDisplayMode === mode
+                          ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
+                          : isLocked
+                          ? 'border-[#252a31] text-slate-500'
+                          : 'border-[#252a31] text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1">
+                        {isLocked && <span className="text-[10px]">🔒</span>}
+                        {getIdentityModeLabel(mode, profile)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex gap-2">
                 <button
-                  key={mode}
                   type="button"
-                  onClick={() => handleCommentDisplayModeChange(mode)}
-                  disabled={!profile?.is_email_verified && mode !== 'full'}
-                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all duration-200 ${
-                    commentDisplayMode === mode
-                      ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
-                      : profile?.is_email_verified || mode === 'full'
-                      ? 'border-[#252a31] text-slate-400 hover:text-slate-200'
-                      : 'cursor-not-allowed border-[#252a31] text-slate-600 opacity-50'
-                  }`}
+                  onClick={() => setIsCommentFocused(false)}
+                  className="h-11 flex-1 rounded-xl border border-[#252a31] text-sm font-medium text-slate-300 transition-colors hover:bg-[#1f2329] md:flex-none md:px-6"
                 >
-                  <span>{getCommentDisplayModeLabel(mode)}</span>
+                  Cancel
                 </button>
-              ))}
+                <button
+                  onClick={() => handleAddComment()}
+                  disabled={submitting || !newComment.trim()}
+                  className="h-11 flex-1 rounded-xl bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 md:flex-none md:px-6"
+                >
+                  {submitting ? 'Posting...' : 'Comment'}
+                </button>
+              </div>
             </div>
-
-            <button
-              onClick={() => handleAddComment()}
-              disabled={submitting || !newComment.trim()}
-              className="h-11 w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 md:w-auto md:px-6"
-            >
-              {submitting ? 'Posting...' : 'Comment'}
-            </button>
-          </div>
+          )}
         </div>
       )}
 
@@ -574,7 +574,7 @@ export default function PostPage() {
               key={comment.id}
               comment={comment}
               onReply={handleAddComment}
-              depth={0}
+              profile={profile}
             />
           ))
         )}
@@ -601,10 +601,10 @@ export default function PostPage() {
         )}
       </div>
 
-      <EmailVerificationModal
-        isOpen={showVerificationModal}
-        onClose={() => setShowVerificationModal(false)}
-        onSuccess={handleVerificationSuccess}
+      <TrustUnlockModal
+        isOpen={showTrustModal}
+        onClose={() => setShowTrustModal(false)}
+        onVerified={handleVerificationSuccess}
         userRollNumber={profile?.roll_number || ''}
       />
     </div>
