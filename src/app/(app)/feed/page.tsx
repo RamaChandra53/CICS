@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Community } from '@/types';
 import PostCard from '@/components/PostCard';
@@ -12,7 +12,7 @@ import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import SkeletonFeed from '@/components/ui/SkeletonFeed';
-import { useFeedPosts } from '@/hooks/useFeedPosts';
+import useFeedPosts from '@/hooks/useFeedPosts';
 
 const BASE_COMMUNITY_CHIPS = [
   { id: 'all', label: 'All' },
@@ -36,19 +36,20 @@ export default function FeedPage() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [authReady, setAuthReady] = useState(false);
 
+  const [selectedCommunity, setSelectedCommunity] = useState('all');
+
   const {
     posts,
     isInitialLoading,
     isRefreshing,
     isLoadingMore,
     error: postsError,
-    selectedCommunity,
-    setSelectedCommunity,
     refresh,
     retry,
     loadMore,
     hasMore,
-  } = useFeedPosts(user?.id);
+    updatePostOptimistically,
+  } = useFeedPosts(selectedCommunity);
 
   const communityChips = useMemo(() => {
     if (communities.length === 0) return BASE_COMMUNITY_CHIPS;
@@ -89,17 +90,21 @@ export default function FeedPage() {
     }
   }, [supabase]);
 
-  // Initialize: auth check + fetch communities + trigger initial feed load
+  // Initialize: auth check + fetch communities
   useEffect(() => {
     if (authLoading || profileLoading) return;
     if (!user) return;
 
     setAuthReady(true);
     fetchCommunities();
-    // Initial feed load is triggered by useFeedPosts when selectedCommunity is set
-    // We need to trigger the first load explicitly
-    refresh();
-  }, [authLoading, profileLoading, user, fetchCommunities, refresh]);
+    // Initial feed load is automatically handled by the useFeedPosts hook
+  }, [authLoading, profileLoading, user, fetchCommunities]);
+
+  // Use a ref to keep track of the latest refresh function without triggering re-subscriptions
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   // Real-time subscription for new posts
   useEffect(() => {
@@ -112,14 +117,14 @@ export default function FeedPage() {
         schema: 'public',
         table: 'posts',
       }, () => {
-        refresh();
+        refreshRef.current();
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, authReady, refresh]);
+  }, [supabase, authReady]);
 
   if (authLoading || (!authReady && !postsError)) {
     return (
@@ -142,11 +147,10 @@ export default function FeedPage() {
                   key={chip.id}
                   type="button"
                   onClick={() => setSelectedCommunity(chip.id)}
-                  className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-colors ${
-                    isActive
+                  className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-colors ${isActive
                       ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-200'
                       : 'border-[#252a31] bg-[#15181c] text-slate-400'
-                  }`}
+                    }`}
                 >
                   {chip.label}
                 </button>
@@ -166,13 +170,13 @@ export default function FeedPage() {
         {/* Create Post Box */}
         {authProfile && (
           <div id="create-post" className="mb-4">
-              <EnhancedCreatePostForm
-                profile={authProfile}
-                defaultCommunity="campus"
-                onPostCreated={() => {
-                  refresh();
-                }}
-              />
+            <EnhancedCreatePostForm
+              profile={authProfile}
+              defaultCommunity="campus"
+              onPostCreated={() => {
+                refresh();
+              }}
+            />
           </div>
         )}
 
@@ -201,15 +205,16 @@ export default function FeedPage() {
         ) : (
           <div className="space-y-3">
             {posts.map((post) => (
-                <div key={post.id}>
-                  <PostCard
-                    post={post}
-                    currentUserId={user?.id ?? null}
-                    initialUserVote={post.user_vote ?? null}
-                  />
-                </div>
+              <div key={post.id}>
+                <PostCard
+                  post={post}
+                  currentUserId={user?.id ?? null}
+                  initialUserVote={post.user_vote ?? null}
+                  onPostUpdate={updatePostOptimistically}
+                />
+              </div>
             ))}
-            
+
             {/* Loading more indicator */}
             {isLoadingMore && (
               <div className="flex justify-center py-4">

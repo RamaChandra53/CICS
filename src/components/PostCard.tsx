@@ -7,6 +7,7 @@ import { Post } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { ROOMS } from '@/types';
 import VoteButtons from './VoteButtons';
+import HorizontalVoteButtons from './HorizontalVoteButtons';
 import { getPostIdentityDisplay } from '@/lib/identityDisplay';
 
 interface PostCardProps {
@@ -14,6 +15,7 @@ interface PostCardProps {
   showRoom?: boolean;
   currentUserId?: string | null;
   initialUserVote?: 'up' | 'down' | null;
+  onPostUpdate?: (postId: string, updates: { upvotes?: number; downvotes?: number; user_vote?: 'up' | 'down' | null }) => void;
 }
 
 const PostCard = memo(function PostCard({
@@ -21,6 +23,7 @@ const PostCard = memo(function PostCard({
   showRoom = false,
   currentUserId,
   initialUserVote,
+  onPostUpdate,
 }: PostCardProps) {
   const router = useRouter();
   const room = ROOMS.find(r => r.id === post.room);
@@ -176,7 +179,7 @@ const PostCard = memo(function PostCard({
         </div>
 
         {/* Right: vertical vote controls */}
-        <div className="w-10 shrink-0 flex justify-center pt-1" onClick={stopProp}>
+        <div className="w-10 shrink-0 hidden sm:flex flex-col items-center pt-1" onClick={stopProp}>
           <VoteButtons
             postId={post.id}
             initialUpvotes={post.upvotes}
@@ -184,8 +187,24 @@ const PostCard = memo(function PostCard({
             currentUserId={currentUserId}
             initialUserVote={initialUserVote}
             skipSync={currentUserId !== undefined}
+            onPostUpdate={onPostUpdate}
           />
         </div>
+      </div>
+      
+      {/* Mobile Horizontal Vote Buttons (only visible when < sm) */}
+      <div className="mt-2 sm:hidden" onClick={stopProp}>
+        <HorizontalVoteButtons
+          postId={post.id}
+          initialUpvotes={post.upvotes}
+          initialDownvotes={post.downvotes}
+          commentCount={post.comment_count || 0}
+          postContent={content}
+          currentUserId={currentUserId}
+          initialUserVote={initialUserVote}
+          skipSync={currentUserId !== undefined}
+          onPostUpdate={onPostUpdate}
+        />
       </div>
 
       {/* Desktop layout: votes left, content right */}
@@ -198,6 +217,7 @@ const PostCard = memo(function PostCard({
             currentUserId={currentUserId}
             initialUserVote={initialUserVote}
             skipSync={currentUserId !== undefined}
+            onPostUpdate={onPostUpdate}
           />
         </div>
 
@@ -275,6 +295,15 @@ const PostCard = memo(function PostCard({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
               </svg>
               Share
+            </button>
+            <button
+              aria-label="Report post"
+              className="flex items-center gap-2 rounded-full border border-[#252a31] px-3 py-2 text-xs text-slate-300 hover:text-red-300 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
+              </svg>
+              Report
             </button>
           </div>
         </div>

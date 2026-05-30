@@ -357,15 +357,38 @@ export default function PostPage() {
     setSubmitting(true);
     setError('');
 
+    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticComment: Comment = {
+      id: optimisticId,
+      post_id: postId,
+      author_id: profile.id,
+      parent_comment_id: parentId || null,
+      content: commentContent,
+      is_anon_comment: displayMode === 'anonymous',
+      display_mode: displayMode,
+      created_at: new Date().toISOString(),
+      profiles: displayMode === 'anonymous' ? null : profile,
+    };
+
+    setFlatComments((prev) => {
+      const updated = [optimisticComment, ...prev];
+      setComments(buildCommentTree(updated));
+      return updated;
+    });
+
     try {
-      const { error: insertError } = await supabase.from('comments').insert({
-        post_id: postId,
-        author_id: profile.id,
-        parent_comment_id: parentId || null,
-        content: commentContent,
-        is_anon_comment: displayMode === 'anonymous',
-        display_mode: displayMode,
-      });
+      const { data: insertedComment, error: insertError } = await supabase
+        .from('comments')
+        .insert({
+          post_id: postId,
+          author_id: profile.id,
+          parent_comment_id: parentId || null,
+          content: commentContent,
+          is_anon_comment: displayMode === 'anonymous',
+          display_mode: displayMode,
+        })
+        .select('id, created_at')
+        .single();
 
       if (insertError) throw insertError;
 
@@ -375,11 +398,23 @@ export default function PostPage() {
         setIsCommentFocused(false);
       }
 
-      setCommentPage(0);
-      setHasMoreComments(true);
-      setFlatComments([]);
-      await fetchComments(0, { reset: true });
+      if (insertedComment) {
+        setFlatComments((prev) => {
+          const updated = prev.map((comment) =>
+            comment.id === optimisticId
+              ? { ...comment, id: insertedComment.id, created_at: insertedComment.created_at }
+              : comment
+          );
+          setComments(buildCommentTree(updated));
+          return updated;
+        });
+      }
     } catch (err: unknown) {
+      setFlatComments((prev) => {
+        const updated = prev.filter((comment) => comment.id !== optimisticId);
+        setComments(buildCommentTree(updated));
+        return updated;
+      });
       setError(err instanceof Error ? err.message : 'Failed to post comment.');
     } finally {
       setSubmitting(false);

@@ -10,6 +10,7 @@ interface VoteButtonsProps {
   initialUserVote?: VoteType | null;
   currentUserId?: string | null;
   skipSync?: boolean;
+  onPostUpdate?: (postId: string, updates: { upvotes: number; downvotes: number; user_vote: VoteType | null }) => void;
 }
 
 type VoteType = 'up' | 'down';
@@ -21,6 +22,7 @@ export default function VoteButtons({
   initialUserVote,
   currentUserId,
   skipSync = false,
+  onPostUpdate,
 }: VoteButtonsProps) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -136,15 +138,23 @@ export default function VoteButtons({
     setVoting(true);
     setErrorMessage('');
 
+    const applyOptimisticUpdate = (nextVote: VoteType | null, nextUpvotes: number, nextDownvotes: number) => {
+      setUserVote(nextVote);
+      setUpvotes(nextUpvotes);
+      setDownvotes(nextDownvotes);
+      onPostUpdate?.(postId, {
+        upvotes: nextUpvotes,
+        downvotes: nextDownvotes,
+        user_vote: nextVote,
+      });
+    };
+
     try {
       if (userVote === type) {
-        setUserVote(null);
-
-        if (type === 'up') {
-          setUpvotes((v) => Math.max(0, v - 1));
-        } else {
-          setDownvotes((v) => Math.max(0, v - 1));
-        }
+        const nextVote = null;
+        const nextUpvotes = type === 'up' ? Math.max(0, upvotes - 1) : upvotes;
+        const nextDownvotes = type === 'down' ? Math.max(0, downvotes - 1) : downvotes;
+        applyOptimisticUpdate(nextVote, nextUpvotes, nextDownvotes);
 
         const { error } = await supabase
           .from('post_votes')
@@ -154,13 +164,10 @@ export default function VoteButtons({
 
         if (error) throw error;
       } else if (userVote === null) {
-        setUserVote(type);
-
-        if (type === 'up') {
-          setUpvotes((v) => v + 1);
-        } else {
-          setDownvotes((v) => v + 1);
-        }
+        const nextVote = type;
+        const nextUpvotes = type === 'up' ? upvotes + 1 : upvotes;
+        const nextDownvotes = type === 'down' ? downvotes + 1 : downvotes;
+        applyOptimisticUpdate(nextVote, nextUpvotes, nextDownvotes);
 
         const { error } = await supabase.from('post_votes').insert({
           post_id: postId,
@@ -170,15 +177,12 @@ export default function VoteButtons({
 
         if (error) throw error;
       } else {
-        setUserVote(type);
-
-        if (type === 'up') {
-          setUpvotes((v) => v + 1);
-          setDownvotes((v) => Math.max(0, v - 1));
-        } else {
-          setDownvotes((v) => v + 1);
-          setUpvotes((v) => Math.max(0, v - 1));
-        }
+        const nextVote = type;
+        const nextUpvotes =
+          type === 'up' ? upvotes + 1 : Math.max(0, upvotes - 1);
+        const nextDownvotes =
+          type === 'down' ? downvotes + 1 : Math.max(0, downvotes - 1);
+        applyOptimisticUpdate(nextVote, nextUpvotes, nextDownvotes);
 
         const { error } = await supabase
           .from('post_votes')
@@ -193,9 +197,7 @@ export default function VoteButtons({
         await syncVoteState(userId);
       }
     } catch (err: unknown) {
-      setUserVote(prevUserVote);
-      setUpvotes(prevUpvotes);
-      setDownvotes(prevDownvotes);
+      applyOptimisticUpdate(prevUserVote, prevUpvotes, prevDownvotes);
       setErrorMessage(getErrorMessage(err));
     } finally {
       setVoting(false);
