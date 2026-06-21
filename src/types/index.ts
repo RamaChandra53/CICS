@@ -68,6 +68,8 @@ export type Comment = {
   content: string;
   is_anon_comment: boolean;
   display_mode: DisplayMode;
+  upvotes: number;
+  downvotes: number;
   created_at: string;
   profiles?: Profile | null;
   replies?: Comment[];
@@ -92,12 +94,11 @@ export type Community = {
 };
 
 export const ROOMS: Room[] = [
-  { id: 'college', label: 'College Feed', icon: '🏠', description: 'Everyone in the college' },
-  { id: 'year', label: 'My Year', icon: '📅', description: 'Students of your year' },
-  { id: 'branch', label: 'My Branch', icon: '💻', description: 'Students of your branch' },
-  { id: 'section', label: 'My Section', icon: '👥', description: 'Your exact section' },
-  { id: 'confessions', label: 'Confessions', icon: '🔥', description: 'Anonymous only' },
-  { id: 'random', label: 'Random', icon: '💬', description: 'Off-topic, memes, anything' },
+  { id: 'campus', label: 'Campus', icon: '🎓', description: 'Everyone in the college' },
+  { id: 'confessions', label: 'Confessions', icon: '🤫', description: 'Anonymous confessions' },
+  { id: 'placements', label: 'Placements', icon: '💼', description: 'Placement updates & discussion' },
+  { id: 'clubs', label: 'Clubs', icon: '🎭', description: 'College clubs & organizations' },
+  { id: 'alumni', label: 'Alumni', icon: '🎓', description: 'Alumni network & connections' },
 ];
 
 export const BRANCHES = ['CSE', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'MCT', 'MME', 'CSB', 'CSM', 'CSD'];

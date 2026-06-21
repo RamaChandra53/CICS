@@ -7,8 +7,6 @@ import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { INVALID_ROLL_MESSAGE, parseRollNumber, getCurrentYear } from '@/lib/parseRoll';
 
-const DEFAULT_PASSWORD = 'cics@123';
-
 function toInternalEmail(rollNumber: string) {
   return `${rollNumber.trim().toUpperCase()}@cics.local`;
 }
@@ -200,6 +198,45 @@ async function getSignInEmailCandidates(
   return Array.from(candidates);
 }
 
+/**
+ * Check if the given password is the default password via server-side API.
+ * This ensures the default password is never embedded in the client bundle.
+ */
+async function checkIsDefaultPassword(password: string): Promise<boolean> {
+  try {
+    const response = await fetch('/api/auth/check-default-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!response.ok) return false;
+    const { isDefault } = await response.json();
+    return isDefault === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Attempt first-time signup via the server-side API.
+ * Returns the new user ID if successful.
+ */
+async function attemptFirstLogin(rollNumber: string): Promise<{ userId: string }> {
+  const response = await fetch('/api/auth/first-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rollNumber }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to create account.');
+  }
+
+  return { userId: result.userId };
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -207,13 +244,30 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [password, setPassword] = useState('');
+  const [isDefaultPassword, setIsDefaultPassword] = useState(false);
   const normalizedIdentifier = rollNumber.trim();
   const parsedRoll = parseRollNumber(normalizedIdentifier);
   const isRollLikeInput = looksLikeRollNumber(normalizedIdentifier);
-  const isFirstTimeAttempt = password === DEFAULT_PASSWORD && parsedRoll !== null;
-  const shouldValidateRollForDefaultPassword = password === DEFAULT_PASSWORD && isRollLikeInput;
+  const isFirstTimeAttempt = isDefaultPassword && parsedRoll !== null;
+  const shouldValidateRollForDefaultPassword = isDefaultPassword && isRollLikeInput;
   const showInvalidRollMessage = shouldValidateRollForDefaultPassword && normalizedIdentifier.length > 0 && !parsedRoll;
   const isSubmitDisabled = loading || (shouldValidateRollForDefaultPassword && !parsedRoll);
+
+  // Check if password is the default one (server-side check)
+  useEffect(() => {
+    if (!password) {
+      setIsDefaultPassword(false);
+      return;
+    }
+
+    // Debounce the check
+    const timer = setTimeout(async () => {
+      const isDefault = await checkIsDefaultPassword(password);
+      setIsDefaultPassword(isDefault);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [password]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,48 +337,28 @@ export default function LoginPage() {
           throw new Error('Invalid roll number, username/email, or password.');
         }
 
-        const { data: existingRollProfile, error: existingRollError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('roll_number', normalizedUpperIdentifier)
-          .maybeSingle();
-        if (existingRollError) throw existingRollError;
-        if (existingRollProfile) {
-          throw new Error('This roll number is already registered. Try logging in instead.');
-        }
+        // Use server-side API for first-time login (default password stays on server)
+        try {
+          const result = await attemptFirstLogin(normalizedUpperIdentifier);
+          createdNewAccount = true;
 
-        const email = toInternalEmail(normalizedUpperIdentifier);
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password: DEFAULT_PASSWORD,
-          options: {
-            data: {
-              roll_number: normalizedUpperIdentifier,
-              is_first_login: true,
-              year: parsedRollForSignup!.year === 'Alumni' ? null : parsedRollForSignup!.year,
-              branch: parsedRollForSignup!.branch,
-              section: parsedRollForSignup!.section,
-            },
-          },
-        });
-        if (signUpError) {
-          throw new Error(signUpError.message || lastSignInErrorMessage || 'Invalid roll number or password.');
-        }
-        createdNewAccount = true;
-
-        if (!signUpData.session) {
-          const { data: fallbackSignIn, error: fallbackSignInError } = await supabase.auth.signInWithPassword({
+          // Now sign in with the password the user typed (which we confirmed is the default)
+          const email = toInternalEmail(normalizedUpperIdentifier);
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
             email,
-            password: DEFAULT_PASSWORD,
+            password,
           });
-          if (fallbackSignInError || !fallbackSignIn.user) {
-            throw new Error('Unable to start your session. Please try again.');
+
+          if (signInError || !signInData.user) {
+            throw new Error('Account created but unable to sign in. Please try again.');
           }
-          userId = fallbackSignIn.user.id;
-        } else {
-          userId = signUpData.user?.id ?? null;
+
+          userId = signInData.user.id;
+        } catch (firstLoginErr) {
+          throw firstLoginErr;
         }
       }
+
       if (!userId) {
         throw new Error('Unable to complete sign in. Please try again.');
       }

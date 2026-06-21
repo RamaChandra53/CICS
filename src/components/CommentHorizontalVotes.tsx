@@ -7,6 +7,7 @@ interface CommentHorizontalVotesProps {
   commentId: string;
   initialUpvotes: number;
   initialDownvotes: number;
+  currentUserId?: string | null;
   onReply?: () => void;
 }
 
@@ -16,6 +17,7 @@ export default function CommentHorizontalVotes({
   commentId,
   initialUpvotes,
   initialDownvotes,
+  currentUserId,
   onReply,
 }: CommentHorizontalVotesProps) {
   const supabase = useMemo(() => createClient(), []);
@@ -23,7 +25,7 @@ export default function CommentHorizontalVotes({
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [downvotes, setDownvotes] = useState(initialDownvotes);
   const [userVote, setUserVote] = useState<VoteType | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(currentUserId ?? null);
   const [voting, setVoting] = useState(false);
 
   useEffect(() => {
@@ -31,34 +33,40 @@ export default function CommentHorizontalVotes({
     setDownvotes(initialDownvotes);
   }, [initialUpvotes, initialDownvotes]);
 
-  const syncVoteState = useCallback(
-    async (currentUserId: string | null) => {
-      // Skip vote sync entirely if comment_votes table doesn't exist
-      // This prevents repeated failed queries that slow down the app
-      return;
-    },
-    [commentId, supabase]
-  );
-
+  // Load user's existing vote
   const loadVote = useCallback(async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      let uid = userId;
+      if (!uid) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        uid = user.id;
+        setUserId(uid);
+      }
 
-      if (!user) {
-        setUserId(null);
-        setUserVote(null);
-        await syncVoteState(null);
+      const { data, error } = await supabase
+        .from('comment_votes')
+        .select('vote_type')
+        .eq('user_id', uid)
+        .eq('comment_id', commentId)
+        .maybeSingle();
+
+      if (error) {
+        // Table might not exist yet — silently ignore
+        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
+          return;
+        }
+        console.error('Comment vote loading error:', error);
         return;
       }
 
-      setUserId(user.id);
-      await syncVoteState(user.id);
+      if (data) {
+        setUserVote(data.vote_type as VoteType);
+      }
     } catch (err: unknown) {
       console.error('Comment vote loading error:', err);
     }
-  }, [supabase, syncVoteState]);
+  }, [supabase, commentId, userId]);
 
   useEffect(() => {
     loadVote();
@@ -70,10 +78,6 @@ export default function CommentHorizontalVotes({
 
     if (!userId || voting) return;
 
-    // Disable comment voting until table is created
-    // This prevents database errors and performance issues
-    return;
-
     const prevUserVote = userVote;
     const prevUpvotes = upvotes;
     const prevDownvotes = downvotes;
@@ -81,35 +85,49 @@ export default function CommentHorizontalVotes({
     setVoting(true);
 
     try {
-      // Local state updates only for now
       if (userVote === type) {
+        // Remove vote
         setUserVote(null);
-        if (type === 'up') {
-          setUpvotes((v) => Math.max(0, v - 1));
-        } else {
-          setDownvotes((v) => Math.max(0, v - 1));
-        }
+        if (type === 'up') setUpvotes(v => Math.max(0, v - 1));
+        else setDownvotes(v => Math.max(0, v - 1));
+
+        await supabase
+          .from('comment_votes')
+          .delete()
+          .eq('user_id', userId)
+          .eq('comment_id', commentId);
       } else if (userVote === null) {
+        // New vote
         setUserVote(type);
-        if (type === 'up') {
-          setUpvotes((v) => v + 1);
-        } else {
-          setDownvotes((v) => v + 1);
-        }
+        if (type === 'up') setUpvotes(v => v + 1);
+        else setDownvotes(v => v + 1);
+
+        await supabase
+          .from('comment_votes')
+          .insert({ user_id: userId, comment_id: commentId, vote_type: type });
       } else {
+        // Change vote
         setUserVote(type);
         if (type === 'up') {
-          setUpvotes((v) => v + 1);
-          setDownvotes((v) => Math.max(0, v - 1));
+          setUpvotes(v => v + 1);
+          setDownvotes(v => Math.max(0, v - 1));
         } else {
-          setDownvotes((v) => v + 1);
-          setUpvotes((v) => Math.max(0, v - 1));
+          setDownvotes(v => v + 1);
+          setUpvotes(v => Math.max(0, v - 1));
         }
+
+        await supabase
+          .from('comment_votes')
+          .update({ vote_type: type })
+          .eq('user_id', userId)
+          .eq('comment_id', commentId);
       }
     } catch (err: unknown) {
+      // Rollback on error
       setUserVote(prevUserVote);
       setUpvotes(prevUpvotes);
       setDownvotes(prevDownvotes);
+      console.error('Comment vote error:', err);
     } finally {
       setVoting(false);
     }

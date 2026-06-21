@@ -24,6 +24,7 @@ export default function Sidebar() {
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [joinedCommunities, setJoinedCommunities] = useState<Community[]>([]);
   const [exploreCommunities, setExploreCommunities] = useState<Community[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const renderCommunityLink = (community: Community) => {
     const href = `/room/${community.slug}`;
@@ -52,6 +53,14 @@ export default function Sidebar() {
   const fetchJoinedCommunities = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+
+    // Check admin status
+    const { data: adminData } = await supabase
+      .from('admins')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    setIsAdmin(!!adminData);
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -219,6 +228,33 @@ export default function Sidebar() {
 
       {/* Bottom links */}
       <div className="p-3 border-t border-gray-800/60 space-y-1">
+        {isAdmin && (
+          <>
+            <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-1">Admin</p>
+            <Link
+              href="/admin/username-review"
+              className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${
+                pathname === '/admin/username-review'
+                  ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+              }`}
+            >
+              <span className="text-base">✏️</span>
+              <span>Usernames</span>
+            </Link>
+            <Link
+              href="/admin/reports"
+              className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${
+                pathname === '/admin/reports'
+                  ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+              }`}
+            >
+              <span className="text-base">🚩</span>
+              <span>Reports</span>
+            </Link>
+          </>
+        )}
         <Link
           href="/profile"
           className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${

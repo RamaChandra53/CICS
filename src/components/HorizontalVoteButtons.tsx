@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
+import ReportModal from './ReportModal';
 
 interface HorizontalVoteButtonsProps {
   postId: string;
@@ -37,6 +38,7 @@ export default function HorizontalVoteButtons({
   const [userVote, setUserVote] = useState<VoteType | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const getErrorMessage = (err: unknown) => {
     if (err instanceof Error) return err.message;
@@ -300,6 +302,7 @@ export default function HorizontalVoteButtons({
             Share
           </button>
           <button
+            onClick={() => setShowReportModal(true)}
             aria-label="Report post"
             className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-red-300"
           >
@@ -309,6 +312,14 @@ export default function HorizontalVoteButtons({
             Report
           </button>
         </>
+      )}
+
+      {showReportModal && userId && (
+        <ReportModal
+          postId={postId}
+          currentUserId={userId}
+          onClose={() => setShowReportModal(false)}
+        />
       )}
     </div>
   );

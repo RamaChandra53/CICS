@@ -38,6 +38,12 @@ export default function ProfilePage() {
   const [usernameSubmitting, setUsernameSubmitting] = useState(false);
   const [usernameSuccess, setUsernameSuccess] = useState('');
 
+  // Display name edit state
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [displayNameError, setDisplayNameError] = useState('');
+  const [displayNameSubmitting, setDisplayNameSubmitting] = useState(false);
+
   const fetchUserPosts = useCallback(
     async (userId: string, pageToLoad = 0, options?: { reset?: boolean }) => {
       try {
@@ -48,7 +54,7 @@ export default function ProfilePage() {
         const { data, error } = await supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
           )
           .eq('author_id', userId)
           .order('created_at', { ascending: false })
@@ -242,6 +248,42 @@ export default function ProfilePage() {
     }
   };
 
+  const handleDisplayNameSubmit = async () => {
+    if (!authProfile) return;
+
+    const trimmed = newDisplayName.trim();
+    if (trimmed.length < 2 || trimmed.length > 50) {
+      setDisplayNameError('Display name must be between 2 and 50 characters.');
+      return;
+    }
+
+    // Basic validation: letters, spaces, hyphens, apostrophes
+    if (!/^[a-zA-Z\s\-'\.]+$/.test(trimmed)) {
+      setDisplayNameError('Display name can only contain letters, spaces, hyphens, and apostrophes.');
+      return;
+    }
+
+    setDisplayNameSubmitting(true);
+    setDisplayNameError('');
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ real_display_name: trimmed })
+        .eq('id', authProfile.id);
+
+      if (updateError) throw updateError;
+
+      setIsEditingDisplayName(false);
+      refreshProfile();
+    } catch (err) {
+      console.error('Display name update error:', err);
+      setDisplayNameError('Failed to update display name. Please try again.');
+    } finally {
+      setDisplayNameSubmitting(false);
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut();
     router.push('/');
@@ -361,9 +403,69 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              {authProfile.real_display_name && (
-                <p className="text-slate-300 text-sm mb-1">{authProfile.real_display_name}</p>
-              )}
+              {/* Real display name (for full identity mode) */}
+              <div className="mb-3">
+                {isEditingDisplayName ? (
+                  <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3">
+                    <label className="text-xs text-slate-400 mb-1.5 block">Display Name (shown in &quot;Full Identity&quot; mode)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newDisplayName}
+                        onChange={(e) => {
+                          setNewDisplayName(e.target.value);
+                          if (displayNameError) setDisplayNameError('');
+                        }}
+                        placeholder="e.g. John Doe"
+                        maxLength={50}
+                        autoFocus
+                        className="flex-1 h-9 rounded-lg border border-[#252a31] bg-[#0b0f12] px-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/60"
+                      />
+                      <button
+                        onClick={handleDisplayNameSubmit}
+                        disabled={displayNameSubmitting || !newDisplayName.trim()}
+                        className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 shrink-0"
+                      >
+                        {displayNameSubmitting ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setIsEditingDisplayName(false)}
+                        className="h-9 rounded-lg border border-[#252a31] px-3 text-xs text-slate-400 hover:text-white transition-colors shrink-0"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {displayNameError && (
+                      <p className="mt-1.5 text-xs text-red-400">{displayNameError}</p>
+                    )}
+                    <p className="mt-1.5 text-[11px] text-slate-500">
+                      This name will be shown when you post with &quot;Full Identity&quot; mode. 2–50 characters.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {authProfile.real_display_name ? (
+                      <p className="text-slate-300 text-sm">{authProfile.real_display_name}</p>
+                    ) : (
+                      <p className="text-slate-500 text-xs italic">No display name set</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        setNewDisplayName(authProfile.real_display_name || '');
+                        setDisplayNameError('');
+                        setIsEditingDisplayName(true);
+                      }}
+                      className="text-slate-500 hover:text-indigo-400 transition-colors"
+                      aria-label="Edit display name"
+                      title="Edit display name (for full identity mode)"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Pseudo username status */}
               {authProfile.pseudo_username_status === 'pending' && (

@@ -136,11 +136,11 @@ export function getPostIdentityDisplay(
     }
 
     case 'full': {
-      // NEVER show roll_number. Use cascading fallback.
+      // NEVER show roll_number or username (which IS the roll number).
+      // Fallback: real_display_name → full_name → pseudo_username → 'Campus Member'
       const fullName =
         profile?.real_display_name ||
         profile?.full_name ||
-        profile?.username ||
         profile?.pseudo_username ||
         'Campus Member';
 
@@ -191,10 +191,10 @@ export function getIdentityModeLabel(
       return 'Branch · Year';
     }
     case 'full': {
+      // Same fallback as getPostIdentityDisplay — never use username (roll number)
       const name =
         profile?.real_display_name ||
         profile?.full_name ||
-        profile?.username ||
         profile?.pseudo_username ||
         'Profile Identity';
       return name;

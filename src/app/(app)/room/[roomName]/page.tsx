@@ -110,7 +110,7 @@ export default function RoomPage() {
         let query = supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
+            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
           )
           .order('created_at', { ascending: false })
           .range(pageToLoad * PAGE_SIZE, pageToLoad * PAGE_SIZE + PAGE_SIZE - 1);
@@ -195,7 +195,7 @@ export default function RoomPage() {
           let query = supabase
             .from('posts')
             .select(
-              'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
+              'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
             )
             .order('created_at', { ascending: false })
             .range(0, PAGE_SIZE - 1);

@@ -85,8 +85,9 @@ function CommentItem({
           <div className="mt-2">
             <CommentHorizontalVotes
               commentId={comment.id}
-              initialUpvotes={0}
-              initialDownvotes={0}
+              initialUpvotes={comment.upvotes ?? 0}
+              initialDownvotes={comment.downvotes ?? 0}
+              currentUserId={profile?.id}
               onReply={() => setReplyOpen(!replyOpen)}
             />
           </div>
@@ -183,6 +184,52 @@ export default function PostPage() {
 
   const [isCommentFocused, setIsCommentFocused] = useState(false);
 
+  // Edit/Delete state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const isOwnPost = post?.author_id === user?.id;
+
+  const handleEditSave = async () => {
+    if (!post || !editContent.trim()) return;
+    setEditSaving(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('posts')
+        .update({ content: editContent.trim() })
+        .eq('id', post.id);
+      if (updateError) throw updateError;
+      setPost(prev => prev ? { ...prev, content: editContent.trim() } : null);
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Edit error:', err);
+      setError('Failed to update post.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!post) return;
+    setDeleting(true);
+    try {
+      const { error: deleteError } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', post.id);
+      if (deleteError) throw deleteError;
+      router.push('/feed');
+    } catch (err) {
+      console.error('Delete error:', err);
+      setError('Failed to delete post.');
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   const buildCommentTree = useCallback((items: Comment[]) => {
     interface CommentNode extends Comment {
       replies: CommentNode[];
@@ -228,7 +275,7 @@ export default function PostPage() {
       const { data, error: commentsError } = await supabase
         .from('comments')
         .select(
-          'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, created_at, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
+          'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, upvotes, downvotes, created_at, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
         )
         .eq('post_id', postId)
         .order('created_at', { ascending: false })
@@ -287,7 +334,7 @@ export default function PostPage() {
         const { data: postData, error: postError } = await supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, roll_number, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
+            'id, author_id, room, content, image_url, video_url, link_url, post_type, poll_options, poll_expires_at, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
           )
           .eq('id', postId)
           .single();
@@ -367,6 +414,8 @@ export default function PostPage() {
       is_anon_comment: displayMode === 'anonymous',
       display_mode: displayMode,
       created_at: new Date().toISOString(),
+      upvotes: 0,
+      downvotes: 0,
       profiles: displayMode === 'anonymous' ? null : profile,
     };
 
@@ -475,52 +524,160 @@ export default function PostPage() {
       </button>
 
       <div className="mb-5 rounded-2xl border border-[#252a31] bg-[#15181c] p-4">
-        <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
-          <Link
-            href={`/room/${room?.id || 'campus'}`}
-            className="font-semibold text-slate-200 hover:text-indigo-300 transition-colors"
-          >
-            campus/{room?.label || 'general'}
-          </Link>
-          <span className="text-slate-600">•</span>
-          <span className="text-slate-300">{postDisplayInfo.displayName}</span>
-          {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
-            <span className="text-[10px] font-semibold text-indigo-300">✓</span>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
+            <Link
+              href={`/room/${room?.id || 'campus'}`}
+              className="font-semibold text-slate-200 hover:text-indigo-300 transition-colors"
+            >
+              campus/{room?.label || 'general'}
+            </Link>
+            <span className="text-slate-600">•</span>
+            <span className="text-slate-300">{postDisplayInfo.displayName}</span>
+            {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
+              <span className="text-[10px] font-semibold text-indigo-300">✓</span>
+            )}
+            <span className="text-slate-600">•</span>
+            <span>{formatTimeAgo(post.created_at)}</span>
+          </div>
+
+          {/* Edit/Delete actions for own posts */}
+          {isOwnPost && !isEditing && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  setEditContent(post.content);
+                  setIsEditing(true);
+                }}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+                title="Edit post"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                title="Delete post"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
           )}
-          <span className="text-slate-600">•</span>
-          <span>{formatTimeAgo(post.created_at)}</span>
         </div>
 
-        <h1 className="mt-3 text-base font-semibold text-slate-100 leading-snug">
-          {postHeadline}
-        </h1>
-
-        {postBody && (
-          <p className="mt-2 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
-            {postBody}
-          </p>
+        {/* Delete confirmation */}
+        {showDeleteConfirm && (
+          <div className="mt-3 rounded-xl border border-red-800/40 bg-red-900/20 p-3">
+            <p className="text-sm text-red-300 mb-2">Are you sure you want to delete this post? This cannot be undone.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-lg bg-red-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-red-500 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="rounded-lg border border-[#252a31] px-4 py-1.5 text-xs text-slate-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
 
-        {post.image_url && (
-          <img
-            src={post.image_url}
-            alt="Post image"
-            className="mt-4 max-h-96 w-full rounded-2xl border border-[#252a31] object-cover"
-          />
-        )}
+        {/* Editing mode */}
+        {isEditing ? (
+          <div className="mt-3">
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="w-full resize-none rounded-xl border border-[#252a31] bg-[#0f1318] px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none min-h-[120px]"
+              autoFocus
+            />
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={handleEditSave}
+                disabled={editSaving || !editContent.trim()}
+                className="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 transition-colors disabled:opacity-50"
+              >
+                {editSaving ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="rounded-lg border border-[#252a31] px-4 py-1.5 text-xs text-slate-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h1 className="mt-3 text-base font-semibold text-slate-100 leading-snug">
+              {postHeadline}
+            </h1>
 
-        <div className="mt-4 border-t border-[#252a31] pt-4">
-          <HorizontalVoteButtons
-            postId={post.id}
-            initialUpvotes={post.upvotes ?? 0}
-            initialDownvotes={post.downvotes ?? 0}
-            commentCount={flatComments.length}
-            showActions={true}
-            postContent={postContent}
-            currentUserId={user?.id ?? null}
-          />
-        </div>
+            {postBody && (
+              <p className="mt-2 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
+                {postBody}
+              </p>
+            )}
+
+            {post.image_url && (
+              <img
+                src={post.image_url}
+                alt="Post image"
+                className="mt-4 max-h-96 w-full rounded-2xl border border-[#252a31] object-cover"
+              />
+            )}
+
+            {post.video_url && (
+              <div className="mt-4 overflow-hidden rounded-2xl border border-[#252a31]">
+                <video
+                  src={post.video_url}
+                  controls
+                  preload="metadata"
+                  className="w-full max-h-[500px]"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            )}
+
+            {post.link_url && !post.image_url && (
+              <a
+                href={post.link_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 block overflow-hidden rounded-2xl border border-[#252a31] hover:border-[#353a41] transition-colors p-3"
+              >
+                <p className="text-xs text-indigo-400 mb-1 truncate">
+                  {(() => { try { return new URL(post.link_url).hostname; } catch { return post.link_url; } })()}
+                </p>
+                <p className="text-sm text-slate-300 truncate">{post.link_url}</p>
+              </a>
+            )}
+
+            <div className="mt-4 border-t border-[#252a31] pt-4">
+              <HorizontalVoteButtons
+                postId={post.id}
+                initialUpvotes={post.upvotes ?? 0}
+                initialDownvotes={post.downvotes ?? 0}
+                commentCount={flatComments.length}
+                showActions={true}
+                postContent={postContent}
+                currentUserId={user?.id ?? null}
+              />
+            </div>
+          </>
+        )}
       </div>
+
 
       <h2 className="mb-4 text-sm font-semibold text-slate-200">
         {flatComments.length} Comment{flatComments.length !== 1 ? 's' : ''}

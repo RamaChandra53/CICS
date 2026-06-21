@@ -7,7 +7,7 @@ import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import ErrorBoundaryFunctional from '@/components/ErrorBoundaryFunctional';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
@@ -135,7 +135,7 @@ export default function FeedPage() {
   }
 
   return (
-    <ErrorBoundaryFunctional>
+    <ErrorBoundary>
       <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6 overflow-x-hidden">
         {/* Community Chips */}
         <div className="mb-4 overflow-x-auto scrollbar-hide -mx-3 px-3">
@@ -239,6 +239,6 @@ export default function FeedPage() {
           </div>
         )}
       </div>
-    </ErrorBoundaryFunctional>
+    </ErrorBoundary>
   );
 }

@@ -19,16 +19,3 @@ export function formatTimeAgo(dateString: string): string {
   return `${diffYears} year${diffYears !== 1 ? 's' : ''} ago`;
 }
 
-export function generateAnonUsername(): string {
-  const adjectives = ['Red', 'Blue', 'Green', 'Purple', 'Gold', 'Silver', 'Dark', 'Bright', 'Swift', 'Bold'];
-  const animals = ['Panda', 'Falcon', 'Tiger', 'Eagle', 'Wolf', 'Fox', 'Hawk', 'Bear', 'Lion', 'Shark'];
-  const pickIndex = (max: number) => {
-    const buffer = new Uint32Array(1);
-    crypto.getRandomValues(buffer);
-    return buffer[0] % max;
-  };
-  const adj = adjectives[pickIndex(adjectives.length)];
-  const animal = animals[pickIndex(animals.length)];
-  const num = pickIndex(100);
-  return `${adj}${animal}_${num}`;
-}

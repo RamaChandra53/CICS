@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { parseRollNumber } from '@/lib/parseRoll';
-import { generateOTP, storeOTP, verifyOTP, sendOTPEmail } from '@/lib/otp';
 import { validateMGITEmail, validateEmailMatchesRoll } from '@/lib/emailValidation';
 
 function getReadableErrorMessage(err: unknown) {
@@ -129,7 +128,7 @@ export default function ForgotPasswordPage() {
       // Check if roll number exists in profiles
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email')
+        .select('id')
         .eq('roll_number', rollNumber.trim().toUpperCase())
         .single();
 
@@ -137,17 +136,18 @@ export default function ForgotPasswordPage() {
         throw new Error('Roll number not found. Please check your roll number.');
       }
 
-      // Generate and send custom OTP code
-      const otp = generateOTP();
-      
-      // Store OTP in database
-      await storeOTP(email, otp, 'password_reset');
-      
-      // Send OTP via email
-      await sendOTPEmail(email, otp, 'password_reset');
+      // Generate and send OTP via secure server-side API
+      const res = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), type: 'password_reset' }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
 
       setUserId(profile.id);
-      setTempEmail(email);
+      setTempEmail(email.trim().toLowerCase());
       setStep('otp');
     } catch (err: unknown) {
       setError(getReadableErrorMessage(err));
@@ -168,15 +168,29 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      // Verify OTP using our custom system
-      const isValid = await verifyOTP(tempEmail, otp, 'password_reset');
-      
-      if (!isValid) {
+      // Client-side OTP format validation only.
+      // The actual OTP verification + consumption happens server-side
+      // in the /api/reset-password endpoint to prevent replay attacks.
+      // We do a lightweight check here to give immediate feedback.
+      const supabase = createClient();
+      const { data: otpCheck } = await supabase
+        .from('otp_codes')
+        .select('id, expires_at')
+        .eq('email', tempEmail)
+        .eq('code', otp)
+        .eq('type', 'password_reset')
+        .single();
+
+      if (!otpCheck) {
         throw new Error('Invalid or expired OTP code');
       }
 
-      // Since we verified the OTP, we can proceed to password reset step
-      // We'll use admin API directly for password update
+      if (new Date() > new Date(otpCheck.expires_at)) {
+        throw new Error('OTP code has expired. Please request a new one.');
+      }
+
+      // OTP looks valid — proceed to password step.
+      // Server will re-verify and consume it atomically during reset.
       setStep('newPassword');
     } catch (err: unknown) {
       setError(getReadableErrorMessage(err));
@@ -208,16 +222,17 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      // Use API route to reset password
+      // Use API route to reset password (OTP verified server-side)
       const response = await fetch('/api/reset-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId,
-          newPassword,
           rollNumber: rollNumber.trim().toUpperCase(),
+          newPassword,
+          email: tempEmail,
+          otp,
         }),
       });
 

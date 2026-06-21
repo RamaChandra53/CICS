@@ -60,15 +60,13 @@ export default function CollegeEmailVerificationModal({
 
     setLoading(true);
     try {
-      // Send OTP via Supabase auth
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          shouldCreateUser: false // don't create new auth user
-        }
+      const res = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), type: 'email_verification' }),
       });
-
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
 
       setStep('otp');
       setResendTimer(60);
@@ -114,27 +112,38 @@ export default function CollegeEmailVerificationModal({
     setError('');
 
     try {
-      // Verify OTP by attempting to sign in
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: email,
-        token: finalOtp,
-        type: 'email'
-      });
+      // Verify OTP against our otp_codes table
+      const normalizedEmail = email.trim().toLowerCase();
+      const { data: otpRecord, error: otpError } = await supabase
+        .from('otp_codes')
+        .select('id, expires_at')
+        .eq('email', normalizedEmail)
+        .eq('code', finalOtp)
+        .eq('type', 'email_verification')
+        .maybeSingle();
 
-      if (error) throw error;
+      if (otpError || !otpRecord) {
+        throw new Error('Invalid or expired OTP code.');
+      }
 
-      // Get current user session
+      if (new Date() > new Date(otpRecord.expires_at)) {
+        throw new Error('OTP has expired. Please request a new one.');
+      }
+
+      // Delete the used OTP
+      await supabase.from('otp_codes').delete().eq('id', otpRecord.id);
+
+      // Get current user and update profile
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
         throw new Error('Please login to verify your email');
       }
 
-      // Update profile with verified college email
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
-          college_email: email,
+          college_email: normalizedEmail,
           is_email_verified: true 
         })
         .eq('id', user.id);
@@ -160,17 +169,16 @@ export default function CollegeEmailVerificationModal({
     setError('');
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          shouldCreateUser: false
-        }
+      const res = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), type: 'email_verification' }),
       });
-
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resend OTP');
 
       setResendTimer(60);
-      setError(''); // Clear any previous errors
+      setError('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to resend OTP');
     } finally {
