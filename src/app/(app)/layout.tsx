@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
@@ -36,9 +36,26 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
     return undefined;
   }, [loading, profileLoading]);
 
+  const hasAuthSettled = useRef(false);
+
+  useEffect(() => {
+    if (loading || profileLoading) {
+      // Auth is still in progress — don't mark as settled yet
+      return;
+    }
+    // Mark settled on the NEXT tick so React finishes batching state updates
+    const id = window.setTimeout(() => {
+      hasAuthSettled.current = true;
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [loading, profileLoading]);
+
   useEffect(() => {
     if (loading || profileLoading) return;
     if (error && errorScope === 'session') return;
+
+    // Don't redirect until auth has truly settled (avoids firing on transient null state)
+    if (!hasAuthSettled.current) return;
 
     if (!user || !session) {
       router.replace('/');
@@ -49,7 +66,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
       router.replace('/set-password');
       return;
     }
-  }, [user, session, profile, loading, profileLoading, error, router]);
+  }, [user, session, profile, loading, profileLoading, error, errorScope, router]);
 
   if (loading || profileLoading) {
     return (

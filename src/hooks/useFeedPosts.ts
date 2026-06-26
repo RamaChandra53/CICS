@@ -108,6 +108,12 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
   const mountedRef = useRef(true);
   const lastUserIdRef = useRef<string | null>(userId);
 
+  // Refs for loading guards — lets callbacks stay stable without depending on state
+  const isRefreshingRef = useRef(false);
+  const isInitialLoadingRef = useRef(true);
+  const isLoadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -162,12 +168,15 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
 
       if (isInitial) {
         setIsInitialLoading(true);
+        isInitialLoadingRef.current = true;
       }
       if (isRefresh) {
         setIsRefreshing(true);
+        isRefreshingRef.current = true;
       }
       if (isLoadMore) {
         setIsLoadingMore(true);
+        isLoadingMoreRef.current = true;
       }
 
       setError(null);
@@ -268,6 +277,7 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
 
         setPosts(merged);
         setHasMore(hasNextPage);
+        hasMoreRef.current = hasNextPage;
         setError(null);
         setErrorContext(null);
 
@@ -295,15 +305,18 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
         setIsInitialLoading(false);
         setIsRefreshing(false);
         setIsLoadingMore(false);
+        isInitialLoadingRef.current = false;
+        isRefreshingRef.current = false;
+        isLoadingMoreRef.current = false;
       }
     },
     [supabase, userId]
   );
 
   const refresh = useCallback(async () => {
-    if (isRefreshing || isInitialLoading) return;
+    if (isRefreshingRef.current || isInitialLoadingRef.current) return;
     await fetchPostsPage(selectedCommunity, 0, 'refresh');
-  }, [fetchPostsPage, isRefreshing, isInitialLoading, selectedCommunity]);
+  }, [fetchPostsPage, selectedCommunity]);
 
   const retry = useCallback(async () => {
     const mode: Exclude<ErrorContext, null> = posts.length > 0 ? 'refresh' : 'initial';
@@ -311,11 +324,17 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
   }, [fetchPostsPage, posts.length, selectedCommunity]);
 
   const loadMore = useCallback(async () => {
-    if (isLoadingMore || isRefreshing || isInitialLoading || !hasMore) return;
+    if (isLoadingMoreRef.current || isRefreshingRef.current || isInitialLoadingRef.current || !hasMoreRef.current) return;
     const cacheEntry = feedCache[selectedCommunity];
     const nextPage = (cacheEntry?.page ?? 0) + 1;
     await fetchPostsPage(selectedCommunity, nextPage, 'loadMore');
-  }, [fetchPostsPage, hasMore, isInitialLoading, isLoadingMore, isRefreshing, selectedCommunity]);
+  }, [fetchPostsPage, selectedCommunity]);
+
+  // Keep a stable ref for refresh so the userId-change effect doesn't depend on it
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -326,11 +345,14 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
     setError(null);
     setErrorContext(null);
     setIsLoadingMore(false);
+    isLoadingMoreRef.current = false;
 
     if (!hasCache) {
       setPosts([]);
       setHasMore(true);
+      hasMoreRef.current = true;
       setIsInitialLoading(true);
+      isInitialLoadingRef.current = true;
     }
 
     const isStale = !cacheEntry || Date.now() - cacheEntry.lastFetchedAt > CACHE_TTL_MS;
@@ -338,11 +360,14 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
     if (isStale) {
       if (hasCache) {
         setIsRefreshing(true);
+        isRefreshingRef.current = true;
       }
       fetchPostsPage(selectedCommunity, 0, hasCache ? 'refresh' : 'initial');
     } else {
       setIsInitialLoading(false);
+      isInitialLoadingRef.current = false;
       setIsRefreshing(false);
+      isRefreshingRef.current = false;
     }
   }, [selectedCommunity, applyCache, fetchPostsPage, authLoading]);
 
@@ -351,10 +376,10 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
     if (lastUserIdRef.current !== userId) {
       lastUserIdRef.current = userId;
       if (posts.length > 0) {
-        refresh();
+        refreshRef.current();
       }
     }
-  }, [authLoading, userId, posts.length, refresh]);
+  }, [authLoading, userId, posts.length]);
 
   return {
     posts,
