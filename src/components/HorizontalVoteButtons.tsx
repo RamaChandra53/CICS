@@ -36,7 +36,6 @@ export default function HorizontalVoteButtons({
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [downvotes, setDownvotes] = useState(initialDownvotes);
   const [userVote, setUserVote] = useState<VoteType | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [voting, setVoting] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
@@ -126,30 +125,16 @@ export default function HorizontalVoteButtons({
 
   const loadVote = useCallback(async () => {
     try {
+      setUserVote(initialUserVote ?? null);
       if (currentUserId !== undefined) {
-        setUserId(currentUserId);
-        setUserVote(initialUserVote ?? null);
         await syncVoteState(currentUserId);
-        return;
-      }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setUserId(null);
-        setUserVote(null);
+      } else {
         await syncVoteState(null);
-        return;
       }
-
-      setUserId(user.id);
-      await syncVoteState(user.id);
     } catch (err: unknown) {
-      console.error('Vote loading error:', err);
+      console.error('Vote loading error:', err instanceof Error ? err.message : String(err));
     }
-  }, [supabase, syncVoteState, currentUserId, initialUserVote]);
+  }, [syncVoteState, currentUserId, initialUserVote]);
 
   useEffect(() => {
     if (skipSync) return;
@@ -158,7 +143,6 @@ export default function HorizontalVoteButtons({
 
   useEffect(() => {
     if (!skipSync) return;
-    setUserId(currentUserId ?? null);
     setUserVote(initialUserVote ?? null);
   }, [currentUserId, initialUserVote, skipSync]);
 
@@ -166,7 +150,7 @@ export default function HorizontalVoteButtons({
     e.preventDefault();
     e.stopPropagation();
 
-    if (!userId || voting) return;
+    if (!currentUserId || voting) return;
 
     const prevUserVote = userVote;
     const prevUpvotes = upvotes;
@@ -196,7 +180,7 @@ export default function HorizontalVoteButtons({
           .from('post_votes')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', userId);
+          .eq('user_id', currentUserId);
 
         if (error) throw error;
       } else if (userVote === null) {
@@ -207,7 +191,7 @@ export default function HorizontalVoteButtons({
 
         const { error } = await supabase.from('post_votes').insert({
           post_id: postId,
-          user_id: userId,
+          user_id: currentUserId,
           vote_type: type,
         });
 
@@ -224,17 +208,17 @@ export default function HorizontalVoteButtons({
           .from('post_votes')
           .update({ vote_type: type })
           .eq('post_id', postId)
-          .eq('user_id', userId);
+          .eq('user_id', currentUserId);
 
         if (error) throw error;
       }
 
       if (!skipSync) {
-        await syncVoteState(userId);
+        await syncVoteState(currentUserId);
       }
     } catch (err: unknown) {
       applyOptimisticUpdate(prevUserVote, prevUpvotes, prevDownvotes);
-      console.error('Vote error:', err);
+      console.error('Vote error:', err instanceof Error ? err.message : String(err));
     } finally {
       setVoting(false);
     }
@@ -243,14 +227,14 @@ export default function HorizontalVoteButtons({
   const score = upvotes - downvotes;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex h-9 items-center gap-1 rounded-full border border-[#252a31] bg-[#0f1318] px-2">
+    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex shrink-0 h-9 items-center gap-1 rounded-full border border-[#252a31] bg-[#0f1318] px-2">
         <button
           onClick={(e) => handleVote(e, 'up')}
-          disabled={voting || !userId}
+          disabled={voting || !currentUserId}
           className={`flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors ${
             userVote === 'up' ? 'text-indigo-300' : 'hover:text-indigo-200'
-          } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
+          } ${!currentUserId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Upvote"
         >
           <span className="text-xs">▲</span>
@@ -270,10 +254,10 @@ export default function HorizontalVoteButtons({
 
         <button
           onClick={(e) => handleVote(e, 'down')}
-          disabled={voting || !userId}
+          disabled={voting || !currentUserId}
           className={`flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors ${
             userVote === 'down' ? 'text-red-300' : 'hover:text-slate-200'
-          } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
+          } ${!currentUserId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Downvote"
         >
           <span className="text-xs">▼</span>
@@ -284,7 +268,7 @@ export default function HorizontalVoteButtons({
         <>
           <button
             aria-label="View comments"
-            className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
+            className="flex shrink-0 h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
@@ -294,7 +278,7 @@ export default function HorizontalVoteButtons({
           <button
             onClick={handleShare}
             aria-label="Share post"
-            className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
+            className="flex shrink-0 h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
@@ -304,7 +288,7 @@ export default function HorizontalVoteButtons({
           <button
             onClick={() => setShowReportModal(true)}
             aria-label="Report post"
-            className="flex h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-red-300"
+            className="flex shrink-0 h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-red-300"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
@@ -314,10 +298,10 @@ export default function HorizontalVoteButtons({
         </>
       )}
 
-      {showReportModal && userId && (
+      {showReportModal && currentUserId && (
         <ReportModal
           postId={postId}
-          currentUserId={userId}
+          currentUserId={currentUserId}
           onClose={() => setShowReportModal(false)}
         />
       )}

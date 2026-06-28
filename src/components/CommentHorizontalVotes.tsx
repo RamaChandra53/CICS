@@ -25,7 +25,6 @@ export default function CommentHorizontalVotes({
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [downvotes, setDownvotes] = useState(initialDownvotes);
   const [userVote, setUserVote] = useState<VoteType | null>(null);
-  const [userId, setUserId] = useState<string | null>(currentUserId ?? null);
   const [voting, setVoting] = useState(false);
 
   useEffect(() => {
@@ -36,12 +35,9 @@ export default function CommentHorizontalVotes({
   // Load user's existing vote
   const loadVote = useCallback(async () => {
     try {
-      let uid = userId;
-      if (!uid) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        uid = user.id;
-        setUserId(uid);
+      const uid = currentUserId;
+      if (!uid || commentId.startsWith('optimistic-')) {
+        return;
       }
 
       const { data, error } = await supabase
@@ -56,7 +52,7 @@ export default function CommentHorizontalVotes({
         if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
           return;
         }
-        console.error('Comment vote loading error:', error);
+        console.error('Comment vote loading error:', error.message || error);
         return;
       }
 
@@ -64,9 +60,9 @@ export default function CommentHorizontalVotes({
         setUserVote(data.vote_type as VoteType);
       }
     } catch (err: unknown) {
-      console.error('Comment vote loading error:', err);
+      console.error('Comment vote loading error:', err instanceof Error ? err.message : String(err));
     }
-  }, [supabase, commentId, userId]);
+  }, [supabase, commentId, currentUserId]);
 
   useEffect(() => {
     loadVote();
@@ -76,7 +72,7 @@ export default function CommentHorizontalVotes({
     e.preventDefault();
     e.stopPropagation();
 
-    if (!userId || voting) return;
+    if (!currentUserId || voting || commentId.startsWith('optimistic-')) return;
 
     const prevUserVote = userVote;
     const prevUpvotes = upvotes;
@@ -94,7 +90,7 @@ export default function CommentHorizontalVotes({
         await supabase
           .from('comment_votes')
           .delete()
-          .eq('user_id', userId)
+          .eq('user_id', currentUserId)
           .eq('comment_id', commentId);
       } else if (userVote === null) {
         // New vote
@@ -104,7 +100,7 @@ export default function CommentHorizontalVotes({
 
         await supabase
           .from('comment_votes')
-          .insert({ user_id: userId, comment_id: commentId, vote_type: type });
+          .insert({ user_id: currentUserId, comment_id: commentId, vote_type: type });
       } else {
         // Change vote
         setUserVote(type);
@@ -119,7 +115,7 @@ export default function CommentHorizontalVotes({
         await supabase
           .from('comment_votes')
           .update({ vote_type: type })
-          .eq('user_id', userId)
+          .eq('user_id', currentUserId)
           .eq('comment_id', commentId);
       }
     } catch (err: unknown) {
@@ -140,10 +136,10 @@ export default function CommentHorizontalVotes({
       <div className="flex h-8 items-center gap-0.5 rounded-full border border-[#252a31] bg-[#0f1318] px-2">
         <button
           onClick={(e) => handleVote(e, 'up')}
-          disabled={voting || !userId}
+          disabled={voting || !currentUserId || commentId.startsWith('optimistic-')}
           className={`flex h-6 w-6 items-center justify-center rounded-full text-white transition-colors ${
             userVote === 'up' ? 'text-indigo-300' : 'hover:text-indigo-200'
-          } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
+          } ${(!currentUserId || commentId.startsWith('optimistic-')) ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Upvote"
         >
           <span className="text-[10px]">▲</span>
@@ -163,10 +159,10 @@ export default function CommentHorizontalVotes({
 
         <button
           onClick={(e) => handleVote(e, 'down')}
-          disabled={voting || !userId}
+          disabled={voting || !currentUserId || commentId.startsWith('optimistic-')}
           className={`flex h-6 w-6 items-center justify-center rounded-full text-white transition-colors ${
             userVote === 'down' ? 'text-red-300' : 'hover:text-slate-200'
-          } ${!userId ? 'cursor-not-allowed opacity-50' : ''}`}
+          } ${(!currentUserId || commentId.startsWith('optimistic-')) ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Downvote"
         >
           <span className="text-[10px]">▼</span>

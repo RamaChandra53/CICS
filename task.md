@@ -20,25 +20,25 @@
 
 ## Week 2: Clean Foundation (Tasks 6-10)
 
-- `[ ]` **Task 6**: Delete all dead code (8 components, 1 context, unused functions)
+- `[x]` **Task 6**: Delete all dead code (8 components, 1 context, unused functions)
   - Files to delete: `CreatePostForm.tsx`, `VoteButtons.tsx`, `EmailVerificationModal.tsx`, `RichTextEditor.tsx`, `RichTextEditorModern.tsx`, `RedditMobileNav.tsx`, `ErrorBoundaryModern.tsx`, `TagsInput.tsx`, `ProfileContext.tsx`
   - Remove `generateAnonUsername()` from `utils.ts`
   - ⚠️ Note: `VoteButtons.tsx` is STILL IMPORTED by `PostCard.tsx` — must fix PostCard first
-- `[ ]` **Task 7**: Remove `quill` and `react-quill` from dependencies
-- `[ ]` **Task 8**: Consolidate to one ErrorBoundary implementation
-- `[ ]` **Task 9**: Consolidate SQL files into numbered migrations
-- `[ ]` **Task 10**: Fix community directory to use DB data
+- `[x]` **Task 7**: Remove `quill` and `react-quill` from dependencies
+- `[x]` **Task 8**: Consolidate to one ErrorBoundary implementation
+- `[x]` **Task 9**: Consolidate SQL files into numbered migrations
+- `[x]` **Task 10**: Fix community directory to use DB data
 
 ## Week 3: Fix Broken Features (Tasks 11-14)
 
-- `[ ]` **Task 11**: Create `comment_votes` table + wire up voting
-- `[ ]` **Task 12**: Add video player rendering in PostCard
-- `[ ]` **Task 13**: Add link card rendering in PostCard
-- `[ ]` **Task 14**: Add poll voting UI and results display
+- `[x]` **Task 11**: Create `comment_votes` table + wire up voting
+- `[x]` **Task 12**: Add video player rendering in PostCard
+- `[x]` **Task 13**: Add link card rendering in PostCard
+- `[x]` **Task 14**: Add poll voting UI and results display
 
 ## Week 4: Core Missing Features (Tasks 15-18)
 
-- `[ ]` **Task 15**: Integrate email service for OTP delivery
-- `[ ]` **Task 16**: Add post edit/delete UI
-- `[ ]` **Task 17**: Add basic report button + admin review page
-- `[ ]` **Task 18**: Add SSRF protection to link-preview + rate limiting
+- `[x]` **Task 15**: Integrate email service for OTP delivery
+- `[x]` **Task 16**: Add post edit/delete UI
+- `[x]` **Task 17**: Add basic report button + admin review page
+- `[x]` **Task 18**: Add SSRF protection to link-preview + rate limiting
