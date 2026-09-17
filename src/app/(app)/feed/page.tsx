@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Community } from '@/types';
 import PostCard from '@/components/PostCard';
@@ -99,32 +99,6 @@ export default function FeedPage() {
     fetchCommunities();
     // Initial feed load is automatically handled by the useFeedPosts hook
   }, [authLoading, profileLoading, user, fetchCommunities]);
-
-  // Use a ref to keep track of the latest refresh function without triggering re-subscriptions
-  const refreshRef = useRef(refresh);
-  useEffect(() => {
-    refreshRef.current = refresh;
-  }, [refresh]);
-
-  // Real-time subscription for new posts
-  useEffect(() => {
-    if (!authReady) return;
-
-    const channel = supabase
-      .channel('feed-posts')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'posts',
-      }, () => {
-        refreshRef.current();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, authReady]);
 
   if (authLoading || (!authReady && !postsError)) {
     return (

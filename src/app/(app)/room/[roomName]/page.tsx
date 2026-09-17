@@ -52,6 +52,7 @@ export default function RoomPage() {
   // Store fetched posts per community in a ref
   const postCache = useRef<Record<string, { posts: Post[]; hasMore: boolean }>>({});
   const tagFilterInitialized = useRef(false);
+  const initializedRoomRef = useRef<string | null>(null);
   const postRoom = roomName;
   const supportsPosting = isMember;
   const hasSafeRoomName = roomName.length > 0;
@@ -253,6 +254,14 @@ export default function RoomPage() {
         return;
       }
 
+      // Supabase emits auth events when it silently renews a session. Do not
+      // treat those events as a request to reload the current community.
+      const roomSessionKey = `${roomName}:${user.id}`;
+      if (initializedRoomRef.current === roomSessionKey) {
+        return;
+      }
+      initializedRoomRef.current = roomSessionKey;
+
       try {
         const initPromise = async () => {
           try {
@@ -373,31 +382,7 @@ export default function RoomPage() {
 
     init();
 
-    // Map community slugs to room values for real-time subscription
-     const channel = hasSafeRoomName
-       ? supabase
-           .channel(`room-${roomName}`)
-           .on(
-             'postgres_changes',
-             {
-               event: 'INSERT',
-               schema: 'public',
-               table: 'posts',
-               filter: roomName === 'campus' ? 'room=in.(campus,college)' : `room=eq.${roomName}`,
-             },
-             () => {
-               setPage(0);
-               setHasMore(true);
-               fetchPosts(0, { reset: true });
-             }
-           )
-           .subscribe()
-       : null;
-
      return () => {
-       if (channel) {
-         supabase.removeChannel(channel);
-       }
      };
    }, [supabase, postRoom, authProfile, roomName, authLoading, user, router, fetchPosts, prefetchCommunities, hasSafeRoomName]);
 

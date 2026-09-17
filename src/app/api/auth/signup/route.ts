@@ -1,21 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { validateMGITEmail } from '@/lib/emailValidation';
 
 /**
  * POST /api/auth/signup
  *
- * Server-side signup for first-time users with default credentials.
- * Creates the Supabase auth user with the default password and returns
+ * Server-side signup for first-time users.
+ * Creates the Supabase auth user with the password chosen by the student and returns
  * session tokens so the client can continue the flow.
  *
- * Body: { rollNumber, year, branch, section }
+ * Body: { rollNumber, collegeEmail, password, year, branch, section }
  */
-
-const DEFAULT_PASSWORD = 'cics@123';
 
 export async function POST(request: NextRequest) {
   try {
-    const { rollNumber, year, branch, section } = await request.json();
+    const { rollNumber, collegeEmail, password, year, branch, section } = await request.json();
 
     if (!rollNumber || typeof rollNumber !== 'string') {
       return NextResponse.json(
@@ -25,7 +24,21 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedRoll = rollNumber.trim().toUpperCase();
-    const email = `${normalizedRoll}@cics.local`;
+    const email = typeof collegeEmail === 'string' ? collegeEmail.trim().toLowerCase() : '';
+
+    if (!validateMGITEmail(email)) {
+      return NextResponse.json(
+        { error: 'Use your MGIT college email address (for example, name@mgit.ac.in).' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof password !== 'string' || password.length < 6) {
+      return NextResponse.json(
+        { error: 'Password must be at least 6 characters long.' },
+        { status: 400 }
+      );
+    }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -56,18 +69,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the auth user with default password
+    const { data: existingCollegeEmail } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .ilike('college_email', email)
+      .maybeSingle();
+
+    if (existingCollegeEmail) {
+      return NextResponse.json(
+        { error: 'An account already exists for this college email. Please log in instead.' },
+        { status: 409 }
+      );
+    }
+
+    // Supabase Auth securely hashes this password; it is never saved as
+    // plaintext in the application database.
     const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
     const { data: signUpData, error: signUpError } = await supabaseAnon.auth.signUp({
       email,
-      password: DEFAULT_PASSWORD,
+      password,
       options: {
         data: {
           roll_number: normalizedRoll,
-          is_first_login: true,
+          is_first_login: false,
           year: year === 'Alumni' ? null : year,
           branch,
           section,
@@ -82,6 +109,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (signUpData.user) {
+      const { error: profileUpdateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ college_email: email })
+        .eq('id', signUpData.user.id);
+
+      if (profileUpdateError) {
+        console.error('Failed to save college email:', profileUpdateError.message);
+        return NextResponse.json(
+          { error: 'Account was created but its college email could not be saved. Please contact support.' },
+          { status: 500 }
+        );
+      }
+    }
+
     // If no session was created, sign in to get one
     let session = signUpData.session;
     let userId = signUpData.user?.id ?? null;
@@ -90,7 +132,7 @@ export async function POST(request: NextRequest) {
       const { data: signInData, error: signInError } =
         await supabaseAnon.auth.signInWithPassword({
           email,
-          password: DEFAULT_PASSWORD,
+          password,
         });
 
       if (signInError || !signInData.user) {

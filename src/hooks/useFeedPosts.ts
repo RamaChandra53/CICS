@@ -27,7 +27,6 @@ type FeedCacheEntry = {
 const feedCache: Record<string, FeedCacheEntry> = {};
 
 const PAGE_SIZE = 15;
-const CACHE_TTL_MS = 45_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 
 const COMMUNITY_ROOM_MAP: Record<string, string[] | null> = {
@@ -106,7 +105,6 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
   const activeCommunityRef = useRef<FeedCommunity>(selectedCommunity);
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
-  const lastUserIdRef = useRef<string | null>(userId);
 
   // Refs for loading guards — lets callbacks stay stable without depending on state
   const isRefreshingRef = useRef(false);
@@ -330,12 +328,6 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
     await fetchPostsPage(selectedCommunity, nextPage, 'loadMore');
   }, [fetchPostsPage, selectedCommunity]);
 
-  // Keep a stable ref for refresh so the userId-change effect doesn't depend on it
-  const refreshRef = useRef(refresh);
-  useEffect(() => {
-    refreshRef.current = refresh;
-  }, [refresh]);
-
   useEffect(() => {
     if (authLoading) return;
 
@@ -355,14 +347,11 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
       isInitialLoadingRef.current = true;
     }
 
-    const isStale = !cacheEntry || Date.now() - cacheEntry.lastFetchedAt > CACHE_TTL_MS;
-
-    if (isStale) {
-      if (hasCache) {
-        setIsRefreshing(true);
-        isRefreshingRef.current = true;
-      }
-      fetchPostsPage(selectedCommunity, 0, hasCache ? 'refresh' : 'initial');
+    // Cached posts remain unchanged until the user explicitly refreshes,
+    // changes community, or performs an action such as creating a post.
+    // In particular, do not refetch after Supabase renews an auth session.
+    if (!hasCache) {
+      fetchPostsPage(selectedCommunity, 0, 'initial');
     } else {
       setIsInitialLoading(false);
       isInitialLoadingRef.current = false;
@@ -370,16 +359,6 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
       isRefreshingRef.current = false;
     }
   }, [selectedCommunity, applyCache, fetchPostsPage, authLoading]);
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (lastUserIdRef.current !== userId) {
-      lastUserIdRef.current = userId;
-      if (posts.length > 0) {
-        refreshRef.current();
-      }
-    }
-  }, [authLoading, userId, posts.length]);
 
   return {
     posts,
