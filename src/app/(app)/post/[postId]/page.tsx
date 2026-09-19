@@ -2,7 +2,7 @@
 
 
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post, Comment, Profile, ROOMS, DisplayMode } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
@@ -185,6 +185,7 @@ export default function PostPage() {
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [commentDisplayMode, setCommentDisplayMode] = useState<DisplayMode>('pseudo');
+  const initializedPostRef = useRef<string | null>(null);
   const [showTrustModal, setShowTrustModal] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsError, setCommentsError] = useState('');
@@ -336,6 +337,13 @@ export default function PostPage() {
         return;
       }
 
+      // Avoid refetching the post/comments on background token renewals.
+      const postSessionKey = `${postId}:${user.id}`;
+      if (initializedPostRef.current === postSessionKey) {
+        return;
+      }
+      initializedPostRef.current = postSessionKey;
+
       setProfile(authProfile ?? null);
       setError('');
 
@@ -373,28 +381,8 @@ export default function PostPage() {
 
     init();
 
-    const channel = supabase
-      .channel(`post-${postId}-comments`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'comments',
-          filter: `post_id=eq.${postId}`,
-        },
-        () => {
-          setCommentPage(0);
-          setHasMoreComments(true);
-          setFlatComments([]);
-          fetchComments(0, { reset: true });
-        }
-      )
-      .subscribe();
-
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
     };
   }, [supabase, router, postId, fetchComments, authLoading, user, authProfile]);
 

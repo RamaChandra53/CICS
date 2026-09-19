@@ -1,450 +1,93 @@
 'use client';
 
-
-
-import { useEffect, useMemo, useState } from 'react';
-import { createClient } from '@/lib/supabase';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { INVALID_ROLL_MESSAGE, parseRollNumber, getCurrentYear } from '@/lib/parseRoll';
+import { createClient } from '@/lib/supabase';
+import { INVALID_ROLL_MESSAGE, parseRollNumber } from '@/lib/parseRoll';
+import { validateMGITEmail } from '@/lib/emailValidation';
 
-function toInternalEmail(rollNumber: string) {
-  return `${rollNumber.trim().toUpperCase()}@cics.local`;
+function getReadableErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
 
-function toLegacyUsernameEmail(username: string) {
-  return `${username.trim().toLowerCase()}@cics.local`;
-}
-
-function looksLikeRollNumber(value: string) {
-  return /^[A-Za-z0-9]{10}$/.test(value.trim());
-}
-
-function getReadableErrorMessage(err: unknown) {
-  if (err instanceof Error) return err.message;
-  if (typeof err === 'object' && err !== null) {
-    const maybeMessage = (err as { message?: unknown }).message;
-    if (typeof maybeMessage === 'string' && maybeMessage.length > 0) {
-      return maybeMessage;
-    }
-  }
-  return 'Something went wrong. Please try again.';
-}
-
-function isMissingTableError(err: { message?: string | null; code?: string | null }, tableName: string) {
-  const message = (err.message ?? '').toLowerCase();
-  return (
-    err.code === 'PGRST205' ||
-    message.includes(`could not find the table 'public.${tableName}'`) ||
-    message.includes(`relation "public.${tableName}" does not exist`) ||
-    message.includes(`relation "${tableName}" does not exist`)
-  );
-}
-
-async function updateDynamicCommunities(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  rollNumber: string
-) {
-  type CommunityMembership = { community_slug: string };
-  type CommunitySlugRecord = { slug: string };
-
-  // Calculate current year dynamically
-  const currentYear = getCurrentYear(rollNumber);
-  const isAlumni = currentYear === 'Alumni';
-
-  // Get current community memberships
-  const { data: currentMemberships, error: membershipError } = await supabase
-    .from('community_members')
-    .select('community_slug')
-    .eq('user_id', userId);
-
-  if (membershipError) {
-    if (isMissingTableError(membershipError, 'community_members')) {
-      return;
-    }
-    throw membershipError;
-  }
-
-  const currentSlugs = new Set(
-    ((currentMemberships ?? []) as CommunityMembership[]).map((membership) => membership.community_slug)
-  );
-
-  // Determine target communities - Reddit-style 5 core subreddits
-  const targetSlugs: string[] = ['campus']; // Everyone joins campus
-
-  // Add specific communities based on user type
-  if (isAlumni) {
-    targetSlugs.push('alumni');
-  } else {
-    // All current students join placements and clubs
-    targetSlugs.push('placements', 'clubs');
-  }
-
-  // Everyone can join confessions (anonymous-only community)
-  targetSlugs.push('confessions');
-
-  // Remove old year/section communities and add new ones
-  const toRemove: string[] = [];
-  const toAdd: string[] = [];
-
-  // Check which communities to remove - only keep 5 core subreddits
-  const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs', 'alumni'];
-  for (const slug of currentSlugs) {
-    if (!coreSubreddits.includes(slug)) {
-      toRemove.push(slug);
-    }
-  }
-
-  // Check which communities to add
-  for (const slug of targetSlugs) {
-    if (!currentSlugs.has(slug)) {
-      toAdd.push(slug);
-    }
-  }
-
-  // Remove old communities
-  for (const slug of toRemove) {
-    const { error: removeError } = await supabase
-      .from('community_members')
-      .delete()
-      .eq('user_id', userId)
-      .eq('community_slug', slug);
-    if (removeError && !isMissingTableError(removeError, 'community_members')) {
-      throw removeError;
-    }
-  }
-
-  // Add new communities
-  const { data: existingCommunities, error: existingCommunitiesError } = await supabase
-    .from('communities')
-    .select('slug')
-    .in('slug', toAdd);
-
-  if (existingCommunitiesError) {
-    if (isMissingTableError(existingCommunitiesError, 'communities')) {
-      return;
-    }
-    throw existingCommunitiesError;
-  }
-
-  const existingSlugSet = new Set(
-    ((existingCommunities ?? []) as CommunitySlugRecord[]).map((community) => community.slug)
-  );
-
-  for (const slug of toAdd) {
-    if (!existingSlugSet.has(slug)) continue;
-    const { error: memberError } = await supabase
-      .from('community_members')
-      .upsert({ user_id: userId, community_slug: slug }, { onConflict: 'user_id,community_slug' });
-    if (memberError && !isMissingTableError(memberError, 'community_members')) {
-      throw memberError;
-    }
-  }
-}
-
-async function getSignInEmailCandidates(
-  supabase: ReturnType<typeof createClient>,
-  identifier: string,
-  normalizedUpperIdentifier: string
-) {
-  type ProfileLoginRecord = { username: string | null; roll_number: string | null; email: string | null };
-  const candidates = new Set<string>();
-  const trimmedIdentifier = identifier.trim();
-  const loweredIdentifier = trimmedIdentifier.toLowerCase();
-
-  if (trimmedIdentifier.includes('@')) {
-    candidates.add(loweredIdentifier);
-  } else {
-    candidates.add(toInternalEmail(normalizedUpperIdentifier));
-    candidates.add(toLegacyUsernameEmail(trimmedIdentifier));
-  }
-
-  const profileRecords = new Map<string, ProfileLoginRecord>();
-  const profileQueries: Array<Promise<{ data: ProfileLoginRecord[] | null }>> = [
-    supabase
-      .from('profiles')
-      .select('username, roll_number, email')
-      .eq('username', trimmedIdentifier),
-    supabase
-      .from('profiles')
-      .select('username, roll_number, email')
-      .eq('roll_number', normalizedUpperIdentifier),
-    supabase
-      .from('profiles')
-      .select('username, roll_number, email')
-      .eq('email', loweredIdentifier),
-  ];
-
-  const profileResults = await Promise.all(profileQueries);
-  for (const result of profileResults) {
-    for (const profile of result.data ?? []) {
-      const dedupeKey = `${profile.username ?? ''}|${profile.roll_number ?? ''}|${profile.email ?? ''}`;
-      profileRecords.set(dedupeKey, profile);
-    }
-  }
-
-  for (const profile of profileRecords.values()) {
-    if (profile.email) {
-      candidates.add(profile.email.toLowerCase());
-    }
-    if (profile.roll_number) {
-      candidates.add(toInternalEmail(profile.roll_number));
-    }
-    if (profile.username) {
-      candidates.add(toLegacyUsernameEmail(profile.username));
-    }
-  }
-
-  return Array.from(candidates);
-}
-
-/**
- * Check if the given password is the default password via server-side API.
- * This ensures the default password is never embedded in the client bundle.
- */
-async function checkIsDefaultPassword(password: string): Promise<boolean> {
-  try {
-    const response = await fetch('/api/auth/check-default-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    if (!response.ok) return false;
-    const { isDefault } = await response.json();
-    return isDefault === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Attempt first-time signup via the server-side API.
- * Returns the new user ID if successful.
- */
-async function attemptFirstLogin(rollNumber: string): Promise<{ userId: string }> {
+async function createAccount(rollNumber: string, collegeEmail: string, password: string) {
   const response = await fetch('/api/auth/first-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rollNumber }),
+    body: JSON.stringify({ rollNumber, collegeEmail, password }),
   });
-
   const result = await response.json();
 
-  if (!response.ok) {
-    throw new Error(result.error || 'Failed to create account.');
-  }
-
-  return { userId: result.userId };
+  if (!response.ok) throw new Error(result.error || 'Failed to create account.');
+  return result as { userId: string; email: string };
 }
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [rollNumber, setRollNumber] = useState('');
+  const [collegeEmail, setCollegeEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [rollNumber, setRollNumber] = useState('');
-  const [password, setPassword] = useState('');
-  const [isDefaultPassword, setIsDefaultPassword] = useState(false);
-  const normalizedIdentifier = rollNumber.trim();
-  const parsedRoll = parseRollNumber(normalizedIdentifier);
-  const isRollLikeInput = looksLikeRollNumber(normalizedIdentifier);
-  const isFirstTimeAttempt = isDefaultPassword && parsedRoll !== null;
-  const shouldValidateRollForDefaultPassword = isDefaultPassword && isRollLikeInput;
-  const showInvalidRollMessage = shouldValidateRollForDefaultPassword && normalizedIdentifier.length > 0 && !parsedRoll;
-  const isSubmitDisabled = loading || (shouldValidateRollForDefaultPassword && !parsedRoll);
-
-  // Check if password is the default one (server-side check)
-  useEffect(() => {
-    if (!password) {
-      setIsDefaultPassword(false);
-      return;
-    }
-
-    // Debounce the check
-    const timer = setTimeout(async () => {
-      const isDefault = await checkIsDefaultPassword(password);
-      setIsDefaultPassword(isDefault);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [password]);
+  const parsedRoll = parseRollNumber(rollNumber.trim());
 
   useEffect(() => {
-    let cancelled = false;
-
     const checkSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_first_login')
-        .eq('id', user.id)
-        .single();
-      if (!cancelled) {
-        router.replace(profile?.is_first_login ? '/set-password' : '/feed');
-      }
+      if (user) router.replace('/feed');
     };
-    checkSession();
-    return () => {
-      cancelled = true;
-    };
+    void checkSession();
   }, [router, supabase]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const clearError = () => {
+    if (error) setError('');
+  };
+
+  const switchMode = (nextMode: 'login' | 'register') => {
+    setMode(nextMode);
+    setError('');
+    setPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const normalizedUpperIdentifier = rollNumber.trim().toUpperCase();
-      if (!normalizedUpperIdentifier || !password) {
-        throw new Error('Please enter your roll number, username, or email and password.');
+      const normalizedEmail = collegeEmail.trim().toLowerCase();
+      if (!validateMGITEmail(normalizedEmail)) {
+        throw new Error('Use your MGIT college email address (name@mgit.ac.in).');
       }
-      if (shouldValidateRollForDefaultPassword && !parsedRoll) {
-        throw new Error(INVALID_ROLL_MESSAGE);
-      }
-      const parsedRollForSignup = parsedRoll;
 
-      let userId: string | null = null;
-      let createdNewAccount = false;
-      let signInSucceeded = false;
-      let lastSignInErrorMessage = 'Invalid credentials.';
+      if (mode === 'register') {
+        if (!parsedRoll) throw new Error(INVALID_ROLL_MESSAGE);
+        if (password.length < 6) throw new Error('Password must be at least 6 characters long.');
+        if (password !== confirmPassword) throw new Error('Passwords do not match.');
 
-      const emailCandidates = await getSignInEmailCandidates(
-        supabase,
-        normalizedIdentifier,
-        normalizedUpperIdentifier
-      );
-
-      for (const candidateEmail of emailCandidates) {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: candidateEmail,
+        const account = await createAccount(rollNumber.trim().toUpperCase(), normalizedEmail, password);
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: account.email,
           password,
         });
-
-        if (!signInError && signInData.user) {
-          userId = signInData.user.id;
-          signInSucceeded = true;
-          break;
+        if (signInError || !data.user) {
+          throw new Error('Account created, but sign-in failed. Please log in with your new password.');
         }
-        if (signInError?.message) {
-          lastSignInErrorMessage = signInError.message;
-        }
-      }
-
-      if (!signInSucceeded) {
-        if (!isFirstTimeAttempt) {
-          throw new Error('Invalid roll number, username/email, or password.');
-        }
-
-        // Use server-side API for first-time login (default password stays on server)
-        try {
-          const result = await attemptFirstLogin(normalizedUpperIdentifier);
-          createdNewAccount = true;
-
-          // Now sign in with the password the user typed (which we confirmed is the default)
-          const email = toInternalEmail(normalizedUpperIdentifier);
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-
-          if (signInError || !signInData.user) {
-            throw new Error('Account created but unable to sign in. Please try again.');
-          }
-
-          userId = signInData.user.id;
-        } catch (firstLoginErr) {
-          throw firstLoginErr;
-        }
-      }
-
-      if (!userId) {
-        throw new Error('Unable to complete sign in. Please try again.');
-      }
-
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('is_first_login, roll_number, username')
-        .eq('id', userId)
-        .maybeSingle();
-      const existingFirstLoginState = existingProfile?.is_first_login;
-      const inferredFirstLoginState =
-        createdNewAccount ||
-        existingFirstLoginState === true ||
-        (existingFirstLoginState == null && isFirstTimeAttempt);
-      const shouldRequirePasswordReset = inferredFirstLoginState;
-
-      const profilePayload: Record<string, string | boolean | null> = {
-        id: userId,
-        is_anonymous: false,
-      };
-      // Always include username to satisfy NOT NULL constraint during upsert
-      profilePayload.username = existingProfile?.username || normalizedUpperIdentifier;
-
-      if (createdNewAccount || !existingProfile?.roll_number) {
-        profilePayload.roll_number = normalizedUpperIdentifier;
-      }
-      if (existingFirstLoginState != null) {
-        profilePayload.is_first_login = existingFirstLoginState;
-      } else if (inferredFirstLoginState) {
-        profilePayload.is_first_login = true;
-      }
-      if (isFirstTimeAttempt) {
-        profilePayload.year = parsedRollForSignup!.year === 'Alumni' ? null : parsedRollForSignup!.year;
-        profilePayload.branch = parsedRollForSignup!.branch;
-        profilePayload.section = parsedRollForSignup!.section;
-      }
-
-      const { error: profileError } = await supabase.from('profiles').upsert(profilePayload);
-      if (profileError) {
-        if (profileError.message?.includes('is_first_login')) {
-          throw new Error(
-            'Database schema is missing is_first_login. Run the latest Supabase SQL migration and try again.'
-          );
-        }
-        throw profileError;
-      }
-
-      const { data: persistedProfile } = await supabase
-        .from('profiles')
-        .select('is_first_login')
-        .eq('id', userId)
-        .maybeSingle();
-      const finalShouldRequirePasswordReset =
-        persistedProfile?.is_first_login ?? shouldRequirePasswordReset;
-
-      // Update year dynamically on login when a valid roll number is available
-      const effectiveRollNumber =
-        existingProfile?.roll_number ??
-        (parsedRoll ? normalizedUpperIdentifier : null);
-      const parsedEffectiveRoll = effectiveRollNumber ? parseRollNumber(effectiveRollNumber) : null;
-      if (effectiveRollNumber && parsedEffectiveRoll) {
-        const currentYear = getCurrentYear(effectiveRollNumber);
-        const isAlumni = currentYear === 'Alumni';
-
-        await supabase
-          .from('profiles')
-          .update({
-            year: isAlumni ? null : currentYear,
-            branch: parsedEffectiveRoll.branch,
-            section: isAlumni ? null : parsedEffectiveRoll.section
-          })
-          .eq('id', userId);
-
-        // Update community memberships dynamically when roll number is valid
-        void updateDynamicCommunities(
-          supabase,
-          userId,
-          effectiveRollNumber
-        ).catch((communityError) => {
-          console.error('Community sync failed:', communityError);
+      } else {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
         });
+        if (signInError || !data.user) throw new Error('Invalid college email or password.');
       }
 
-      router.push(finalShouldRequirePasswordReset ? '/set-password' : '/feed');
-    } catch (err: unknown) {
-      setError(getReadableErrorMessage(err));
+      router.replace('/feed');
+    } catch (submitError: unknown) {
+      setError(getReadableErrorMessage(submitError));
     } finally {
       setLoading(false);
     }
@@ -458,108 +101,55 @@ export default function LoginPage() {
           <p className="text-gray-500 text-sm">Only MGIT students can enter. You can stay anonymous inside.</p>
         </div>
 
+        <div className="mb-6 grid grid-cols-2 rounded-xl bg-[#111] p-1">
+          <button type="button" onClick={() => switchMode('login')} className={`rounded-lg py-2 text-sm font-medium transition-colors ${mode === 'login' ? 'bg-[#6366f1] text-white' : 'text-gray-400'}`}>
+            Log in
+          </button>
+          <button type="button" onClick={() => switchMode('register')} className={`rounded-lg py-2 text-sm font-medium transition-colors ${mode === 'register' ? 'bg-[#6366f1] text-white' : 'text-gray-400'}`}>
+            Create account
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === 'register' && (
+            <div>
+              <label className="block text-gray-400 text-xs mb-1.5">Roll Number</label>
+              <input type="text" value={rollNumber} onChange={(event) => { setRollNumber(event.target.value); clearError(); }} placeholder="e.g. 25261A0512" className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors" required maxLength={10} />
+              {rollNumber && !parsedRoll && <p className="mt-1.5 text-xs text-red-400">{INVALID_ROLL_MESSAGE}</p>}
+              {parsedRoll && <p className="mt-1.5 text-xs text-gray-500">{parsedRoll.year} year · {parsedRoll.branch} · Section {parsedRoll.section}</p>}
+            </div>
+          )}
+
           <div>
-            <label className="block text-gray-400 text-xs mb-1.5">Roll Number</label>
-            <input
-              type="text"
-              value={rollNumber}
-              onChange={e => {
-                setRollNumber(e.target.value);
-                if (error) setError('');
-              }}
-              placeholder="e.g. 25261A0512"
-              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-              required
-              maxLength={80}
-            />
+            <label className="block text-gray-400 text-xs mb-1.5">MGIT College Email</label>
+            <input type="email" value={collegeEmail} onChange={(event) => { setCollegeEmail(event.target.value); clearError(); }} placeholder="yourname@mgit.ac.in" className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors" required />
+            {mode === 'register' && <p className="mt-1.5 text-xs text-gray-500">One account is allowed per MGIT email address.</p>}
           </div>
 
           <div>
             <label className="block text-gray-400 text-xs mb-1.5">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors"
-              required
-            />
+            <input type="password" value={password} onChange={(event) => { setPassword(event.target.value); clearError(); }} placeholder={mode === 'register' ? 'At least 6 characters' : 'Enter your password'} className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors" required minLength={mode === 'register' ? 6 : undefined} />
           </div>
 
-          {isFirstTimeAttempt && (
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 space-y-3">
-              <div className="flex items-center gap-2 text-[#6366f1]">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                <p className="text-xs font-medium">First-time login detected</p>
-              </div>
-              <p className="text-xs text-gray-400">
-                Your year, branch, and section are auto-detected from your roll number.
-              </p>
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="bg-[#111] rounded-lg p-2">
-                  <p className="text-xs text-gray-500">Year</p>
-                  <p className="text-sm font-semibold text-white">{parsedRoll ? parsedRoll.year : '-'}</p>
-                </div>
-                <div className="bg-[#111] rounded-lg p-2">
-                  <p className="text-xs text-gray-500">Branch</p>
-                  <p className="text-sm font-semibold text-white">{parsedRoll?.branch ?? '-'}</p>
-                </div>
-                <div className="bg-[#111] rounded-lg p-2">
-                  <p className="text-xs text-gray-500">Section</p>
-                  <p className="text-sm font-semibold text-white">{parsedRoll?.section ?? '-'}</p>
-                </div>
-              </div>
+          {mode === 'register' && (
+            <div>
+              <label className="block text-gray-400 text-xs mb-1.5">Confirm Password</label>
+              <input type="password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearError(); }} placeholder="Re-enter your password" className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#6366f1] transition-colors" required minLength={6} />
             </div>
           )}
 
-          {showInvalidRollMessage && (
-            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
-              {INVALID_ROLL_MESSAGE}
-            </p>
-          )}
+          {error && <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">{error}</p>}
 
-          {error && (
-            <p className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-xl p-3">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={isSubmitDisabled}
-            className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Signing in...
-              </span>
-            ) : 'Login'}
+          <button type="submit" disabled={loading || (mode === 'register' && rollNumber.length > 0 && !parsedRoll)} className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            {loading ? 'Please wait...' : mode === 'register' ? 'Create account' : 'Log in'}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-gray-700 space-y-3">
-          <div className="text-center">
-            <p className="text-xs text-gray-400">
-              First time logging in? Use your temporary credentials.
-            </p>
+        {mode === 'login' && (
+          <div className="mt-6 pt-6 border-t border-gray-700 text-center">
+            <button onClick={() => router.push('/forgot-password')} className="text-gray-400 hover:text-white text-sm transition-colors">Forgot password?</button>
           </div>
-
-          <div className="text-center">
-            <button
-              onClick={() => router.push('/forgot-password')}
-              className="text-gray-400 hover:text-white text-sm transition-colors"
-            >
-              Forgot password?
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
