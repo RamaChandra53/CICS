@@ -66,6 +66,7 @@ async function backfillPseudoUsername(
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<{ id: string } | null>(null);
+  const userRef = useRef<{ id: string } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -219,7 +220,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(session ?? null);
         const currentUser = session?.user ?? null;
-        setUser(currentUser ? { id: currentUser.id } : null);
+        const nextUser = currentUser ? { id: currentUser.id } : null;
+        userRef.current = nextUser;
+        setUser(nextUser);
 
         if (currentUser) {
           const profileData = await fetchProfile(currentUser.id);
@@ -232,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error instanceof Error && error.message.includes('Refresh Token')) {
           await supabase.auth.signOut();
           setSession(null);
+          userRef.current = null;
           setUser(null);
           setProfile(null);
         }
@@ -266,10 +270,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const isSignOut = event === 'SIGNED_OUT';
         const isSignIn = event === 'SIGNED_IN';
         const currentUser = session?.user ?? null;
-        
-        // Only trigger full-screen loading if signing in/out or we don't have a user yet.
-        // Background token refreshes should NOT block the UI.
-        const shouldBlockUI = isSignOut || (isSignIn && !user);
+        const previousUser = userRef.current;
+        const isSameUser = !!(previousUser && currentUser && previousUser.id === currentUser.id);
+
+        // Only trigger full-screen loading if signing out or signing in from a logged-out state.
+        // Tab refocus, token refresh, and background sync should NEVER block the UI or unmount pages.
+        const shouldBlockUI = isSignOut || (isSignIn && !previousUser);
         
         if (shouldBlockUI) {
           setLoading(true);
@@ -279,14 +285,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setErrorScope(null);
         setSession(session ?? null);
 
-        setUser(currentUser ? { id: currentUser.id } : null);
+        const nextUser = currentUser ? { id: currentUser.id } : null;
+        userRef.current = nextUser;
+        setUser(nextUser);
 
         if (currentUser) {
-          // If we already have the profile for this user and it's just a token refresh, 
-          // we can load it in the background without blocking the UI if we wanted,
-          // but we still await it here. Since shouldBlockUI is false for refreshes, 
-          // the UI won't show a loading spinner.
-          const profileData = await fetchProfile(currentUser.id, { background: !shouldBlockUI });
+          // If user was already logged in, fetch profile in background without resetting UI
+          const profileData = await fetchProfile(currentUser.id, { background: isSameUser || !shouldBlockUI });
           if (mounted) {
             setProfile(profileData);
           }
@@ -313,6 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Sign out error:', error);
     }
+    userRef.current = null;
     setUser(null);
     setProfile(null);
     setSession(null);

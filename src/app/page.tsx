@@ -10,11 +10,11 @@ function getReadableErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
 
-async function createAccount(rollNumber: string, collegeEmail: string, password: string) {
+async function createAccount(rollNumber: string, collegeEmail: string, password: string, otpCode: string) {
   const response = await fetch('/api/auth/first-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rollNumber, collegeEmail, password }),
+    body: JSON.stringify({ rollNumber, collegeEmail, password, otpCode }),
   });
   const result = await response.json();
 
@@ -33,6 +33,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // OTP verification state for registration
+  const [regStep, setRegStep] = useState<'form' | 'otp'>('form');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const parsedRoll = parseRollNumber(rollNumber.trim());
 
   useEffect(() => {
@@ -42,6 +47,13 @@ export default function LoginPage() {
     };
     void checkSession();
   }, [router, supabase]);
+
+  // Countdown timer for OTP resend cooldown
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   const clearError = () => {
     if (error) setError('');
@@ -53,6 +65,39 @@ export default function LoginPage() {
     setPassword('');
     setConfirmPassword('');
     setShowPassword(false);
+    setRegStep('form');
+    setOtpCode('');
+    setCountdown(0);
+  };
+
+  // Send OTP to the college email (registration step 1)
+  const handleSendOtp = async () => {
+    setOtpSending(true);
+    setError('');
+    try {
+      const normalizedEmail = collegeEmail.trim().toLowerCase();
+      if (!validateMGITEmail(normalizedEmail)) {
+        throw new Error('Use your MGIT college email address (name@mgit.ac.in).');
+      }
+      if (!parsedRoll) throw new Error(INVALID_ROLL_MESSAGE);
+      if (password.length < 6) throw new Error('Password must be at least 6 characters long.');
+      if (password !== confirmPassword) throw new Error('Passwords do not match.');
+
+      const res = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, type: 'email_verification' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send verification code.');
+
+      setRegStep('otp');
+      setCountdown(60);
+    } catch (err: unknown) {
+      setError(getReadableErrorMessage(err));
+    } finally {
+      setOtpSending(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -71,7 +116,17 @@ export default function LoginPage() {
         if (password.length < 6) throw new Error('Password must be at least 6 characters long.');
         if (password !== confirmPassword) throw new Error('Passwords do not match.');
 
-        const account = await createAccount(rollNumber.trim().toUpperCase(), normalizedEmail, password);
+        // If we're still on the form step, send OTP first
+        if (regStep === 'form') {
+          setLoading(false);
+          await handleSendOtp();
+          return;
+        }
+
+        // On OTP step — verify and create account
+        if (!/^\d{6}$/.test(otpCode)) throw new Error('Please enter a valid 6-digit code.');
+
+        const account = await createAccount(rollNumber.trim().toUpperCase(), normalizedEmail, password, otpCode);
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email: account.email,
           password,
@@ -135,8 +190,8 @@ export default function LoginPage() {
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-400 to-violet-600 text-base font-black text-white shadow-lg shadow-indigo-950/50">C</span>
                 <span className="font-semibold tracking-tight text-white">CICS</span>
               </div>
-              <h2 className="text-2xl font-bold tracking-tight text-white">{mode === 'login' ? 'Welcome back' : 'Join your campus'}</h2>
-              <p className="mt-1.5 text-sm text-slate-400">{mode === 'login' ? 'Sign in to continue the conversation.' : 'Use your MGIT email to create your private account.'}</p>
+              <h2 className="text-2xl font-bold tracking-tight text-white">{mode === 'login' ? 'Welcome back' : regStep === 'otp' ? 'Verify your email' : 'Join your campus'}</h2>
+              <p className="mt-1.5 text-sm text-slate-400">{mode === 'login' ? 'Sign in to continue the conversation.' : regStep === 'otp' ? `Enter the 6-digit code sent to ${collegeEmail.trim().toLowerCase()}` : 'Use your MGIT email to create your private account.'}</p>
             </div>
 
         <div className="mb-6 grid grid-cols-2 rounded-xl border border-white/5 bg-black/20 p-1">
@@ -149,38 +204,64 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === 'register' && (
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-300">Roll number</label>
-              <input type="text" value={rollNumber} onChange={(event) => { setRollNumber(event.target.value.toUpperCase()); clearError(); }} placeholder="e.g. 25261A0512" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required maxLength={10} />
-              {rollNumber && !parsedRoll && <p className="mt-1.5 text-xs text-rose-300">{INVALID_ROLL_MESSAGE}</p>}
-              {parsedRoll && <p className="mt-1.5 text-xs text-emerald-300">Looks right · {parsedRoll.year} year · {parsedRoll.branch} · Section {parsedRoll.section}</p>}
-            </div>
+          {/* ── Registration Step 1: Form fields ── */}
+          {mode === 'register' && regStep === 'form' && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">Roll number</label>
+                <input type="text" value={rollNumber} onChange={(event) => { setRollNumber(event.target.value.toUpperCase()); clearError(); }} placeholder="e.g. 25261A0512" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required maxLength={10} />
+                {rollNumber && !parsedRoll && <p className="mt-1.5 text-xs text-rose-300">{INVALID_ROLL_MESSAGE}</p>}
+                {parsedRoll && <p className="mt-1.5 text-xs text-emerald-300">Looks right · {parsedRoll.year} year · {parsedRoll.branch} · Section {parsedRoll.section}</p>}
+              </div>
+            </>
           )}
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-300">MGIT college email</label>
-            <input type="email" value={collegeEmail} onChange={(event) => { setCollegeEmail(event.target.value); clearError(); }} placeholder="yourname@mgit.ac.in" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required autoComplete="email" />
-            {mode === 'register' && <p className="mt-1.5 text-xs text-slate-500">One account per MGIT email. We never show it publicly.</p>}
-          </div>
+          {/* ── Registration Step 2: OTP entry ── */}
+          {mode === 'register' && regStep === 'otp' && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">Verification code</label>
+                <input type="text" inputMode="numeric" value={otpCode} onChange={(event) => { setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6)); clearError(); }} placeholder="000000" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-center text-lg tracking-[0.3em] text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required maxLength={6} autoFocus />
+                <p className="mt-1.5 text-xs text-slate-500">Check your inbox (and spam folder) for the code.</p>
+              </div>
 
-          <div>
-            <div className="mb-1.5 flex items-center justify-between"><label className="text-xs font-medium text-slate-300">Password</label>{mode === 'login' && <button type="button" onClick={() => router.push('/forgot-password')} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">Forgot it?</button>}</div>
-            <div className="relative"><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => { setPassword(event.target.value); clearError(); }} placeholder={mode === 'register' ? 'At least 6 characters' : 'Enter your password'} className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 pr-14 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required minLength={mode === 'register' ? 6 : undefined} autoComplete={mode === 'register' ? 'new-password' : 'current-password'} /><button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute inset-y-0 right-0 px-4 text-xs font-medium text-slate-400 hover:text-white">{showPassword ? 'Hide' : 'Show'}</button></div>
-            {mode === 'register' && password && <div className="mt-2 flex gap-1.5">{[1, 2, 3].map((level) => <span key={level} className={`h-1 flex-1 rounded-full ${passwordStrength >= level ? passwordStrength === 1 ? 'bg-rose-400' : passwordStrength === 2 ? 'bg-amber-400' : 'bg-emerald-400' : 'bg-white/10'}`} />)}</div>}
-          </div>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => { setRegStep('form'); setOtpCode(''); setError(''); }} className="text-xs font-medium text-slate-400 hover:text-white transition">← Back</button>
+                <button type="button" disabled={countdown > 0 || otpSending} onClick={handleSendOtp} className="text-xs font-medium text-indigo-300 hover:text-indigo-200 disabled:text-slate-600 disabled:cursor-not-allowed transition">
+                  {otpSending ? 'Sending...' : countdown > 0 ? `Resend in ${countdown}s` : 'Resend code'}
+                </button>
+              </div>
+            </>
+          )}
 
-          {mode === 'register' && (
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-300">Confirm password</label>
-              <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearError(); }} placeholder="Re-enter your password" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required minLength={6} autoComplete="new-password" />
-            </div>
+          {/* ── Shared fields: email + password (hide during OTP step) ── */}
+          {!(mode === 'register' && regStep === 'otp') && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">MGIT college email</label>
+                <input type="email" value={collegeEmail} onChange={(event) => { setCollegeEmail(event.target.value); clearError(); }} placeholder="yourname@mgit.ac.in" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required autoComplete="email" />
+                {mode === 'register' && <p className="mt-1.5 text-xs text-slate-500">One account per MGIT email. We never show it publicly.</p>}
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex items-center justify-between"><label className="text-xs font-medium text-slate-300">Password</label>{mode === 'login' && <button type="button" onClick={() => router.push('/forgot-password')} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">Forgot it?</button>}</div>
+                <div className="relative"><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => { setPassword(event.target.value); clearError(); }} placeholder={mode === 'register' ? 'At least 6 characters' : 'Enter your password'} className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 pr-14 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required minLength={mode === 'register' ? 6 : undefined} autoComplete={mode === 'register' ? 'new-password' : 'current-password'} /><button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute inset-y-0 right-0 px-4 text-xs font-medium text-slate-400 hover:text-white">{showPassword ? 'Hide' : 'Show'}</button></div>
+                {mode === 'register' && password && <div className="mt-2 flex gap-1.5">{[1, 2, 3].map((level) => <span key={level} className={`h-1 flex-1 rounded-full ${passwordStrength >= level ? passwordStrength === 1 ? 'bg-rose-400' : passwordStrength === 2 ? 'bg-amber-400' : 'bg-emerald-400' : 'bg-white/10'}`} />)}</div>}
+              </div>
+
+              {mode === 'register' && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-300">Confirm password</label>
+                  <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearError(); }} placeholder="Re-enter your password" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required minLength={6} autoComplete="new-password" />
+                </div>
+              )}
+            </>
           )}
 
           {error && <p role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-200">{error}</p>}
 
-          <button type="submit" disabled={loading || (mode === 'register' && rollNumber.length > 0 && !parsedRoll)} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-950/40 transition hover:from-indigo-400 hover:to-violet-500 focus:outline-none focus:ring-4 focus:ring-indigo-400/30 disabled:cursor-not-allowed disabled:opacity-50">
-            {loading ? 'Please wait...' : mode === 'register' ? 'Create my account' : 'Continue to CICS'} {!loading && <span className="transition-transform group-hover:translate-x-0.5">→</span>}
+          <button type="submit" disabled={loading || otpSending || (mode === 'register' && regStep === 'form' && rollNumber.length > 0 && !parsedRoll)} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-950/40 transition hover:from-indigo-400 hover:to-violet-500 focus:outline-none focus:ring-4 focus:ring-indigo-400/30 disabled:cursor-not-allowed disabled:opacity-50">
+            {loading || otpSending ? 'Please wait...' : mode === 'register' ? (regStep === 'form' ? 'Send verification code' : 'Create my account') : 'Continue to CICS'} {!loading && !otpSending && <span className="transition-transform group-hover:translate-x-0.5">→</span>}
           </button>
         </form>
 

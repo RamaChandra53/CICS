@@ -24,7 +24,17 @@ export default function TrustUnlockModal({
   onVerified,
   userRollNumber,
 }: TrustUnlockModalProps) {
-  const [showVerification, setShowVerification] = useState(false);
+  const [showVerification, setShowVerification] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const saved = sessionStorage.getItem('cics_pending_verification');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.rollNumber === userRollNumber && Date.now() - parsed.sentAt < 10 * 60 * 1000;
+      }
+    } catch {}
+    return false;
+  });
 
   if (!isOpen) return null;
 

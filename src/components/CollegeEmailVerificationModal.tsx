@@ -16,11 +16,51 @@ export default function CollegeEmailVerificationModal({
   onSuccess, 
   userRollNumber 
 }: CollegeEmailVerificationModalProps) {
-  const [email, setEmail] = useState('');
-  const [step, setStep] = useState<'email' | 'otp'>('email');
+  const [email, setEmail] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      const saved = sessionStorage.getItem('cics_pending_verification');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.rollNumber === userRollNumber && Date.now() - parsed.sentAt < 10 * 60 * 1000) {
+          return parsed.email || '';
+        }
+      }
+    } catch {}
+    return '';
+  });
+
+  const [step, setStep] = useState<'email' | 'otp'>(() => {
+    if (typeof window === 'undefined') return 'email';
+    try {
+      const saved = sessionStorage.getItem('cics_pending_verification');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.rollNumber === userRollNumber && Date.now() - parsed.sentAt < 10 * 60 * 1000) {
+          return 'otp';
+        }
+      }
+    } catch {}
+    return 'email';
+  });
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [resendTimer, setResendTimer] = useState(0);
+  const [resendTimer, setResendTimer] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    try {
+      const saved = sessionStorage.getItem('cics_pending_verification');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.rollNumber === userRollNumber) {
+          const elapsed = Math.floor((Date.now() - parsed.sentAt) / 1000);
+          return Math.max(0, 60 - elapsed);
+        }
+      }
+    } catch {}
+    return 0;
+  });
+
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   
   // Refs for OTP input boxes
@@ -63,10 +103,18 @@ export default function CollegeEmailVerificationModal({
       const res = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: normalizedEmail, type: 'email_verification' }),
+        body: JSON.stringify({ email: normalizedEmail, type: 'email_verification' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
+
+      try {
+        sessionStorage.setItem('cics_pending_verification', JSON.stringify({
+          email: normalizedEmail,
+          rollNumber: userRollNumber,
+          sentAt: Date.now(),
+        }));
+      } catch {}
 
       setStep('otp');
       setResendTimer(60);
@@ -133,6 +181,9 @@ export default function CollegeEmailVerificationModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to verify OTP');
 
+      try {
+        sessionStorage.removeItem('cics_pending_verification');
+      } catch {}
       onSuccess();
       onClose();
     } catch (err: unknown) {
@@ -149,13 +200,22 @@ export default function CollegeEmailVerificationModal({
     setError('');
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       const res = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), type: 'email_verification' }),
+        body: JSON.stringify({ email: normalizedEmail, type: 'email_verification' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to resend OTP');
+
+      try {
+        sessionStorage.setItem('cics_pending_verification', JSON.stringify({
+          email: normalizedEmail,
+          rollNumber: userRollNumber,
+          sentAt: Date.now(),
+        }));
+      } catch {}
 
       setResendTimer(60);
       setError('');
@@ -167,6 +227,9 @@ export default function CollegeEmailVerificationModal({
   };
 
   const handleBack = () => {
+    try {
+      sessionStorage.removeItem('cics_pending_verification');
+    } catch {}
     setStep('email');
     setOtp(['', '', '', '', '', '']);
     setError('');
@@ -174,6 +237,9 @@ export default function CollegeEmailVerificationModal({
   };
 
   const closeAndReset = () => {
+    try {
+      sessionStorage.removeItem('cics_pending_verification');
+    } catch {}
     setEmail('');
     setStep('email');
     setOtp(['', '', '', '', '', '']);

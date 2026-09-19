@@ -8,16 +8,17 @@ import { validateMGITEmail } from '@/lib/emailValidation';
  *
  * Creates a new account using the password selected by the student.
  *
- * The client sends { rollNumber, collegeEmail, password } and the server:
+ * The client sends { rollNumber, collegeEmail, password, otpCode } and the server:
  * 1. Validates the roll number format
- * 2. Checks if a profile already exists for this roll number
- * 3. Creates a Supabase Auth account, which securely hashes the password
- * 4. Saves the unique college email in the user's profile
+ * 2. Verifies the email OTP so no one can register on someone else's behalf
+ * 3. Checks if a profile already exists for this roll number
+ * 4. Creates a Supabase Auth account, which securely hashes the password
+ * 5. Saves the unique college email in the user's profile
  */
 
 export async function POST(request: NextRequest) {
   try {
-    const { rollNumber, collegeEmail, password } = await request.json();
+    const { rollNumber, collegeEmail, password, otpCode } = await request.json();
 
     if (!rollNumber || typeof rollNumber !== 'string') {
       return NextResponse.json(
@@ -40,6 +41,14 @@ export async function POST(request: NextRequest) {
     if (typeof password !== 'string' || password.length < 6) {
       return NextResponse.json(
         { error: 'Password must be at least 6 characters long.' },
+        { status: 400 }
+      );
+    }
+
+    // OTP is required to prove the user owns this email address
+    if (typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
+      return NextResponse.json(
+        { error: 'A valid 6-digit verification code is required.' },
         { status: 400 }
       );
     }
@@ -70,6 +79,30 @@ export async function POST(request: NextRequest) {
         persistSession: false,
       },
     });
+
+    // ── Verify the email OTP ────────────────────────────────
+    const { data: otpRecord, error: otpError } = await supabaseAdmin
+      .from('otp_codes')
+      .select('id, expires_at')
+      .eq('email', normalizedCollegeEmail)
+      .eq('code', otpCode)
+      .eq('type', 'email_verification')
+      .maybeSingle();
+
+    if (otpError || !otpRecord) {
+      return NextResponse.json(
+        { error: 'Invalid or expired verification code. Please request a new one.' },
+        { status: 401 }
+      );
+    }
+
+    if (new Date() > new Date(otpRecord.expires_at)) {
+      await supabaseAdmin.from('otp_codes').delete().eq('id', otpRecord.id);
+      return NextResponse.json(
+        { error: 'Verification code has expired. Please request a new one.' },
+        { status: 401 }
+      );
+    }
 
     // Check if a profile already exists with this roll number
     const { data: existingProfile, error: profileCheckError } = await supabaseAdmin
@@ -163,6 +196,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // ── Clean up used OTP ───────────────────────────────────
+    await supabaseAdmin.from('otp_codes').delete().eq('id', otpRecord.id);
 
     return NextResponse.json({
       success: true,
