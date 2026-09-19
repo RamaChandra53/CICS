@@ -19,20 +19,9 @@ CREATE INDEX IF NOT EXISTS idx_otp_codes_type ON public.otp_codes(type);
 -- Enable RLS
 ALTER TABLE public.otp_codes ENABLE ROW LEVEL SECURITY;
 
--- RLS policies (using DROP IF EXISTS to handle existing policies)
+-- OTPs are server-only credentials. The service role bypasses RLS, so no
+-- client-facing policies are created for this table.
 DROP POLICY IF EXISTS "Users can view their own OTP codes" ON public.otp_codes;
 DROP POLICY IF EXISTS "Users can insert their own OTP codes" ON public.otp_codes;
 DROP POLICY IF EXISTS "Users can update their own OTP codes" ON public.otp_codes;
 DROP POLICY IF EXISTS "Users can delete their own OTP codes" ON public.otp_codes;
-
-CREATE POLICY "Users can view their own OTP codes" ON public.otp_codes
-  FOR SELECT USING (true);
-
-CREATE POLICY "Users can insert their own OTP codes" ON public.otp_codes
-  FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Users can update their own OTP codes" ON public.otp_codes
-  FOR UPDATE USING (true);
-
-CREATE POLICY "Users can delete their own OTP codes" ON public.otp_codes
-  FOR DELETE USING (true);

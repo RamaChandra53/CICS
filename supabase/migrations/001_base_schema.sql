@@ -145,6 +145,10 @@ ALTER TABLE community_members ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
+DROP POLICY IF EXISTS "Users can insert their own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
+
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles
   FOR SELECT USING (true);
 
@@ -155,6 +159,11 @@ CREATE POLICY "Users can update their own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
 
 -- Posts policies
+DROP POLICY IF EXISTS "Posts are viewable by authenticated users" ON posts;
+DROP POLICY IF EXISTS "Authenticated users can create posts" ON posts;
+DROP POLICY IF EXISTS "Users can update their own posts" ON posts;
+DROP POLICY IF EXISTS "Users can delete their own posts" ON posts;
+
 CREATE POLICY "Posts are viewable by authenticated users" ON posts
   FOR SELECT USING (auth.role() = 'authenticated');
 
@@ -168,6 +177,11 @@ CREATE POLICY "Users can delete their own posts" ON posts
   FOR DELETE USING (auth.uid() = author_id);
 
 -- Comments policies
+DROP POLICY IF EXISTS "Comments are viewable by authenticated users" ON comments;
+DROP POLICY IF EXISTS "Authenticated users can create comments" ON comments;
+DROP POLICY IF EXISTS "Users can update their own comments" ON comments;
+DROP POLICY IF EXISTS "Users can delete their own comments" ON comments;
+
 CREATE POLICY "Comments are viewable by authenticated users" ON comments
   FOR SELECT USING (auth.role() = 'authenticated');
 
@@ -181,6 +195,11 @@ CREATE POLICY "Users can delete their own comments" ON comments
   FOR DELETE USING (auth.uid() = author_id);
 
 -- Communities policies
+DROP POLICY IF EXISTS "Communities are viewable by authenticated users" ON communities;
+DROP POLICY IF EXISTS "Community members are viewable by authenticated users" ON community_members;
+DROP POLICY IF EXISTS "Users can join communities themselves" ON community_members;
+DROP POLICY IF EXISTS "Users can leave communities themselves" ON community_members;
+
 CREATE POLICY "Communities are viewable by authenticated users" ON communities
   FOR SELECT USING (auth.role() = 'authenticated');
 
@@ -195,6 +214,11 @@ CREATE POLICY "Users can leave communities themselves" ON community_members
 
 -- Post votes policies
 ALTER TABLE post_votes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Post votes are viewable by authenticated users" ON post_votes;
+DROP POLICY IF EXISTS "Authenticated users can insert their own votes" ON post_votes;
+DROP POLICY IF EXISTS "Users can update their own votes" ON post_votes;
+DROP POLICY IF EXISTS "Users can delete their own votes" ON post_votes;
 
 CREATE POLICY "Post votes are viewable by authenticated users" ON post_votes
   FOR SELECT USING (auth.role() = 'authenticated');
@@ -212,6 +236,10 @@ CREATE POLICY "Users can delete their own votes" ON post_votes
 INSERT INTO storage.buckets (id, name, public) VALUES ('id-cards', 'id-cards', false) ON CONFLICT DO NOTHING;
 
 -- Storage policies for id-cards bucket
+DROP POLICY IF EXISTS "Authenticated users can upload ID cards" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view their own ID cards" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can view all ID cards for verification" ON storage.objects;
+
 CREATE POLICY "Authenticated users can upload ID cards" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'id-cards' AND auth.role() = 'authenticated');
 
@@ -235,6 +263,9 @@ CREATE POLICY "Admins can view all ID cards for verification" ON storage.objects
 
 -- Storage bucket for post images
 INSERT INTO storage.buckets (id, name, public) VALUES ('post-images', 'post-images', true) ON CONFLICT DO NOTHING;
+
+DROP POLICY IF EXISTS "Authenticated users can upload post images" ON storage.objects;
+DROP POLICY IF EXISTS "Post images are publicly accessible" ON storage.objects;
 
 CREATE POLICY "Authenticated users can upload post images" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'post-images' AND auth.role() = 'authenticated');

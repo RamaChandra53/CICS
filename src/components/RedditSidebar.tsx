@@ -140,7 +140,6 @@ export default function RedditSidebar() {
                 profile={profile}
                 onPostCreated={() => {
                   setShowCreatePost(false);
-                  router.refresh();
                 }}
               />
             </div>

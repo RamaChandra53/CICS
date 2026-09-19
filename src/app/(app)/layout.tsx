@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { ToastProvider } from '@/components/Toast';
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -121,13 +122,24 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
             </span>
             CICS
           </Link>
-          <Link
-            href="/profile"
-            aria-label="Profile"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-indigo-500/20 text-sm font-semibold text-indigo-200"
-          >
-            {initials}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/search"
+              aria-label="Search"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:text-white transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </Link>
+            <Link
+              href="/profile"
+              aria-label="Profile"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-indigo-500/20 text-sm font-semibold text-indigo-200"
+            >
+              {initials}
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -155,7 +167,9 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <AppLayoutContent>{children}</AppLayoutContent>
+      <ToastProvider>
+        <AppLayoutContent>{children}</AppLayoutContent>
+      </ToastProvider>
     </AuthProvider>
   );
 }

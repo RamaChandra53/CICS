@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
 import ReportModal from './ReportModal';
+import { useToast } from './Toast';
 
 interface HorizontalVoteButtonsProps {
   postId: string;
@@ -38,6 +39,7 @@ export default function HorizontalVoteButtons({
   const [userVote, setUserVote] = useState<VoteType | null>(null);
   const [voting, setVoting] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const { showToast } = useToast();
 
   const getErrorMessage = (err: unknown) => {
     if (err instanceof Error) return err.message;
@@ -75,10 +77,10 @@ export default function HorizontalVoteButtons({
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      // Show success feedback (you could add a toast here)
-      console.log('Post link copied to clipboard');
+      showToast('Link copied!', 'success');
     } catch (error) {
       console.error('Failed to copy:', error);
+      showToast('Failed to copy link', 'error');
     }
   };
 

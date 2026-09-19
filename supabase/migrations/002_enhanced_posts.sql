@@ -18,7 +18,12 @@ ADD COLUMN IF NOT EXISTS link_url TEXT,
 ADD COLUMN IF NOT EXISTS link_metadata JSONB, -- Store link preview metadata
 ADD COLUMN IF NOT EXISTS poll_options TEXT[], -- Array of poll options
 ADD COLUMN IF NOT EXISTS poll_expires_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS display_mode TEXT DEFAULT 'full',
 ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_display_mode_check;
+ALTER TABLE posts ADD CONSTRAINT posts_display_mode_check
+  CHECK (display_mode IN ('full', 'partial', 'anonymous', 'pseudo'));
 
 -- Add foreign key constraint for community_slug (only if communities table exists and constraint doesn't exist)
 DO $$

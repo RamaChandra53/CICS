@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Community } from '@/types';
 import PostCard from '@/components/PostCard';
@@ -14,13 +14,13 @@ import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import SkeletonFeed from '@/components/ui/SkeletonFeed';
 import useFeedPosts from '@/hooks/useFeedPosts';
 
-const BASE_COMMUNITY_CHIPS = [
+const FALLBACK_COMMUNITY_CHIPS = [
   { id: 'all', label: 'All' },
-  { id: 'general', label: 'General' },
+  { id: 'campus', label: 'Campus' },
   { id: 'confessions', label: 'Confessions' },
-  { id: 'rants', label: 'Rants' },
-  { id: 'random', label: 'Random' },
   { id: 'placements', label: 'Placements' },
+  { id: 'clubs', label: 'Clubs' },
+  { id: 'alumni', label: 'Alumni' },
 ];
 
 export default function FeedPage() {
@@ -52,14 +52,11 @@ export default function FeedPage() {
   } = useFeedPosts(selectedCommunity);
 
   const communityChips = useMemo(() => {
-    if (communities.length === 0) return BASE_COMMUNITY_CHIPS;
-    const labelMap = new Map(communities.map((community) => [community.slug, community.name]));
-    const hasMatchingChip = BASE_COMMUNITY_CHIPS.some((chip) => labelMap.has(chip.id));
-    if (!hasMatchingChip) return BASE_COMMUNITY_CHIPS;
-    return BASE_COMMUNITY_CHIPS.map((chip) => ({
-      ...chip,
-      label: labelMap.get(chip.id) ?? chip.label,
-    }));
+    if (communities.length === 0) return FALLBACK_COMMUNITY_CHIPS;
+    return [
+      { id: 'all', label: 'All' },
+      ...communities.map((c) => ({ id: c.slug, label: c.name })),
+    ];
   }, [communities]);
 
   const composeParam = searchParams.get('compose');
@@ -99,32 +96,6 @@ export default function FeedPage() {
     fetchCommunities();
     // Initial feed load is automatically handled by the useFeedPosts hook
   }, [authLoading, profileLoading, user, fetchCommunities]);
-
-  // Use a ref to keep track of the latest refresh function without triggering re-subscriptions
-  const refreshRef = useRef(refresh);
-  useEffect(() => {
-    refreshRef.current = refresh;
-  }, [refresh]);
-
-  // Real-time subscription for new posts
-  useEffect(() => {
-    if (!authReady) return;
-
-    const channel = supabase
-      .channel('feed-posts')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'posts',
-      }, () => {
-        refreshRef.current();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, authReady]);
 
   if (authLoading || (!authReady && !postsError)) {
     return (
@@ -173,9 +144,6 @@ export default function FeedPage() {
             <EnhancedCreatePostForm
               profile={authProfile}
               defaultCommunity="campus"
-              onPostCreated={() => {
-                refresh();
-              }}
             />
           </div>
         )}

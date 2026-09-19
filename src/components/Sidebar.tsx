@@ -208,6 +208,19 @@ export default function Sidebar() {
 
       {/* Reddit-style Subreddits */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-200px)]">
+        {/* Search link */}
+        <Link
+          href="/search"
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors mb-2 ${
+            pathname === '/search'
+              ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+          }`}
+        >
+          <span className="text-base">🔍</span>
+          <span>Search</span>
+        </Link>
+
         <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">Core Subreddits</p>
         {myCommunities.map(renderCommunityLink)}
 

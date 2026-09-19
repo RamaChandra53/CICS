@@ -318,7 +318,17 @@ const PostCard = memo(function PostCard({
           {room?.label || post.room || 'general'}
         </Link>
         <span className="text-slate-600">·</span>
-        <span className="text-slate-300">{displayInfo.displayName}</span>
+        {post.is_anon_post || post.display_mode === 'anonymous' ? (
+          <span className="text-slate-300">{displayInfo.displayName}</span>
+        ) : (
+          <Link
+            href={`/user/${post.author_id}`}
+            onClick={stopProp}
+            className="text-slate-300 hover:text-indigo-300 transition-colors"
+          >
+            {displayInfo.displayName}
+          </Link>
+        )}
         {displayInfo.showVerified && (
           <span className="text-[10px] font-semibold text-indigo-300">✓</span>
         )}

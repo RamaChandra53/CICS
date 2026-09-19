@@ -29,24 +29,28 @@ CREATE TABLE IF NOT EXISTS comment_votes (
 ALTER TABLE comment_votes ENABLE ROW LEVEL SECURITY;
 
 -- Authenticated users can read all comment votes
+DROP POLICY IF EXISTS "Authenticated users can view comment votes" ON comment_votes;
 CREATE POLICY "Authenticated users can view comment votes"
   ON comment_votes FOR SELECT
   TO authenticated
   USING (true);
 
 -- Users can insert their own votes
+DROP POLICY IF EXISTS "Users can insert own comment votes" ON comment_votes;
 CREATE POLICY "Users can insert own comment votes"
   ON comment_votes FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 -- Users can update their own votes
+DROP POLICY IF EXISTS "Users can update own comment votes" ON comment_votes;
 CREATE POLICY "Users can update own comment votes"
   ON comment_votes FOR UPDATE
   TO authenticated
   USING (auth.uid() = user_id);
 
 -- Users can delete their own votes
+DROP POLICY IF EXISTS "Users can delete own comment votes" ON comment_votes;
 CREATE POLICY "Users can delete own comment votes"
   ON comment_votes FOR DELETE
   TO authenticated

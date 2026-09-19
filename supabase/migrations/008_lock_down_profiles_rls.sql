@@ -34,9 +34,11 @@ GRANT SELECT ON profiles_public TO anon;
 -- Drop the old overly-permissive policy
 DROP POLICY IF EXISTS "profiles_select_policy" ON profiles;
 DROP POLICY IF EXISTS "Users can read all profiles" ON profiles;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone." ON profiles;
 DROP POLICY IF EXISTS "profiles_are_viewable_by_everyone" ON profiles;
 DROP POLICY IF EXISTS "Enable read access for all users" ON profiles;
+DROP POLICY IF EXISTS "Users can read own full profile" ON profiles;
 
 -- Create new restrictive policy: users can only SELECT their own full profile
 CREATE POLICY "Users can read own full profile"

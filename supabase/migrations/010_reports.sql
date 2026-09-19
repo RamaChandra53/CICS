@@ -15,31 +15,35 @@ CREATE TABLE IF NOT EXISTS reports (
   reviewed_by UUID REFERENCES profiles(id),
   created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
   reviewed_at TIMESTAMPTZ,
-  CONSTRAINT report_has_target CHECK (post_id IS NOT NULL OR comment_id IS NOT NULL)
+  CONSTRAINT report_has_target CHECK ((post_id IS NOT NULL) <> (comment_id IS NOT NULL))
 );
 
 -- Enable RLS
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 
 -- Users can create reports
+DROP POLICY IF EXISTS "Authenticated users can create reports" ON reports;
 CREATE POLICY "Authenticated users can create reports" ON reports
   FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = reporter_id);
 
 -- Users can view their own reports
+DROP POLICY IF EXISTS "Users can view own reports" ON reports;
 CREATE POLICY "Users can view own reports" ON reports
   FOR SELECT
   TO authenticated
   USING (auth.uid() = reporter_id);
 
 -- Admins can view all reports
+DROP POLICY IF EXISTS "Admins can view all reports" ON reports;
 CREATE POLICY "Admins can view all reports" ON reports
   FOR SELECT
   TO authenticated
   USING (EXISTS (SELECT 1 FROM admins WHERE user_id = auth.uid()));
 
 -- Admins can update reports (review, action, dismiss)
+DROP POLICY IF EXISTS "Admins can update reports" ON reports;
 CREATE POLICY "Admins can update reports" ON reports
   FOR UPDATE
   TO authenticated

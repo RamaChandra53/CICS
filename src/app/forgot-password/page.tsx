@@ -168,29 +168,6 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      // Client-side OTP format validation only.
-      // The actual OTP verification + consumption happens server-side
-      // in the /api/reset-password endpoint to prevent replay attacks.
-      // We do a lightweight check here to give immediate feedback.
-      const supabase = createClient();
-      const { data: otpCheck } = await supabase
-        .from('otp_codes')
-        .select('id, expires_at')
-        .eq('email', tempEmail)
-        .eq('code', otp)
-        .eq('type', 'password_reset')
-        .single();
-
-      if (!otpCheck) {
-        throw new Error('Invalid or expired OTP code');
-      }
-
-      if (new Date() > new Date(otpCheck.expires_at)) {
-        throw new Error('OTP code has expired. Please request a new one.');
-      }
-
-      // OTP looks valid — proceed to password step.
-      // Server will re-verify and consume it atomically during reset.
       setStep('newPassword');
     } catch (err: unknown) {
       setError(getReadableErrorMessage(err));

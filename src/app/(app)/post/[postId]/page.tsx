@@ -68,7 +68,16 @@ function CommentItem({
 
         <div className="flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-semibold text-white">{displayInfo.displayName}</span>
+            {comment.is_anon_comment || displayMode === 'anonymous' ? (
+              <span className="text-sm font-semibold text-white">{displayInfo.displayName}</span>
+            ) : (
+              <Link
+                href={`/user/${comment.author_id}`}
+                className="text-sm font-semibold text-white hover:text-indigo-300 transition-colors"
+              >
+                {displayInfo.displayName}
+              </Link>
+            )}
 
             {displayInfo.showVerified && (
               <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-semibold text-white">
@@ -533,7 +542,16 @@ export default function PostPage() {
               campus/{room?.label || 'general'}
             </Link>
             <span className="text-slate-600">•</span>
-            <span className="text-slate-300">{postDisplayInfo.displayName}</span>
+            {post.is_anon_post || postDisplayMode === 'anonymous' ? (
+              <span className="text-slate-300">{postDisplayInfo.displayName}</span>
+            ) : (
+              <Link
+                href={`/user/${post.author_id}`}
+                className="text-slate-300 hover:text-indigo-300 transition-colors"
+              >
+                {postDisplayInfo.displayName}
+              </Link>
+            )}
             {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
               <span className="text-[10px] font-semibold text-indigo-300">✓</span>
             )}

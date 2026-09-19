@@ -110,7 +110,7 @@ export default function RoomPage() {
         let query = supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
+            'id, author_id, room, content, image_url, video_url, link_url, poll_options, poll_expires_at, post_type, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
           )
           .order('created_at', { ascending: false })
           .range(pageToLoad * PAGE_SIZE, pageToLoad * PAGE_SIZE + PAGE_SIZE - 1);
@@ -156,9 +156,11 @@ export default function RoomPage() {
           }
         }
 
-        const normalized = postsData.map((post: Post) => ({
+        const normalized = postsData.map((post) => ({
           ...post,
-          comment_count: 0,
+          comment_count: Array.isArray((post as Record<string, unknown>).comment_count)
+            ? ((post as Record<string, unknown>).comment_count as { count: number }[])?.[0]?.count ?? 0
+            : (post.comment_count as number) ?? 0,
           user_vote: voteMap.get(post.id) ?? null,
         }));
 
@@ -373,32 +375,7 @@ export default function RoomPage() {
 
     init();
 
-    // Map community slugs to room values for real-time subscription
-     const channel = hasSafeRoomName
-       ? supabase
-           .channel(`room-${roomName}`)
-           .on(
-             'postgres_changes',
-             {
-               event: 'INSERT',
-               schema: 'public',
-               table: 'posts',
-               filter: roomName === 'campus' ? 'room=in.(campus,college)' : `room=eq.${roomName}`,
-             },
-             () => {
-               setPage(0);
-               setHasMore(true);
-               fetchPosts(0, { reset: true });
-             }
-           )
-           .subscribe()
-       : null;
-
-     return () => {
-       if (channel) {
-         supabase.removeChannel(channel);
-       }
-     };
+    return undefined;
    }, [supabase, postRoom, authProfile, roomName, authLoading, user, router, fetchPosts, prefetchCommunities, hasSafeRoomName]);
 
   useEffect(() => {
@@ -555,11 +532,6 @@ export default function RoomPage() {
                 <EnhancedCreatePostForm
                   profile={authProfile}
                   defaultCommunity={postRoom === 'campus' ? 'college' : postRoom}
-                  onPostCreated={() => {
-                    setPage(0);
-                    setHasMore(true);
-                    fetchPosts(0, { reset: true });
-                  }}
                 />
               </div>
             )}

@@ -98,10 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
-  const fetchProfile = async (userId: string): Promise<Profile | null> => {
-    setProfileLoading(true);
-    setError(null);
-    setErrorScope(null);
+  const fetchProfile = async (userId: string, options?: { background?: boolean }): Promise<Profile | null> => {
+    if (!options?.background) {
+      setProfileLoading(true);
+      setError(null);
+      setErrorScope(null);
+    }
     try {
       let profileResult:
         | { data: Profile | null; error: { message?: string } | null }
@@ -149,11 +151,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return finalProfile;
     } catch (fetchError) {
       console.error('Profile fetch error:', fetchError);
-      setError('Unable to load your profile. Please try again.');
-      setErrorScope('profile');
+      if (!options?.background) {
+        setError('Unable to load your profile. Please try again.');
+        setErrorScope('profile');
+      }
       return null;
     } finally {
-      setProfileLoading(false);
+      if (!options?.background) {
+        setProfileLoading(false);
+      }
     }
   };
 
@@ -252,21 +258,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event: AuthChangeEvent, session: Session | null) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         if (!mounted) return;
         if (isInitializingRef.current) return;
         if (authRequestInFlightRef.current) return;
 
-        setLoading(true);
+        const isSignOut = event === 'SIGNED_OUT';
+        const isSignIn = event === 'SIGNED_IN';
+        const currentUser = session?.user ?? null;
+        
+        // Only trigger full-screen loading if signing in/out or we don't have a user yet.
+        // Background token refreshes should NOT block the UI.
+        const shouldBlockUI = isSignOut || (isSignIn && !user);
+        
+        if (shouldBlockUI) {
+          setLoading(true);
+        }
+        
         setError(null);
         setErrorScope(null);
         setSession(session ?? null);
 
-        const currentUser = session?.user ?? null;
         setUser(currentUser ? { id: currentUser.id } : null);
 
         if (currentUser) {
-          const profileData = await fetchProfile(currentUser.id);
+          // If we already have the profile for this user and it's just a token refresh, 
+          // we can load it in the background without blocking the UI if we wanted,
+          // but we still await it here. Since shouldBlockUI is false for refreshes, 
+          // the UI won't show a loading spinner.
+          const profileData = await fetchProfile(currentUser.id, { background: !shouldBlockUI });
           if (mounted) {
             setProfile(profileData);
           }
@@ -274,7 +294,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(null);
         }
 
-        setLoading(false);
+        if (shouldBlockUI) {
+          setLoading(false);
+        }
       }
     );
 

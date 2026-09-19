@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { createClient } from '@/lib/supabase';
 import { validateMGITEmail, validateEmailMatchesRoll, maskEmail } from '@/lib/emailValidation';
 
 interface CollegeEmailVerificationModalProps {
@@ -17,7 +16,6 @@ export default function CollegeEmailVerificationModal({
   onSuccess, 
   userRollNumber 
 }: CollegeEmailVerificationModalProps) {
-  const supabase = createClient();
   const [email, setEmail] = useState('');
   const [step, setStep] = useState<'email' | 'otp'>('email');
   const [loading, setLoading] = useState(false);
@@ -112,46 +110,14 @@ export default function CollegeEmailVerificationModal({
     setError('');
 
     try {
-      // Verify OTP against our otp_codes table
       const normalizedEmail = email.trim().toLowerCase();
-      const { data: otpRecord, error: otpError } = await supabase
-        .from('otp_codes')
-        .select('id, expires_at')
-        .eq('email', normalizedEmail)
-        .eq('code', finalOtp)
-        .eq('type', 'email_verification')
-        .maybeSingle();
-
-      if (otpError || !otpRecord) {
-        throw new Error('Invalid or expired OTP code.');
-      }
-
-      if (new Date() > new Date(otpRecord.expires_at)) {
-        throw new Error('OTP has expired. Please request a new one.');
-      }
-
-      // Delete the used OTP
-      await supabase.from('otp_codes').delete().eq('id', otpRecord.id);
-
-      // Get current user and update profile
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('Please login to verify your email');
-      }
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ 
-          college_email: normalizedEmail,
-          is_email_verified: true 
-        })
-        .eq('id', user.id);
-
-      if (updateError) {
-        console.error('Error updating profile:', updateError);
-        throw new Error('Email verified but failed to update profile');
-      }
+      const res = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, otpCode: finalOtp, type: 'email_verification' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to verify OTP');
 
       onSuccess();
       onClose();
