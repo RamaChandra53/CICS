@@ -37,6 +37,7 @@ export default function FeedPage() {
   const [authReady, setAuthReady] = useState(false);
 
   const [selectedCommunity, setSelectedCommunity] = useState('all');
+  const [composeSignal, setComposeSignal] = useState(0);
 
   const {
     posts,
@@ -61,11 +62,22 @@ export default function FeedPage() {
 
   const composeParam = searchParams.get('compose');
 
-  useEffect(() => {
-    if (composeParam !== '1') return;
+  const openComposer = useCallback(() => {
+    setComposeSignal((prev) => prev + 1);
     const target = document.getElementById('create-post');
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [composeParam]);
+  }, []);
+
+  useEffect(() => {
+    if (composeParam !== '1') return;
+    openComposer();
+  }, [composeParam, openComposer]);
+
+  useEffect(() => {
+    const handleOpen = () => openComposer();
+    window.addEventListener('open-create-post', handleOpen);
+    return () => window.removeEventListener('open-create-post', handleOpen);
+  }, [openComposer]);
 
   // Fetch communities list (for chip label enrichment)
   const fetchCommunities = useCallback(async () => {
@@ -144,6 +156,7 @@ export default function FeedPage() {
             <EnhancedCreatePostForm
               profile={authProfile}
               defaultCommunity="campus"
+              openSignal={composeSignal}
             />
           </div>
         )}

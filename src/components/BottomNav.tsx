@@ -42,8 +42,7 @@ export default function BottomNav() {
                   router.push('/feed?compose=1');
                   return;
                 }
-                const target = document.getElementById('create-post');
-                target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                window.dispatchEvent(new Event('open-create-post'));
               }}
               className={`flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-medium transition-colors ${
                 isActive ? 'text-indigo-400' : 'text-slate-400'

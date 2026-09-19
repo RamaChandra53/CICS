@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Profile, Community, ROOMS, DisplayMode } from '@/types';
 import TrustUnlockModal from './TrustUnlockModal';
@@ -30,6 +30,7 @@ interface EnhancedCreatePostFormProps {
   defaultCommunity?: string;
   onPostCreated?: () => void;
   className?: string;
+  openSignal?: number;
 }
 
 interface PostFormData {
@@ -55,6 +56,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   defaultCommunity = '',
   onPostCreated,
   className = '',
+  openSignal,
 }) => {
   const supabase = createClient();
 
@@ -66,8 +68,21 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   );
   const [showTrustModal, setShowTrustModal] = useState(false);
   const [localCommunities, setLocalCommunities] = useState<Community[]>([]);
+  const lastOpenSignal = useRef<number | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    if (openSignal === undefined) return;
+    if (lastOpenSignal.current === null) {
+      lastOpenSignal.current = openSignal;
+      return;
+    }
+    if (lastOpenSignal.current === openSignal) return;
+    lastOpenSignal.current = openSignal;
+    setExpanded(true);
+    setError('');
+  }, [openSignal]);
+
+  useEffect(() => {
     const fetchCommunities = async () => {
       try {
         const { data, error } = await supabase
