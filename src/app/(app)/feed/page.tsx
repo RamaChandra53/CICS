@@ -119,9 +119,34 @@ export default function FeedPage() {
 
   return (
     <ErrorBoundary>
-      <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6 overflow-x-hidden">
+      <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-5 md:py-8 overflow-x-hidden">
+        <section className="mb-5 rounded-3xl border border-white/8 bg-gradient-to-br from-indigo-500/15 via-[#151b2b] to-[#111722] px-5 py-5 shadow-xl shadow-black/10 md:px-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-indigo-300">Your campus space</p>
+              <h1 className="text-xl font-bold tracking-tight text-white md:text-2xl">Good to see you{authProfile?.username ? `, ${authProfile.username}` : ''}.</h1>
+              <p className="mt-1.5 max-w-md text-sm leading-6 text-slate-400">Catch up on campus conversations or start one of your own.</p>
+            </div>
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={isRefreshing}
+              aria-label="Refresh feed"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-indigo-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <svg className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2M20 20h-5" />
+              </svg>
+            </button>
+          </div>
+          <button type="button" onClick={openComposer} className="mt-5 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-left text-sm text-slate-500 transition hover:border-indigo-400/30 hover:bg-white/5 hover:text-slate-300">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-400/15 text-lg leading-none text-indigo-200">+</span>
+            Share something with your campus…
+          </button>
+        </section>
+
         {/* Community Chips */}
-        <div className="mb-4 overflow-x-auto scrollbar-hide -mx-3 px-3">
+        <div className="mb-5 overflow-x-auto scrollbar-hide -mx-3 px-3">
           <div className="flex gap-2 pb-1">
             {communityChips.map((chip) => {
               const isActive = selectedCommunity === chip.id;
@@ -130,9 +155,10 @@ export default function FeedPage() {
                   key={chip.id}
                   type="button"
                   onClick={() => setSelectedCommunity(chip.id)}
-                  className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition-colors ${isActive
-                      ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-200'
-                      : 'border-[#252a31] bg-[#15181c] text-slate-400'
+                  aria-pressed={isActive}
+                  className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-semibold transition-all ${isActive
+                      ? 'border-indigo-400/30 bg-indigo-400/15 text-indigo-100 shadow-sm shadow-indigo-950/30'
+                      : 'border-white/8 bg-white/[0.03] text-slate-400 hover:border-white/15 hover:text-slate-200'
                     }`}
                 >
                   {chip.label}
@@ -152,7 +178,7 @@ export default function FeedPage() {
 
         {/* Create Post Box */}
         {authProfile && (
-          <div id="create-post" className="mb-4">
+          <div id="create-post" className="mb-5 scroll-mt-5">
             <EnhancedCreatePostForm
               profile={authProfile}
               defaultCommunity="campus"

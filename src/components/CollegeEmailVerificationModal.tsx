@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { createRef, useMemo, useState, useEffect } from 'react';
 import { validateMGITEmail, validateEmailMatchesRoll, maskEmail } from '@/lib/emailValidation';
 
 interface CollegeEmailVerificationModalProps {
@@ -24,14 +24,7 @@ export default function CollegeEmailVerificationModal({
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   
   // Refs for OTP input boxes
-  const inputRefs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null)
-  ];
+  const inputRefs = useMemo(() => Array.from({ length: 6 }, () => createRef<HTMLInputElement>()), []);
 
   useEffect(() => {
     if (resendTimer > 0) {
@@ -40,18 +33,27 @@ export default function CollegeEmailVerificationModal({
     }
   }, [resendTimer]);
 
+  useEffect(() => {
+    if (isOpen && step === 'otp') {
+      const focusId = window.setTimeout(() => inputRefs[0].current?.focus(), 120);
+      return () => window.clearTimeout(focusId);
+    }
+    return undefined;
+  }, [inputRefs, isOpen, step]);
+
   if (!isOpen) return null;
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
-    if (!validateMGITEmail(email)) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!validateMGITEmail(normalizedEmail)) {
       setError('Must end with @mgit.ac.in');
       return;
     }
 
-    if (!validateEmailMatchesRoll(email, userRollNumber)) {
+    if (!validateEmailMatchesRoll(normalizedEmail, userRollNumber)) {
       setError('This email doesn\'t match your roll number. Please use your own MGIT email.');
       return;
     }
@@ -61,7 +63,7 @@ export default function CollegeEmailVerificationModal({
       const res = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), type: 'email_verification' }),
+      body: JSON.stringify({ email: normalizedEmail, type: 'email_verification' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
@@ -77,18 +79,30 @@ export default function CollegeEmailVerificationModal({
 
   const handleOtpChange = (index: number, value: string) => {
     const newOtp = [...otp];
-    newOtp[index] = value.slice(0, 1);
+    newOtp[index] = value.replace(/\D/g, '').slice(0, 1);
     setOtp(newOtp);
 
     // Auto-focus next input
     if (value && index < 5) {
-      inputRefs[index + 1].current?.focus();
+    inputRefs[index + 1].current?.focus();
     }
 
     // Auto-submit when all 6 digits are filled
     if (newOtp.every(digit => digit.length === 1)) {
       handleOtpSubmit(newOtp.join(''));
     }
+  };
+
+  const handleOtpPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const pastedDigits = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pastedDigits) return;
+    event.preventDefault();
+    const nextOtp = Array.from({ length: 6 }, (_, index) => pastedDigits[index] ?? '');
+    setOtp(nextOtp);
+    setError('');
+    const focusIndex = Math.min(pastedDigits.length, 5);
+    inputRefs[focusIndex].current?.focus();
+    if (pastedDigits.length === 6) void handleOtpSubmit(pastedDigits);
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -159,17 +173,27 @@ export default function CollegeEmailVerificationModal({
     setResendTimer(0);
   };
 
+  const closeAndReset = () => {
+    setEmail('');
+    setStep('email');
+    setOtp(['', '', '', '', '', '']);
+    setError('');
+    setResendTimer(0);
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-6 max-w-md w-full">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="verification-title">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#121926] p-5 shadow-2xl shadow-black/50 sm:p-7">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-white text-xl font-semibold flex items-center gap-2">
-            <span className="text-2xl">🔒</span>
-            Verify for trusted anonymous posting
+          <h2 id="verification-title" className="text-white text-xl font-semibold flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-400/15 text-indigo-200">✦</span>
+            <span>Build your campus trust</span>
           </h2>
           <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-300 text-xl transition-colors"
+            onClick={closeAndReset}
+            aria-label="Close verification"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-200"
           >
             ×
           </button>
@@ -178,24 +202,24 @@ export default function CollegeEmailVerificationModal({
         {step === 'email' ? (
           <>
             <div className="mb-6">
-              <p className="text-gray-300 text-sm mb-3">
-                Basic posting works without verification. MGIT email verification unlocks anonymous posting in higher-trust spaces like Placements.
+              <p className="text-slate-300 text-sm leading-6 mb-3">
+                You can already post in open spaces. Verifying your MGIT email unlocks trusted identity options for communities like Placements.
               </p>
             </div>
             
             <form onSubmit={handleEmailSubmit} className="space-y-4">
               <div>
-                <label className="block text-gray-400 text-sm mb-2">College Email</label>
+                <label className="block text-slate-300 text-sm font-medium mb-2">College email</label>
                 <input
                   type="email"
                   value={email}
-                  onChange={e => setEmail(e.target.value.toLowerCase())}
-                  placeholder="___________________"
-                  className="w-full bg-gray-800 text-white placeholder-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 border border-gray-700 font-mono"
+                  onChange={e => { setEmail(e.target.value.toLowerCase()); setError(''); }}
+                  placeholder="you@mgit.ac.in"
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10"
                   required
                 />
-                <p className="text-gray-500 text-xs mt-1">
-                  Must end with @mgit.ac.in
+                <p className="text-slate-500 text-xs mt-1.5">
+                  This must match the roll number on your account.
                 </p>
               </div>
               
@@ -208,15 +232,15 @@ export default function CollegeEmailVerificationModal({
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium py-3 rounded-lg transition-colors"
+                  onClick={closeAndReset}
+                  className="flex-1 rounded-xl border border-white/10 bg-white/5 text-white text-sm font-medium py-3 transition-colors hover:bg-white/10"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-semibold py-3 shadow-lg shadow-indigo-950/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Sending...' : 'Send OTP'}
                 </button>
@@ -227,10 +251,10 @@ export default function CollegeEmailVerificationModal({
           <>
             <div className="mb-6">
               <p className="text-gray-300 text-sm mb-2">
-                📧 OTP sent to {maskEmail(email)}
+                A 6-digit code is on its way to <span className="font-medium text-indigo-200">{maskEmail(email)}</span>
               </p>
               <p className="text-gray-400 text-xs">
-                Enter the 6-digit code:
+                It expires in 10 minutes. Paste the full code or enter each digit.
               </p>
             </div>
             
@@ -244,7 +268,9 @@ export default function CollegeEmailVerificationModal({
                     value={digit}
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
-                    className="w-12 h-12 bg-gray-800 text-white text-center text-lg font-bold rounded-lg border border-gray-700 focus:border-indigo-500 focus:outline-none"
+                    onPaste={handleOtpPaste}
+                    aria-label={`Verification code digit ${index + 1}`}
+                    className="h-12 w-10 rounded-xl border border-white/10 bg-black/20 text-center text-lg font-bold text-white outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 sm:w-12"
                     maxLength={1}
                     inputMode="numeric"
                     pattern="[0-9]"
@@ -262,7 +288,7 @@ export default function CollegeEmailVerificationModal({
                 <button
                   type="submit"
                   disabled={loading || otp.some(digit => !digit)}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-semibold py-3 shadow-lg shadow-indigo-950/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Verifying...' : 'Verify'}
                 </button>
