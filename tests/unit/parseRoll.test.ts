@@ -114,9 +114,11 @@ test.describe('parseRollNumber – invalid inputs', () => {
     expect(parseRollNumber('22261A9930')).toBeNull();
   });
 
-  test('returns null for invalid year prefix', () => {
-    // year must be 22-25
-    expect(parseRollNumber('20261A0530')).toBeNull();
+  test('accepts an older valid intake as alumni', () => {
+    const result = parseRollNumber('20261A0530');
+    expect(result).not.toBeNull();
+    expect(result!.year).toBe('Alumni');
+    expect(result!.yearNumber).toBe('Alumni');
   });
 
   test('returns null for completely invalid input', () => {

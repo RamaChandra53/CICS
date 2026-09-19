@@ -54,8 +54,8 @@ const PROFANITY_PATTERNS = [
   /mgit/i, /official/i, /staff/i, /warden/i,
 ];
 
-// Roll number pattern (MGIT format: 2 digits + 3 letters + 1 letter + 4 digits)
-const ROLL_NUMBER_PATTERN = /^\d{2}[A-Z]{3}[A-Z]\d{4}$/i;
+// Roll number pattern (MGIT format: 22 + 261 + A + branch + student code)
+const ROLL_NUMBER_PATTERN = /^\d{2}261A\d{2}[0-9A-Z]{2}$/i;
 // Phone number pattern
 const PHONE_PATTERN = /\d{10}/;
 

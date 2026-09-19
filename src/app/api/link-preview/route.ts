@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { lookup } from 'node:dns/promises';
 
 /**
  * GET /api/link-preview?url=<url>
@@ -18,21 +19,6 @@ import { RateLimiter, getClientIp } from '@/lib/rate-limiter';
 const limiter = new RateLimiter({ windowMs: 60_000, max: 30 });
 
 // ── SSRF: private / reserved IPv4 ranges ──────────────────────────────────────
-const PRIVATE_IPV4_PATTERNS = [
-  /^127\./,              // Loopback
-  /^0\./,               // This network
-  /^10\./,              // RFC 1918 private
-  /^172\.(1[6-9]|2\d|3[01])\./,  // RFC 1918 private
-  /^192\.168\./,        // RFC 1918 private
-  /^169\.254\./,        // Link-local / AWS metadata (169.254.169.254)
-  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,  // Shared address (RFC 6598)
-  /^192\.0\.[02]\./,    // IETF protocol assignments
-  /^198\.51\.100\./,    // TEST-NET-2 (RFC 5737)
-  /^203\.0\.113\./,     // TEST-NET-3 (RFC 5737)
-  /^240\./,             // Reserved (class E)
-  /^255\.255\.255\.255$/, // Broadcast
-];
-
 // ── SSRF: blocked hostnames ───────────────────────────────────────────────────
 const BLOCKED_HOSTNAMES = new Set([
   'localhost',
@@ -41,43 +27,96 @@ const BLOCKED_HOSTNAMES = new Set([
   '0.0.0.0',
 ]);
 
-function isSsrfUrl(parsedUrl: URL): { blocked: boolean; reason?: string } {
+const IPV4_PATTERN = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+function normalizeHostname(hostname: string) {
+  return hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1').replace(/\.$/, '');
+}
+
+export function isPrivateOrReservedIp(address: string): boolean {
+  const normalized = normalizeHostname(address);
+
+  if (IPV4_PATTERN.test(normalized)) {
+    const parts = normalized.split('.').map((part) => Number(part));
+    if (parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+      return true;
+    }
+
+    const [a, b, c, d] = parts;
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+      (a === 198 && b === 18) ||
+      (a === 198 && b === 19) ||
+      (a === 198 && b === 51 && c === 100) ||
+      (a === 203 && b === 0 && c === 113) ||
+      a >= 224 ||
+      (a === 255 && b === 255 && c === 255 && d === 255)
+    );
+  }
+
+  const compact = normalized.replace(/^0:0:0:0:0:0:0:1$/, '::1');
+  return (
+    compact === '::1' ||
+    compact === '::' ||
+    compact.startsWith('fe80:') ||
+    compact.startsWith('fc') ||
+    compact.startsWith('fd') ||
+    compact.startsWith('ff')
+  );
+}
+
+function isIpLiteral(hostname: string) {
+  const normalized = normalizeHostname(hostname);
+  return IPV4_PATTERN.test(normalized) || normalized.includes(':');
+}
+
+export async function validateLinkPreviewUrl(
+  parsedUrl: URL,
+  resolveHostname: (hostname: string) => Promise<Array<{ address: string }>> = async (hostname) =>
+    lookup(hostname, { all: true })
+): Promise<{ allowed: boolean; reason?: string }> {
   const { protocol, hostname } = parsedUrl;
+  const normalizedHost = normalizeHostname(hostname);
 
   // Only allow http and https
   if (protocol !== 'http:' && protocol !== 'https:') {
-    return { blocked: true, reason: 'Only http and https URLs are supported.' };
+    return { allowed: false, reason: 'Only http and https URLs are supported.' };
   }
 
   // Block by hostname
-  const lowerHost = hostname.toLowerCase();
-  if (BLOCKED_HOSTNAMES.has(lowerHost)) {
-    return { blocked: true, reason: 'URL is not allowed.' };
+  if (BLOCKED_HOSTNAMES.has(normalizedHost)) {
+    return { allowed: false, reason: 'URL is not allowed.' };
   }
 
-  // Block IPv4 private ranges
-  for (const pattern of PRIVATE_IPV4_PATTERNS) {
-    if (pattern.test(hostname)) {
-      return { blocked: true, reason: 'URL is not allowed.' };
-    }
+  if (isIpLiteral(normalizedHost)) {
+    return {
+      allowed: !isPrivateOrReservedIp(normalizedHost),
+      reason: isPrivateOrReservedIp(normalizedHost) ? 'URL is not allowed.' : undefined,
+    };
   }
 
-  // Block IPv6 loopback and link-local
-  // [::1], [fe80::...], [fc00::...], [fd00::...]
-  const ipv6 = hostname.startsWith('[') ? hostname.slice(1, -1) : null;
-  if (ipv6) {
-    const lower = ipv6.toLowerCase();
-    if (
-      lower === '::1' ||
-      lower.startsWith('fe80:') ||
-      lower.startsWith('fc') ||
-      lower.startsWith('fd')
-    ) {
-      return { blocked: true, reason: 'URL is not allowed.' };
-    }
+  let resolvedAddresses: Array<{ address: string }>;
+  try {
+    resolvedAddresses = await resolveHostname(normalizedHost);
+  } catch {
+    return { allowed: false, reason: 'Unable to resolve URL hostname.' };
   }
 
-  return { blocked: false };
+  if (
+    resolvedAddresses.length === 0 ||
+    resolvedAddresses.some(({ address }) => isPrivateOrReservedIp(address))
+  ) {
+    return { allowed: false, reason: 'URL is not allowed.' };
+  }
+
+  return { allowed: true };
 }
 
 export async function GET(request: NextRequest) {
@@ -120,8 +159,8 @@ export async function GET(request: NextRequest) {
   }
 
   // ── SSRF check ───────────────────────────────────────────────────────────────
-  const ssrfCheck = isSsrfUrl(parsedUrl);
-  if (ssrfCheck.blocked) {
+  const ssrfCheck = await validateLinkPreviewUrl(parsedUrl);
+  if (!ssrfCheck.allowed) {
     return NextResponse.json(
       { error: ssrfCheck.reason },
       { status: 400, headers: rateLimitHeaders }

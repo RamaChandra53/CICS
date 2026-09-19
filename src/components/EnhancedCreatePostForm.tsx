@@ -271,16 +271,27 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         }
       }
 
+      const headline = formData.headline.trim();
+      const description = formData.description.trim();
+      const validPollOptions = formData.pollOptions
+        .map((option) => option.trim())
+        .filter(Boolean);
+
       const postData = {
         author_id: profile.id,
         room: formData.community,
-        content:
-          formData.headline.trim() +
-          (formData.description.trim()
-            ? `\n\n${formData.description.trim()}`
-            : ''),
+        content: headline + (description ? `\n\n${description}` : ''),
+        post_type: formData.postType,
+        headline,
+        description: description || null,
+        tags: formData.tags,
+        community_slug: formData.community,
+        is_draft: saveAsDraft,
         image_url: imageUrl,
         video_url: videoUrl,
+        link_url: formData.postType === 'link' ? formData.linkUrl.trim() : null,
+        poll_options: formData.postType === 'poll' ? validPollOptions : null,
+        poll_expires_at: formData.postType === 'poll' ? formData.pollExpiresAt : null,
         is_anon_post: formData.isAnonymous || false,
         display_mode: displayMode,
         year_tag: profile.year || null,

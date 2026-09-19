@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { RateLimiter, getClientIp } from '@/lib/rate-limiter';
 
 /**
  * POST /api/reset-password
@@ -15,22 +16,40 @@ import { NextRequest, NextResponse } from 'next/server';
  * - OTP is consumed (deleted) after successful verification
  * - Rate-limited by OTP expiry (10 minutes)
  */
+const limiter = new RateLimiter({ windowMs: 60_000, max: 10 });
+
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const rateResult = limiter.check(ip);
+
+    const rateLimitHeaders = {
+      'X-RateLimit-Limit': rateResult.limit.toString(),
+      'X-RateLimit-Remaining': rateResult.remaining.toString(),
+      'X-RateLimit-Reset': Math.ceil(rateResult.resetAt / 1000).toString(),
+    };
+
+    if (!rateResult.allowed) {
+      return NextResponse.json(
+        { error: 'Too many password reset attempts. Please slow down.' },
+        { status: 429, headers: rateLimitHeaders }
+      );
+    }
+
     const { rollNumber, newPassword, otpCode, email } = await request.json();
 
     // ── Validate required fields ────────────────────────────
     if (!rollNumber || !newPassword || !otpCode || !email) {
       return NextResponse.json(
         { error: 'Missing required fields: rollNumber, newPassword, otpCode, and email are all required.' },
-        { status: 400 }
+        { status: 400, headers: rateLimitHeaders }
       );
     }
 
     if (typeof newPassword !== 'string' || newPassword.length < 6) {
       return NextResponse.json(
         { error: 'Password must be at least 6 characters long.' },
-        { status: 400 }
+        { status: 400, headers: rateLimitHeaders }
       );
     }
 
@@ -45,7 +64,7 @@ export async function POST(request: NextRequest) {
       console.error('SUPABASE_SERVICE_ROLE_KEY not configured');
       return NextResponse.json(
         { error: 'Server configuration error.' },
-        { status: 500 }
+        { status: 500, headers: rateLimitHeaders }
       );
     }
 
@@ -68,7 +87,7 @@ export async function POST(request: NextRequest) {
     if (otpError || !otpRecord) {
       return NextResponse.json(
         { error: 'Invalid or expired OTP code. Please request a new one.' },
-        { status: 401 }
+        { status: 401, headers: rateLimitHeaders }
       );
     }
 
@@ -82,7 +101,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         { error: 'OTP has expired. Please request a new one.' },
-        { status: 401 }
+        { status: 401, headers: rateLimitHeaders }
       );
     }
 
@@ -96,7 +115,7 @@ export async function POST(request: NextRequest) {
     if (profileError || !profile) {
       return NextResponse.json(
         { error: 'No account found with this roll number.' },
-        { status: 404 }
+        { status: 404, headers: rateLimitHeaders }
       );
     }
 
@@ -118,7 +137,7 @@ export async function POST(request: NextRequest) {
       console.error('Password update failed:', updateError.message);
       return NextResponse.json(
         { error: 'Failed to update password. Please try again.' },
-        { status: 500 }
+        { status: 500, headers: rateLimitHeaders }
       );
     }
 
@@ -140,7 +159,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { message: 'Password reset successful.' },
-      { status: 200 }
+      { status: 200, headers: rateLimitHeaders }
     );
   } catch (error) {
     console.error('Reset password API error:', error);

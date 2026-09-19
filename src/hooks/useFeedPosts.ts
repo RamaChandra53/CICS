@@ -7,11 +7,11 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export type FeedCommunity =
   | 'all'
-  | 'general'
+  | 'campus'
   | 'confessions'
-  | 'rants'
-  | 'random'
   | 'placements'
+  | 'clubs'
+  | 'alumni'
   | string;
 
 type VoteType = 'up' | 'down';
@@ -32,11 +32,11 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 const COMMUNITY_ROOM_MAP: Record<string, string[] | null> = {
   all: null,
-  general: ['campus', 'college'],
+  campus: ['campus'],
   confessions: ['confessions'],
-  rants: ['rants'],
-  random: ['random'],
   placements: ['placements'],
+  clubs: ['clubs'],
+  alumni: ['alumni'],
 };
 
 const logDebug = (message: string, meta?: Record<string, unknown>) => {
@@ -196,8 +196,9 @@ export default function useFeedPosts(selectedCommunity: FeedCommunity) {
         let query = supabase
           .from('posts')
           .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, upvotes, downvotes, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
+            'id, author_id, room, content, post_type, headline, description, tags, community_slug, is_draft, image_url, video_url, link_url, poll_options, poll_expires_at, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, updated_at, upvotes, downvotes, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
           )
+          .eq('is_draft', false)
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
           .range(pageToLoad * PAGE_SIZE, pageToLoad * PAGE_SIZE + PAGE_SIZE - 1);
