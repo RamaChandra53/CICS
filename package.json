@@ -4,10 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "node .next/standalone/server.js",
+    "clean": "node scripts/clean-build.mjs",
+    "dev:clean": "npm run clean && next dev",
+    "build": "npm run clean && next build",
+    "start": "next start -H 0.0.0.0",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "test": "playwright test --project=unit"
+    "test": "playwright test --project=unit",
+    "validate": "npm run lint && npm test && npm run build",
+    "prod": "npm run build && npm run start"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

@@ -3,6 +3,7 @@
 
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 import { Post } from '@/types';
 import PostCard from '@/components/PostCard';
@@ -333,6 +334,11 @@ export default function ProfilePage() {
                     ✓ verified
                   </span>
                 )}
+                {authProfile.is_moderator && (
+                  <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2 py-0.5 text-xs font-semibold text-cyan-200">
+                    Moderator
+                  </span>
+                )}
                 {authProfile.pseudo_username_status !== 'pending' && (
                   <button
                     onClick={handleEditNicknameClick}
@@ -348,6 +354,11 @@ export default function ProfilePage() {
               </div>
 
               <p className="text-slate-400 text-xs mb-3">Campus nickname — people recognize you without knowing who you are</p>
+              {authProfile.is_moderator && (
+                <Link href="/admin/reports" className="inline-flex rounded-lg border border-cyan-300/20 bg-cyan-300/5 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-300/10">
+                  Open moderation console →
+                </Link>
+              )}
 
               {/* Username edit form */}
               {isEditingUsername && (
@@ -488,13 +499,13 @@ export default function ProfilePage() {
                 {authProfile.is_email_verified ? (
                   <div className="bg-emerald-900/20 border border-emerald-800/40 rounded-lg p-2">
                     <p className="text-emerald-400 text-xs flex items-center gap-1">
-                      ✅ Student verified — anonymous posting, partial identity, and nickname editing unlocked
+                      ✅ MGIT email verified — identity switching, anonymous posting, partial identity, and nickname editing unlocked
                     </p>
                   </div>
                 ) : (
                   <div className="bg-[#1f2329] border border-[#252a31] rounded-lg p-2">
                     <p className="text-slate-400 text-xs mb-2">
-                      🔒 Verify your MGIT email to unlock anonymous posting, partial identity, and custom nickname
+                      🔒 Verify your MGIT email to unlock the identity switcher, anonymous posting, partial identity, and custom nickname
                     </p>
                     <button
                       onClick={() => setShowTrustModal(true)}

@@ -209,7 +209,12 @@ export default function SearchPage() {
 
   return (
     <ErrorBoundary>
-      <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6">
+      <div className="w-full max-w-3xl mx-auto px-3 md:px-6 py-6 md:py-10">
+        <div className="mb-6">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">Explore campus</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">Find what is happening</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">Search live posts, public profiles, and communities from the CICS database.</p>
+        </div>
         {/* Search input */}
         <div className="mb-4">
           <div className="relative">

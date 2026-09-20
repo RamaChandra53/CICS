@@ -84,6 +84,11 @@ function CommentItem({
                 ✓
               </span>
             )}
+            {displayInfo.showModerator && (
+              <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-cyan-200">
+                Moderator
+              </span>
+            )}
 
             <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
           </div>
@@ -542,6 +547,11 @@ export default function PostPage() {
             )}
             {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
               <span className="text-[10px] font-semibold text-indigo-300">✓</span>
+            )}
+            {postDisplayInfo.showModerator && (
+              <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-cyan-200">
+                Moderator
+              </span>
             )}
             <span className="text-slate-600">•</span>
             <span>{formatTimeAgo(post.created_at)}</span>

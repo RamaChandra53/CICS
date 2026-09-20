@@ -22,7 +22,7 @@ interface Report {
   reviewed_at: string | null;
   // Joined data
   posts?: { id: string; content: string; author_id: string } | null;
-  comments?: { id: string; content: string; post_id: string } | null;
+  comments?: { id: string; content: string; post_id: string; author_id: string } | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -51,16 +51,13 @@ function ReportsPageContent() {
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
 
-  // Check admin access
+  // Check the server-only moderator allowlist and synchronize admins.
   useEffect(() => {
     const checkAdmin = async () => {
       if (!user) return;
-      const { data } = await supabase
-        .from('admins')
-        .select('user_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (data) {
+      const response = await fetch('/api/moderation/me');
+      const status = await response.json();
+      if (response.ok && status.isModerator) {
         setIsAdmin(true);
       } else {
         router.push('/feed');
@@ -75,7 +72,7 @@ function ReportsPageContent() {
     try {
       let query = supabase
         .from('reports')
-        .select('*, posts(id, content, author_id), comments(id, content, post_id)')
+        .select('*, posts(id, content, author_id), comments(id, content, post_id, author_id)')
         .order('created_at', { ascending: false });
 
       if (filter !== 'all') {
@@ -130,6 +127,35 @@ function ReportsPageContent() {
       await fetchReports();
     } catch (err) {
       console.error('Error updating report:', err);
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleModerationAction = async (report: Report, action: 'warn' | 'mute' | 'kick' | 'ban') => {
+    const targetUserId = report.posts?.author_id ?? report.comments?.author_id;
+    if (!targetUserId) return;
+    const reason = window.prompt(`Reason for ${action}:`, 'Community guidelines violation')?.trim();
+    if (!reason) return;
+    setActioningId(report.id);
+    try {
+      const response = await fetch('/api/moderation/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          targetUserId,
+          postId: report.post_id,
+          commentId: report.comment_id,
+          reportId: report.id,
+          reason,
+          durationHours: action === 'ban' ? 168 : action === 'mute' ? 24 : undefined,
+        }),
+      });
+      if (!response.ok) throw new Error('Moderation action failed');
+      await fetchReports();
+    } catch (err) {
+      console.error('Moderation action error:', err);
     } finally {
       setActioningId(null);
     }
@@ -267,6 +293,21 @@ function ReportsPageContent() {
                         Delete Content
                       </button>
                     </div>
+                    {(report.posts?.author_id || report.comments?.author_id) && (
+                      <div className="mt-3 flex flex-wrap gap-2 border-t border-[#252a31] pt-3">
+                        <span className="self-center text-[10px] font-bold uppercase tracking-wider text-slate-600">User actions</span>
+                        {(['warn', 'mute', 'kick', 'ban'] as const).map((action) => (
+                          <button
+                            key={action}
+                            onClick={() => handleModerationAction(report, action)}
+                            disabled={actioningId === report.id}
+                            className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold capitalize transition-colors disabled:opacity-50 ${action === 'ban' ? 'border-red-500/30 text-red-300 hover:bg-red-500/10' : 'border-cyan-400/20 text-cyan-200 hover:bg-cyan-400/10'}`}
+                          >
+                            {action}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

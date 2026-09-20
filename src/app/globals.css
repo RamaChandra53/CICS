@@ -83,6 +83,16 @@ body {
 }
 
 @layer components {
+  .messages-wallpaper {
+    background-color: #0d1117;
+    background-image:
+      radial-gradient(circle at 16% 22%, transparent 0 14px, rgba(148, 163, 184, 0.035) 15px 16px, transparent 17px),
+      linear-gradient(135deg, transparent 0 47%, rgba(148, 163, 184, 0.025) 48% 49%, transparent 50%),
+      linear-gradient(45deg, transparent 0 47%, rgba(148, 163, 184, 0.02) 48% 49%, transparent 50%);
+    background-size: 128px 128px, 96px 96px, 144px 144px;
+    background-position: 0 0, 24px 38px, 72px 8px;
+  }
+
   /* Solid rich effect instead of glass */
   .glass {
     background: var(--bg-secondary);
@@ -169,6 +179,34 @@ body {
   }
 }
 
+@layer base {
+  a,
+  button:not(:disabled),
+  label:has(input[type='file']) {
+    cursor: pointer;
+  }
+
+  button:not(:disabled),
+  a {
+    transition-property: color, background-color, border-color, opacity, transform, box-shadow;
+    transition-duration: 160ms;
+    transition-timing-function: ease-out;
+  }
+
+  button:not(:disabled):active,
+  a:active {
+    transform: translateY(1px);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid rgba(103, 232, 249, 0.7);
+    outline-offset: 2px;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -203,4 +241,3 @@ body {
     text-align: left !important;
   }
 }
-

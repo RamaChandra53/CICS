@@ -1,292 +1,32 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Community } from '@/types';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
-async function ensureMembership(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  slug: string
-) {
-  const { error } = await supabase
-    .from('community_members')
-    .upsert({ user_id: userId, community_slug: slug }, { onConflict: 'user_id,community_slug' });
-  if (error) throw error;
-}
+const links: { href: string; label: string; icon: string; badge?: string }[] = [
+  { href: '/feed', label: 'Feed', icon: '⌂' },
+  { href: '/messages', label: 'Messages', icon: '◌' },
+  { href: '/feed?view=spaces', label: 'Spaces', icon: '✦' },
+  { href: '/search', label: 'Explore', icon: '⌕' },
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
-  const [myCommunities, setMyCommunities] = useState<Community[]>([]);
-  const [joinedCommunities, setJoinedCommunities] = useState<Community[]>([]);
-  const [exploreCommunities, setExploreCommunities] = useState<Community[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  const renderCommunityLink = (community: Community) => {
-    const href = `/room/${community.slug}`;
-    const isActive = pathname === href || pathname.startsWith(`/room/${community.slug}`);
-    return (
-      <Link
-        key={community.id}
-        href={href}
-        className={`flex items-start gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
-          isActive
-            ? 'bg-indigo-600/20 text-indigo-400 font-medium'
-            : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-        }`}
-      >
-        <span className="text-base">{community.icon ?? '💬'}</span>
-        <span className="min-w-0">
-          <span className="block truncate">r/{community.slug}</span>
-          <span className="block text-[10px] text-gray-500">
-            {community.member_count} member{community.member_count === 1 ? '' : 's'}
-          </span>
-        </span>
-      </Link>
-    );
-  };
-
-  const fetchJoinedCommunities = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Check admin status
-    const { data: adminData } = await supabase
-      .from('admins')
-      .select('user_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    setIsAdmin(!!adminData);
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('is_anonymous, year, branch, section')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (profileError) return;
-
-    const { data: membershipData } = await supabase
-      .from('community_members')
-      .select(`
-        communities (
-          id,
-          name,
-          slug,
-          description,
-          icon,
-          type,
-          member_count,
-          created_at
-        )
-      `)
-      .eq('user_id', user.id);
-
-    const normalizeMembershipRows = (rows: Array<{ communities: Community | Community[] | null }>) => rows
-      .flatMap(item => {
-        if (!item.communities) return [];
-        return Array.isArray(item.communities) ? item.communities : [item.communities];
-      })
-      .sort((a, b) => b.member_count - a.member_count);
-
-    let communities = (membershipData ?? [])
-      .length > 0
-      ? normalizeMembershipRows(membershipData as Array<{ communities: Community | Community[] | null }>)
-      : [];
-
-    // Existing users may not have been backfilled into community_members.
-    // Bootstrap them into the 5 core subreddits so the sidebar is never empty.
-    if (communities.length === 0) {
-      const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs'];
-      
-      // Add alumni if user is alumni (no year)
-      if (!profile?.year) {
-        coreSubreddits.push('alumni');
-      }
-      
-      const { data: existingCommunities } = await supabase
-        .from('communities')
-        .select('id, name, slug, description, icon, type, member_count, created_at')
-        .in('slug', coreSubreddits);
-      const existingSlugSet = new Set(
-        ((existingCommunities ?? []) as Community[]).map((community) => community.slug)
-      );
-
-      for (const slug of coreSubreddits) {
-        if (!existingSlugSet.has(slug)) continue;
-        await ensureMembership(supabase, user.id, slug);
-      }
-
-      const { data: bootstrappedData } = await supabase
-        .from('community_members')
-        .select(`
-          communities (
-            id,
-            name,
-            slug,
-            description,
-            icon,
-            type,
-            member_count,
-            created_at
-          )
-        `)
-        .eq('user_id', user.id);
-
-      communities = (bootstrappedData ?? [])
-        .length > 0
-        ? normalizeMembershipRows(bootstrappedData as Array<{ communities: Community | Community[] | null }>)
-        : [];
-    }
-
-    const allJoined = profile?.is_anonymous
-      ? communities.filter(c => ['campus', 'confessions'].includes(c.slug))
-      : communities;
-
-    // Define the 5 core subreddits
-    const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs', 'alumni'];
-    
-    // For alumni, include alumni community, for students include placements/clubs
-    const userCoreSubreddits = !profile?.year 
-      ? ['campus', 'confessions', 'placements', 'clubs', 'alumni']
-      : ['campus', 'confessions', 'placements', 'clubs'];
-
-    const mine = allJoined
-      .filter(c => userCoreSubreddits.includes(c.slug))
-      .sort((a, b) => b.member_count - a.member_count);
-    const joined = allJoined
-      .filter(c => !userCoreSubreddits.includes(c.slug))
-      .sort((a, b) => b.member_count - a.member_count);
-
-    // Only show core subreddits that user hasn't joined yet
-    const { data: coreCommunities } = await supabase
-      .from('communities')
-      .select('id,name,slug,description,icon,type,member_count,created_at')
-      .in('slug', coreSubreddits)
-      .order('member_count', { ascending: false });
-
-    const joinedSlugSet = new Set(allJoined.map((community) => community.slug));
-    const explore = ((coreCommunities ?? []) as Community[]).filter(
-      (community) => !joinedSlugSet.has(community.slug)
-    );
-
-    setMyCommunities(mine);
-    setJoinedCommunities(joined);
-    setExploreCommunities(explore as Community[]);
-  }, [supabase]);
-
+  const { user } = useAuth();
+  const [isModerator, setIsModerator] = useState(false);
   useEffect(() => {
-    fetchJoinedCommunities();
-  }, [fetchJoinedCommunities]);
-
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      router.push('/');
-    } catch (error) {
-      console.error('Sign out error:', error);
-      // Still try to redirect even if sign out fails
-      router.push('/');
-    }
-  };
-
-  return (
-    <aside className="hidden md:flex flex-col w-60 min-h-screen bg-[#111] border-r border-gray-800/60 fixed left-0 top-0 z-10">
-      {/* Logo */}
-      <div className="p-5 border-b border-gray-800/60">
-        <Link href="/feed" className="flex items-center gap-2">
-          <span className="text-2xl">🎓</span>
-          <div>
-            <span className="text-white font-bold text-base">CICS</span>
-            <p className="text-gray-500 text-[10px] leading-none">College Chat</p>
-          </div>
-        </Link>
-      </div>
-
-      {/* Reddit-style Subreddits */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-200px)]">
-        {/* Search link */}
-        <Link
-          href="/search"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors mb-2 ${
-            pathname === '/search'
-              ? 'bg-indigo-600/20 text-indigo-400 font-medium'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-          }`}
-        >
-          <span className="text-base">🔍</span>
-          <span>Search</span>
-        </Link>
-
-        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">Core Subreddits</p>
-        {myCommunities.map(renderCommunityLink)}
-
-        {joinedCommunities.length > 0 && (
-          <>
-            <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2 mt-2">Other Communities</p>
-            {joinedCommunities.map(renderCommunityLink)}
-          </>
-        )}
-
-        {exploreCommunities.length > 0 && (
-          <>
-            <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2 mt-2">Available</p>
-            {exploreCommunities.map(renderCommunityLink)}
-          </>
-        )}
-      </nav>
-
-      {/* Bottom links */}
-      <div className="p-3 border-t border-gray-800/60 space-y-1">
-        {isAdmin && (
-          <>
-            <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-1">Admin</p>
-            <Link
-              href="/admin/username-review"
-              className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${
-                pathname === '/admin/username-review'
-                  ? 'bg-indigo-600/20 text-indigo-400 font-medium'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-              }`}
-            >
-              <span className="text-base">✏️</span>
-              <span>Usernames</span>
-            </Link>
-            <Link
-              href="/admin/reports"
-              className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${
-                pathname === '/admin/reports'
-                  ? 'bg-indigo-600/20 text-indigo-400 font-medium'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-              }`}
-            >
-              <span className="text-base">🚩</span>
-              <span>Reports</span>
-            </Link>
-          </>
-        )}
-        <Link
-          href="/profile"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
-            pathname === '/profile'
-              ? 'bg-indigo-600/20 text-indigo-400 font-medium'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-          }`}
-        >
-          <span className="text-base">👤</span>
-          <span>My Profile</span>
-        </Link>
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:text-red-400 hover:bg-red-900/10 transition-colors w-full text-left"
-        >
-          <span className="text-base">🚪</span>
-          <span>Sign Out</span>
-        </button>
-      </div>
-    </aside>
-  );
+    if (!user) return;
+    fetch('/api/moderation/me').then((response) => response.json()).then((data) => setIsModerator(Boolean(data.isModerator))).catch(() => setIsModerator(false));
+  }, [user]);
+  const signOut = async () => { await createClient().auth.signOut(); router.push('/'); };
+  return <aside className="fixed left-0 top-0 z-30 hidden h-screen w-60 flex-col border-r border-white/8 bg-[#090b12] px-4 py-7 md:flex">
+    <Link href="/feed" className="mb-12 flex items-center gap-3 px-3"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-400 to-cyan-300 text-lg font-black text-slate-950">C</span><span><span className="block font-display text-lg font-bold tracking-tight text-white">cics</span><span className="block text-[9px] font-bold uppercase tracking-[0.22em] text-slate-600">campus pulse</span></span></Link>
+    <p className="px-3 pb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">Your space</p>
+    <nav className="space-y-1">{links.map((link) => { const active = pathname === link.href || (link.href === '/feed' && pathname === '/'); return <Link key={link.href} href={link.href} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition ${active ? 'bg-white/10 text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'}`}><span className={`flex h-8 w-8 items-center justify-center rounded-xl text-lg ${active ? 'bg-cyan-300 text-slate-950' : 'bg-white/5 text-slate-400'}`}>{link.icon}</span><span className="flex-1">{link.label}</span>{link.badge && <span className="rounded-full bg-cyan-300 px-1.5 py-0.5 text-[10px] font-black text-slate-950">{link.badge}</span>}</Link>; })}</nav>
+    <div className="mt-auto space-y-1 border-t border-white/8 pt-4"><Link href="/profile" className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-slate-500 transition hover:bg-white/5 hover:text-slate-200"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-300/15 text-amber-200">◎</span><span>Profile & identity</span></Link>{isModerator && <Link href="/admin/reports" className="flex items-center gap-3 rounded-2xl border border-cyan-300/15 bg-cyan-300/5 px-3 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-300/10"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-300/15">⚑</span><span>Moderation console</span></Link>}<button onClick={signOut} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/5">↗</span><span>Sign out</span></button></div>
+  </aside>;
 }
