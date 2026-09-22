@@ -18,7 +18,6 @@ export interface IdentityDisplay {
   avatar: string;
   avatarBg: string;
   showVerified: boolean;
-  showModerator: boolean;
 }
 
 export interface IdentityModeAccess {
@@ -78,11 +77,11 @@ export function getEffectiveDefaultMode(
 export function getIdentityModeAccess(
   profile: Pick<Profile, 'is_email_verified' | 'is_verified'> | null
 ): Record<IdentityMode, IdentityModeAccess> {
-  const isVerified = profile?.is_email_verified || false;
+  const isVerified = profile?.is_email_verified || profile?.is_verified || false;
 
   return {
-    pseudo: { available: isVerified, requiresVerification: true },
-    full: { available: isVerified, requiresVerification: true },
+    pseudo: { available: true, requiresVerification: false },
+    full: { available: true, requiresVerification: false },
     partial: { available: isVerified, requiresVerification: true },
     anonymous: { available: isVerified, requiresVerification: true },
   };
@@ -110,7 +109,6 @@ export function getPostIdentityDisplay(
         avatar: '👻',
         avatarBg: 'bg-gray-700 text-gray-400',
         showVerified: false,
-        showModerator: Boolean(profile?.is_moderator),
       };
 
     case 'partial': {
@@ -134,7 +132,6 @@ export function getPostIdentityDisplay(
         avatar: branch?.[0]?.toUpperCase() || '✓',
         avatarBg: 'bg-purple-600/30 text-purple-400',
         showVerified: isVerified,
-        showModerator: Boolean(profile?.is_moderator),
       };
     }
 
@@ -154,7 +151,6 @@ export function getPostIdentityDisplay(
         avatar: fullName[0]?.toUpperCase() || '?',
         avatarBg: 'bg-indigo-600/30 text-indigo-400',
         showVerified: isVerified,
-        showModerator: Boolean(profile?.is_moderator),
       };
     }
 
@@ -167,7 +163,6 @@ export function getPostIdentityDisplay(
         avatar: pseudoName[0]?.toUpperCase() || '?',
         avatarBg: 'bg-emerald-600/30 text-emerald-400',
         showVerified: false,
-        showModerator: Boolean(profile?.is_moderator),
       };
     }
   }

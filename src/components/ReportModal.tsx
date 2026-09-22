@@ -14,12 +14,8 @@ interface ReportModalProps {
 const REPORT_REASONS = [
   { value: 'spam', label: 'Spam', icon: '🗑️', description: 'Unwanted promotional content' },
   { value: 'harassment', label: 'Harassment', icon: '⚠️', description: 'Bullying or targeted attacks' },
-  { value: 'targeted_harassment', label: 'Targeted harassment', icon: '🎯', description: 'An anonymous or semi-anonymous attack aimed at a person or group' },
   { value: 'inappropriate', label: 'Inappropriate', icon: '🚫', description: 'NSFW or offensive content' },
-  { value: 'identity_exposure', label: 'Identity exposure', icon: '🔒', description: 'Shares someone’s name, roll number, contact, or private details' },
-  { value: 'threats', label: 'Threats or safety concern', icon: '🛡️', description: 'Threatening, dangerous, or urgent safety-related content' },
   { value: 'misinformation', label: 'Misinformation', icon: '❌', description: 'False or misleading information' },
-  { value: 'self_harm', label: 'Self-harm concern', icon: '🫶', description: 'Someone may be at risk and needs support' },
   { value: 'other', label: 'Other', icon: '📝', description: 'Something else' },
 ] as const;
 
@@ -47,7 +43,7 @@ export default function ReportModal({
     setError('');
 
     try {
-      let { error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('reports')
         .insert({
           reporter_id: currentUserId,
@@ -56,18 +52,6 @@ export default function ReportModal({
           reason,
           details: details.trim() || null,
         });
-
-      // Older databases only allow the original five reasons. Preserve the
-      // selected safety category in details until migration 015 is applied.
-      if (insertError?.code === '23514') {
-        insertError = (await supabase.from('reports').insert({
-          reporter_id: currentUserId,
-          post_id: postId || null,
-          comment_id: commentId || null,
-          reason: 'other',
-          details: `[${reason}] ${details.trim() || 'Reported from the anonymous-safety menu.'}`,
-        })).error;
-      }
 
       if (insertError) {
         if (insertError.code === '23505') {
@@ -119,7 +103,7 @@ export default function ReportModal({
             </div>
 
             <p className="text-sm text-slate-400 mb-4">
-              Why are you reporting this {postId ? 'post' : 'comment'}? Reports are private; moderators see the report context, not the public identity of anonymous reporters.
+              Why are you reporting this {postId ? 'post' : 'comment'}?
             </p>
 
             {/* Reason selection */}

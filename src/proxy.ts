@@ -55,23 +55,6 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user && pathname !== '/suspended') {
-    const { data: suspension } = await supabase
-      .from('moderation_suspensions')
-      .select('kind, reason, ends_at')
-      .eq('user_id', user.id)
-      .is('revoked_at', null)
-      .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
-      .maybeSingle();
-
-    if (suspension) {
-      const suspendedUrl = request.nextUrl.clone();
-      suspendedUrl.pathname = '/suspended';
-      suspendedUrl.searchParams.set('kind', suspension.kind);
-      return NextResponse.redirect(suspendedUrl);
-    }
-  }
-
   // ── Protected routes: require authentication ──────────────
   const isProtectedRoute =
     pathname.startsWith('/feed') ||
