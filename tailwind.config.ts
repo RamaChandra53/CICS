@@ -41,7 +41,6 @@ const config: Config = {
       },
       fontFamily: {
         'sans': ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
-        'display': ['Space Grotesk', 'Inter', 'sans-serif'],
         'mono': ['JetBrains Mono', 'monospace'],
       },
       boxShadow: {

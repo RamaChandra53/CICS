@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   isPrivateOrReservedIp,
   validateLinkPreviewUrl,
-} from '../../src/lib/linkPreviewSecurity';
+} from '../../src/app/api/link-preview/route';
 
 test.describe('link preview SSRF protection', () => {
   test('blocks localhost hostnames', async () => {

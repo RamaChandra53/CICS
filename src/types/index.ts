@@ -23,7 +23,6 @@ export type Profile = {
   pseudo_username_rejection_reason: string | null;
   pseudo_username_last_changed_at: string | null;
   show_roll_number_publicly: boolean;
-  is_moderator: boolean;
 };
 
 export type PostType = 'text' | 'image' | 'video' | 'poll' | 'link';
