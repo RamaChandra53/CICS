@@ -10,7 +10,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
-import Link from 'next/link';
 
 const PAGE_SIZE = 10;
 

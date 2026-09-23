@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
-import { Community } from '@/types';
+import type { CommunitySummary } from '@/types/domain';
 import { useAuth } from '@/contexts/AuthContext';
+import { clearCommunityCaches, fetchCommunities as fetchCommunityList, isClubCommunity } from '@/lib/services/communities';
 
 const COMMUNITY_ICONS: Record<string, string> = {
   campus: '🎓',
@@ -17,24 +18,14 @@ const COMMUNITY_ICONS: Record<string, string> = {
 export default function CommunitiesPage() {
   const supabase = useMemo(() => createClient(), []);
   const { user, profile } = useAuth();
-  const [communities, setCommunities] = useState<Community[]>([]);
+  const [communities, setCommunities] = useState<CommunitySummary[]>([]);
   const [userCommunities, setUserCommunities] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [joinLoading, setJoinLoading] = useState<string | null>(null);
 
   const fetchCommunities = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('communities')
-        .select('id, name, slug, description, icon, type, member_count, created_at')
-        .order('member_count', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching communities:', error);
-        return;
-      }
-
-      setCommunities(data || []);
+      setCommunities(await fetchCommunityList(supabase));
     } catch (error) {
       console.error('Unexpected error fetching communities:', error);
     }
@@ -105,6 +96,7 @@ export default function CommunitiesPage() {
       }
 
       // Refresh member counts
+      clearCommunityCaches(user.id);
       fetchCommunities();
     } catch (error) {
       console.error('Error joining/leaving community:', error);
@@ -113,12 +105,35 @@ export default function CommunitiesPage() {
     }
   };
 
-  const getIcon = (community: Community) => {
+  const getIcon = (community: CommunitySummary) => {
     return community.icon || COMMUNITY_ICONS[community.slug] || '📌';
   };
 
-  const myCommunities = communities.filter(c => userCommunities.has(c.slug));
-  const otherCommunities = communities.filter(c => !userCommunities.has(c.slug));
+  const accessibleSlugs = useMemo(() => {
+    const slugs = new Set(['campus', 'confessions', 'placements']);
+
+    if (!profile?.year) {
+      slugs.add('alumni');
+      return slugs;
+    }
+
+    const yearNumber = profile.year.replace(/\D/g, '');
+    if (yearNumber) slugs.add(`year-${yearNumber}`);
+    if (profile.branch) slugs.add(profile.branch.toLowerCase());
+    if (profile.branch && profile.section) {
+      slugs.add(`${profile.branch.toLowerCase()}-${profile.section.toLowerCase()}`);
+    }
+
+    return slugs;
+  }, [profile]);
+
+  const visibleCommunities = communities.filter(
+    (community) => accessibleSlugs.has(community.slug) && !isClubCommunity(community)
+  );
+  const myCommunities = visibleCommunities.filter(c => userCommunities.has(c.slug));
+  const otherCommunities = visibleCommunities.filter(
+    c => !userCommunities.has(c.slug) && c.type === 'open'
+  );
 
   if (loading) {
     return (
@@ -140,7 +155,12 @@ export default function CommunitiesPage() {
 
   return (
     <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6">
-      <h1 className="text-xl md:text-2xl font-bold text-white mb-6">Communities</h1>
+      <div className="mb-6">
+        <h1 className="text-xl md:text-2xl font-bold text-white">Communities</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          Your academic spaces are based on your verified roll number, year, branch, and section.
+        </p>
+      </div>
 
       {/* MY COMMUNITIES Section */}
       {myCommunities.length > 0 && (
@@ -176,7 +196,7 @@ export default function CommunitiesPage() {
                   </div>
                 </Link>
 
-                {community.slug !== 'campus' && (
+                {community.type === 'open' && community.slug !== 'campus' && (
                   <button
                     onClick={() => handleJoinLeave(community.slug)}
                     disabled={joinLoading === community.slug}
@@ -238,10 +258,10 @@ export default function CommunitiesPage() {
         </div>
       )}
 
-      {communities.length === 0 && (
+      {visibleCommunities.length === 0 && (
         <div className="text-center py-12">
           <div className="text-3xl mb-3">🏘️</div>
-          <p className="text-slate-400 text-sm">No communities found</p>
+          <p className="text-slate-400 text-sm">No academic communities found</p>
         </div>
       )}
     </div>

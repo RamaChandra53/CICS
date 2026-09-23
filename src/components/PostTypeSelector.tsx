@@ -27,7 +27,7 @@ const PostTypeSelector: React.FC<PostTypeSelectorProps> = ({
       type: 'text',
       icon: '📝',
       label: 'Text',
-      description: 'Share your thoughts with rich text'
+      description: 'Recommended for the alpha: questions, confessions, and campus updates'
     },
     {
       type: 'image',

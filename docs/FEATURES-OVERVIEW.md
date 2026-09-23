@@ -48,13 +48,20 @@ This document provides a comprehensive overview of all features integrated into 
 - Post description enhancements
 - UI/UX refinements
 
+### Phase 6: Architecture-First v2 Refactor
+- Service modules for posts, comments, communities, polls, and profiles
+- Normalized domain types for UI-safe post/comment/community data
+- Feed fetching moved behind service contracts while preserving existing behavior
+- Post media, poll voting, and link preview logic split out of `PostCard`
+- Profile fetch and pseudo-username backfill moved out of `AuthContext`
+
 ## 🏗️ Technical Architecture
 
 ### Frontend Stack
-- **Framework:** Next.js 14 with App Router
+- **Framework:** Next.js with App Router
 - **Styling:** Tailwind CSS
 - **UI Components:** Custom component library
-- **State Management:** React hooks and context
+- **State Management:** React hooks, context, and typed service modules
 - **Real-time:** Supabase real-time subscriptions
 
 ### Backend Stack
@@ -76,7 +83,7 @@ This document provides a comprehensive overview of all features integrated into 
 - Multi-community support
 - Room-based organization
 - Community creation and management
-- Hybrid Reddit-style communities
+- Hybrid Reddit-style communities with academic access controls and official clubs
 
 #### 📝 Content Management
 - Rich post creation with descriptions

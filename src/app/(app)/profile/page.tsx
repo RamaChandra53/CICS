@@ -22,7 +22,15 @@ type VoteType = 'up' | 'down';
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
-  const { user, profile: authProfile, loading: authLoading, signOut, refreshProfile } = useAuth();
+  const {
+    user,
+    profile: authProfile,
+    loading: authLoading,
+    profileLoading,
+    signOut,
+    refreshProfile,
+    reloadAuth,
+  } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [showTrustModal, setShowTrustModal] = useState(false);
@@ -115,41 +123,33 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const init = async () => {
-      if (authLoading) return;
+      if (authLoading || profileLoading) return;
       
-      if (!user || !authProfile) {
+      if (!user) {
         router.push('/');
         return;
       }
 
+      if (!authProfile) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Add timeout to prevent infinite loading, increased to 30s for cold starts
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Profile initialization timeout')), 30000)
-        );
-
-        const initPromise = async () => {
-          setPage(0);
-          setHasMore(true);
-          await fetchUserPosts(user.id, 0, { reset: true });
-        };
-
-        await Promise.race([initPromise(), timeoutPromise]);
+        setLoading(false);
+        setPage(0);
+        setHasMore(true);
+        await fetchUserPosts(user.id, 0, { reset: true });
       } catch (error) {
         console.error('Profile initialization error:', error);
-        if (error instanceof Error && error.message === 'Profile initialization timeout') {
-          console.error('Profile page initialization timed out');
-          setPostsError('Loading timed out. The server might be waking up or network is slow. Please refresh.');
-        } else {
-          setPostsError('An unexpected error occurred while loading your profile.');
-        }
+        setPostsError('An unexpected error occurred while loading your posts.');
         setPostsLoading(false);
       } finally {
         setLoading(false);
       }
     };
     init();
-  }, [supabase, router, authLoading, user, authProfile, fetchUserPosts]);
+  }, [router, authLoading, profileLoading, user, authProfile, fetchUserPosts]);
 
   const loadMore = useCallback(() => {
     if (!postsLoading && hasMore && user) {
@@ -289,7 +289,7 @@ export default function ProfilePage() {
     router.push('/');
   };
 
-  if (loading) {
+  if (authLoading || profileLoading || loading) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-6">
@@ -304,9 +304,9 @@ export default function ProfilePage() {
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <ErrorMessage
           title="Profile not found"
-          message="Please sign in to view your profile."
-          onRetry={() => router.push('/')}
-          retryText="Sign In"
+          message="Your session is active, but your profile did not load yet."
+          onRetry={() => reloadAuth()}
+          retryText="Retry"
         />
       </div>
     );

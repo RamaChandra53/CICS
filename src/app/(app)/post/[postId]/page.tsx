@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Post, Comment, Profile, ROOMS, DisplayMode } from '@/types';
+import type { CommentWithAuthor } from '@/types/domain';
 import { formatTimeAgo } from '@/lib/utils';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -17,8 +18,15 @@ import {
   type IdentityMode,
   getIdentityModeAccess,
   getIdentityModeLabel,
-  getIdentityModeHelper,
 } from '@/lib/identityDisplay';
+import {
+  buildCommentTree,
+  createComment,
+  createOptimisticComment,
+  fetchCommentsPage,
+} from '@/lib/services/comments';
+import { deletePost } from '@/lib/services/posts';
+import { cachePostPreview, getCachedPostPreview } from '@/lib/postPreviewCache';
 
 const COMMENTS_PAGE_SIZE = 50;
 
@@ -28,7 +36,7 @@ function CommentItem({
   depth = 0,
   profile,
 }: {
-  comment: Comment;
+  comment: CommentWithAuthor;
   onReply: (commentId: string, content: string, displayMode: IdentityMode) => Promise<void>;
   depth?: number;
   profile: Profile | null;
@@ -175,14 +183,15 @@ export default function PostPage() {
   const params = useParams();
   const postId = params.postId as string;
   const { user, profile: authProfile, loading: authLoading } = useAuth();
+  const cachedPost = useMemo(() => getCachedPostPreview(postId), [postId]);
 
-  const [post, setPost] = useState<Post | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [post, setPost] = useState<Post | null>(cachedPost);
+  const [comments, setComments] = useState<CommentWithAuthor[]>([]);
   const [flatComments, setFlatComments] = useState<Comment[]>([]);
   const [commentPage, setCommentPage] = useState(0);
   const [hasMoreComments, setHasMoreComments] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedPost);
   const [newComment, setNewComment] = useState('');
   const [commentDisplayMode, setCommentDisplayMode] = useState<DisplayMode>('pseudo');
   const initializedPostRef = useRef<string | null>(null);
@@ -226,11 +235,7 @@ export default function PostPage() {
     if (!post) return;
     setDeleting(true);
     try {
-      const { error: deleteError } = await supabase
-        .from('posts')
-        .delete()
-        .eq('id', post.id);
-      if (deleteError) throw deleteError;
+      await deletePost(supabase, post.id);
       router.push('/feed');
     } catch (err) {
       console.error('Delete error:', err);
@@ -240,76 +245,34 @@ export default function PostPage() {
     }
   };
 
-  const buildCommentTree = useCallback((items: Comment[]) => {
-    interface CommentNode extends Comment {
-      replies: CommentNode[];
-    }
-
-    const map: Record<string, CommentNode> = {};
-    const roots: CommentNode[] = [];
-
-    items.forEach((comment) => {
-      map[comment.id] = { ...comment, replies: [] };
-    });
-
-    items.forEach((comment) => {
-      if (comment.parent_comment_id && map[comment.parent_comment_id]) {
-        map[comment.parent_comment_id].replies.push(map[comment.id]);
-      } else {
-        roots.push(map[comment.id]);
-      }
-    });
-
-    const sortReplies = (nodes: CommentNode[]) => {
-      nodes.forEach((node) => {
-        if (node.replies.length > 0) {
-          node.replies.sort(
-            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          );
-          sortReplies(node.replies);
-        }
-      });
-    };
-
-    roots.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    sortReplies(roots);
-    return roots;
-  }, []);
-
   const fetchComments = useCallback(
     async (pageToLoad = 0, options?: { reset?: boolean }) => {
       setCommentsLoading(true);
       setCommentsError('');
 
       const targetPage = options?.reset ? 0 : pageToLoad;
-      const { data, error: commentsError } = await supabase
-        .from('comments')
-        .select(
-          'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, upvotes, downvotes, created_at, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
-        )
-        .eq('post_id', postId)
-        .order('created_at', { ascending: false })
-        .range(targetPage * COMMENTS_PAGE_SIZE, (targetPage + 1) * COMMENTS_PAGE_SIZE - 1);
+      try {
+        const nextComments = await fetchCommentsPage(
+          supabase,
+          postId,
+          targetPage,
+          COMMENTS_PAGE_SIZE
+        );
 
-      if (commentsError) {
-        console.error('Error fetching comments:', commentsError);
-        setCommentsError(commentsError.message || 'Failed to load comments.');
+        setHasMoreComments(nextComments.length === COMMENTS_PAGE_SIZE);
+        setFlatComments((prev) => {
+          const merged = options?.reset ? nextComments : [...prev, ...nextComments];
+          setComments(buildCommentTree(merged));
+          return merged;
+        });
+      } catch (err) {
+        console.error('Error fetching comments:', err);
+        setCommentsError(err instanceof Error ? err.message : 'Failed to load comments.');
+      } finally {
         setCommentsLoading(false);
-        return;
       }
-
-      const nextComments = (data as Comment[]) ?? [];
-
-      setHasMoreComments(nextComments.length === COMMENTS_PAGE_SIZE);
-      setFlatComments((prev) => {
-        const merged = options?.reset ? nextComments : [...prev, ...nextComments];
-        setComments(buildCommentTree(merged));
-        return merged;
-      });
-
-      setCommentsLoading(false);
     },
-    [supabase, postId, buildCommentTree]
+    [supabase, postId]
   );
 
   const handleCommentDisplayModeChange = (mode: IdentityMode) => {
@@ -346,6 +309,7 @@ export default function PostPage() {
 
       setProfile(authProfile ?? null);
       setError('');
+      setLoading(!cachedPost);
 
       try {
         const { data: postData, error: postError } = await supabase
@@ -363,6 +327,7 @@ export default function PostPage() {
         if (cancelled) return;
 
         setPost(postData as Post);
+        cachePostPreview(postData as Post);
         setCommentPage(0);
         setHasMoreComments(true);
         setFlatComments([]);
@@ -384,7 +349,7 @@ export default function PostPage() {
     return () => {
       cancelled = true;
     };
-  }, [supabase, router, postId, fetchComments, authLoading, user, authProfile]);
+  }, [supabase, router, postId, fetchComments, authLoading, user, authProfile, cachedPost]);
 
   const handleAddComment = async (
     parentId?: string,
@@ -401,20 +366,14 @@ export default function PostPage() {
     setSubmitting(true);
     setError('');
 
-    const optimisticId = `optimistic-${Date.now()}`;
-    const optimisticComment: Comment = {
-      id: optimisticId,
-      post_id: postId,
-      author_id: profile.id,
-      parent_comment_id: parentId || null,
+    const optimisticComment = createOptimisticComment({
+      postId,
+      author: profile,
+      parentId,
       content: commentContent,
-      is_anon_comment: displayMode === 'anonymous',
-      display_mode: displayMode,
-      created_at: new Date().toISOString(),
-      upvotes: 0,
-      downvotes: 0,
-      profiles: displayMode === 'anonymous' ? null : profile,
-    };
+      displayMode,
+    });
+    const optimisticId = optimisticComment.id;
 
     setFlatComments((prev) => {
       const updated = [optimisticComment, ...prev];
@@ -423,20 +382,13 @@ export default function PostPage() {
     });
 
     try {
-      const { data: insertedComment, error: insertError } = await supabase
-        .from('comments')
-        .insert({
-          post_id: postId,
-          author_id: profile.id,
-          parent_comment_id: parentId || null,
-          content: commentContent,
-          is_anon_comment: displayMode === 'anonymous',
-          display_mode: displayMode,
-        })
-        .select('id, created_at')
-        .single();
-
-      if (insertError) throw insertError;
+      const insertedComment = await createComment(supabase, {
+        postId,
+        authorId: profile.id,
+        parentId,
+        content: commentContent,
+        displayMode,
+      });
 
       if (!parentId) {
         setNewComment('');

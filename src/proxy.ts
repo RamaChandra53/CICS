@@ -62,6 +62,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/profile') ||
     pathname.startsWith('/room') ||
     pathname.startsWith('/communities') ||
+    pathname.startsWith('/clubs') ||
     pathname.startsWith('/admin');
 
   if (isProtectedRoute && !user) {

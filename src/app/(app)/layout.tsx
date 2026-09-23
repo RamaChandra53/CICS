@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
+import MobileMenuDrawer from '@/components/MobileMenuDrawer';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/components/Toast';
+import RouteProgress from '@/components/RouteProgress';
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -23,6 +25,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const mobileHeaderOffset = 'pt-12';
   const mobileNavOffset = 'pb-24';
   const [showTimeout, setShowTimeout] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (loading || profileLoading) {
@@ -69,7 +72,9 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [user, session, profile, loading, profileLoading, error, errorScope, router]);
 
-  if (loading || profileLoading) {
+  const shouldBlockForAuth = (loading && !session) || (profileLoading && !profile);
+
+  if (shouldBlockForAuth) {
     return (
       <div className="min-h-screen bg-[#0b0f12] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-gray-400 text-sm">
@@ -112,26 +117,23 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#0b0f12] text-slate-100 overflow-x-hidden">
+      <RouteProgress />
       <Sidebar />
+      <MobileMenuDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
       <header className="md:hidden fixed top-0 left-0 right-0 z-30 border-b border-[#252a31] bg-[#0b0f12]">
         <div className="flex h-12 items-center justify-between px-4">
-          <Link href="/feed" className="flex items-center gap-2 text-sm font-semibold text-white">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300">
-              C
-            </span>
-            CICS
-          </Link>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Open menu"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#252a31] bg-[#15181c] text-slate-300 transition-colors hover:text-white"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M5 7h14M5 12h14M5 17h14" />
+            </svg>
+          </button>
           <div className="flex items-center gap-2">
-            <Link
-              href="/search"
-              aria-label="Search"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:text-white transition-colors"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </Link>
             <Link
               href="/profile"
               aria-label="Profile"

@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation';
 
 const navItems = [
   { id: 'home', href: '/feed', label: 'Home' },
-  { id: 'communities', href: '/communities', label: 'Communities' },
   { id: 'post', href: '/feed?compose=1', label: 'Post' },
   { id: 'profile', href: '/profile', label: 'Profile' },
 ];
@@ -23,8 +22,6 @@ export default function BottomNav() {
               ? false
               : item.id === 'home'
               ? pathname === '/feed'
-              : item.id === 'communities'
-              ? pathname.startsWith('/communities') || pathname.startsWith('/room')
               : item.id === 'profile'
               ? pathname.startsWith('/profile')
               : false;
@@ -38,6 +35,7 @@ export default function BottomNav() {
               onClick={(event) => {
                 if (item.id !== 'post') return;
                 event.preventDefault();
+                window.dispatchEvent(new Event('cics-route-start'));
                 if (pathname !== '/feed') {
                   router.push('/feed?compose=1');
                   return;
@@ -51,15 +49,6 @@ export default function BottomNav() {
               {item.id === 'home' && (
                 <svg className={iconClassName} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 10.5L12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
-                </svg>
-              )}
-              {item.id === 'communities' && (
-                <svg className={iconClassName} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M7 21v-2a4 4 0 0 1 3-3.87" />
-                  <circle cx="12" cy="7" r="3" />
-                  <path d="M5.5 8a3.5 3.5 0 1 0 0-7" />
-                  <path d="M18.5 1a3.5 3.5 0 1 1 0 7" />
                 </svg>
               )}
               {item.id === 'post' && (

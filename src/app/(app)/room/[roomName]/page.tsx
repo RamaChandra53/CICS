@@ -9,9 +9,6 @@ import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import RedditNavbar from '@/components/RedditNavbar';
-import RedditSidebar from '@/components/RedditSidebar';
-import RedditRightPanel from '@/components/RedditRightPanel';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
@@ -346,7 +343,15 @@ export default function RoomPage() {
                 // Don't throw error for membership check, just default to not member
                 setIsMember(false);
               } else {
-                setIsMember(Boolean(memberData));
+                const nextIsMember = Boolean(memberData);
+                setIsMember(nextIsMember);
+
+                if (communityData.type === 'auto' && !nextIsMember) {
+                  setPosts([]);
+                  setHasMore(false);
+                  setError('This academic community is limited to students from that year, branch, or section.');
+                  return;
+                }
               }
             }
 
@@ -440,22 +445,13 @@ export default function RoomPage() {
   if (error && !community) {
     return (
       <ErrorBoundary>
-        <div className="min-h-screen bg-[#0b0f12]">
-          <RedditNavbar />
-          <div className="flex pt-0 md:pt-14">
-            <RedditSidebar />
-            <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
-              <ErrorMessage
-                title="Community not found"
-                message={error || `The community r/${roomName} doesn't exist.`}
-                onRetry={() => window.location.reload()}
-              />
-            </main>
-            <div className="hidden xl:block w-80 p-4">
-              <RedditRightPanel />
-            </div>
-          </div>
-        </div>
+        <main className="mx-auto w-full max-w-3xl px-3 py-4 md:px-6 md:py-6">
+          <ErrorMessage
+            title="Community not found"
+            message={error || `The community r/${roomName} doesn't exist.`}
+            onRetry={() => window.location.reload()}
+          />
+        </main>
       </ErrorBoundary>
     );
   }
@@ -463,31 +459,17 @@ export default function RoomPage() {
   if (loading) {
     return (
       <ErrorBoundary>
-        <div className="min-h-screen bg-[#0b0f12]">
-          <RedditNavbar />
-          <div className="flex pt-0 md:pt-14">
-            <RedditSidebar />
-            <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
-              <PostLoadingSkeleton count={3} />
-            </main>
-            <div className="hidden xl:block w-80 p-4">
-              <RedditRightPanel />
-            </div>
-          </div>
-        </div>
+        <main className="mx-auto w-full max-w-3xl px-3 py-4 md:px-6 md:py-6">
+          <div className="mb-4 h-28 animate-pulse rounded-2xl border border-[#252a31] bg-[#15181c]" />
+          <PostLoadingSkeleton count={3} />
+        </main>
       </ErrorBoundary>
     );
   }
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#0b0f12]">
-        <RedditNavbar />
-        <div className="flex pt-0 md:pt-14">
-          <RedditSidebar />
-          
-          {/* Main Content */}
-          <main className="flex-1 w-full md:max-w-2xl lg:max-w-3xl mx-auto px-3 md:px-6 py-4 md:py-6">
+      <main className="mx-auto w-full max-w-3xl px-3 py-4 md:px-6 md:py-6">
             {/* Subtle loading indicator for community switching */}
             {switching && (
               <div className="h-1 bg-indigo-500 animate-pulse w-full mb-4" />
@@ -586,14 +568,7 @@ export default function RoomPage() {
                 )}
               </div>
             )}
-          </main>
-
-          {/* Right Sidebar */}
-          <div className="hidden xl:block w-80 p-4">
-            <RedditRightPanel currentRoom={roomName} />
-          </div>
-        </div>
-      </div>
+      </main>
     </ErrorBoundary>
   );
 }

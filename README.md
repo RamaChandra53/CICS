@@ -4,13 +4,14 @@ CICS is a Reddit-style internal social platform for college communities, built w
 
 ## 📌 Current Project Level
 
-**Current level: Post-audit implementation complete (Tasks 1–18).**  
-Security hardening, identity flow, OTP flows, media posts, voting, moderation reports, and admin review flows are implemented.
+**Current level: Post-audit implementation complete + v2 architecture refactor underway.**  
+Security hardening, identity flow, OTP flows, media posts, voting, moderation reports, and admin review flows are implemented. Core feed, post, comment, poll, community, and profile logic is being moved into typed service modules so UI components stay focused on rendering.
 
 For detailed progress, see:
-- `/home/runner/work/cics1/cics1/task.md`
-- `/home/runner/work/cics1/cics1/implementation_plan.md`
-- `/home/runner/work/cics1/cics1/docs/FEATURES-OVERVIEW.md`
+- `task.md`
+- `implementation_plan.md`
+- `docs/FEATURES-OVERVIEW.md`
+- `docs/alpha-feedback-launch.md`
 
 ## ✨ What’s Included
 
@@ -32,19 +33,23 @@ npm install
 
 ### 2) Configure environment
 
-Copy `/home/runner/work/cics1/cics1/.env.local.example` to `.env.local` and fill values:
+Copy `.env.example` to `.env.local` and fill values:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-RESEND_API_KEY=re_your_resend_api_key
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_user
+SMTP_PASS=your_smtp_password
+SMTP_FROM="CICS <no-reply@example.com>"
 ```
 
 ### 3) Apply database migrations (Supabase SQL Editor)
 
-Run files in `/home/runner/work/cics1/cics1/supabase/migrations` in order:
-`001` → `010`
+Run files in `supabase/migrations` in order:
+`001` → `012`
 
 ### 4) Run locally
 
@@ -73,12 +78,14 @@ src/
 ├── components/        # UI and feature components
 ├── contexts/          # React contexts
 ├── hooks/             # Custom hooks
-├── lib/               # Core utilities (auth, OTP, security, helpers)
-├── types/             # Shared TypeScript types
+├── lib/
+│   ├── services/      # Supabase data access and domain operations
+│   └── ...            # Core utilities (auth, OTP, security, helpers)
+├── types/             # Shared TypeScript and normalized domain types
 └── proxy.ts           # Route protection middleware/proxy logic
 
 supabase/
-└── migrations/        # Ordered schema + policy migrations (001-010)
+└── migrations/        # Ordered schema + policy migrations (001-012)
 ```
 
 ## 🔒 Security Notes
@@ -88,10 +95,16 @@ supabase/
 - Link preview route includes SSRF guards and rate limiting
 - Authentication gating is enforced through `src/proxy.ts`
 
+## 🧭 Alpha Launch Notes
+
+CICS is currently prepared for a close-friends website alpha on Vercel Hobby/free plan. Keep the first test small, mobile-first, and focused on the core loop: register, browse, post, comment, and vote.
+
+For the first round, test physically with classmates. Sit with each tester, watch where they get stuck, and ask the questions in `docs/alpha-feedback-launch.md` after they try the flow.
+
 ## 🤝 Contribution Notes
 
 Before contributing:
-- Follow migration ordering (`001`–`010`)
+- Follow migration ordering (`001`–`012`)
 - Keep API logic server-side for sensitive flows
 - Run `npm run lint` and `npm run build`
 

@@ -41,14 +41,15 @@ export default function HorizontalVoteButtons({
   const [showReportModal, setShowReportModal] = useState(false);
   const { showToast } = useToast();
 
-  const getErrorMessage = (err: unknown) => {
-    if (err instanceof Error) return err.message;
-    if (typeof err === 'object' && err !== null) {
-      const message = (err as { message?: unknown }).message;
-      if (typeof message === 'string' && message.trim()) return message;
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Link copied!', 'success');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      showToast('Failed to copy link', 'error');
     }
-    return 'Failed to record vote. Please try again.';
-  };
+  }, [showToast]);
 
   // Share functionality
   const handleShare = useCallback(async () => {
@@ -72,17 +73,7 @@ export default function HorizontalVoteButtons({
       // Fallback for desktop - copy to clipboard
       await copyToClipboard(postUrl);
     }
-  }, [postId, postContent]);
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast('Link copied!', 'success');
-    } catch (error) {
-      console.error('Failed to copy:', error);
-      showToast('Failed to copy link', 'error');
-    }
-  };
+  }, [copyToClipboard, postId, postContent]);
 
   useEffect(() => {
     setUpvotes(initialUpvotes);

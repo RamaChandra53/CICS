@@ -97,7 +97,6 @@ export const ROOMS: Room[] = [
   { id: 'campus', label: 'Campus', icon: '🎓', description: 'Everyone in the college' },
   { id: 'confessions', label: 'Confessions', icon: '🤫', description: 'Anonymous confessions' },
   { id: 'placements', label: 'Placements', icon: '💼', description: 'Placement updates & discussion' },
-  { id: 'clubs', label: 'Clubs', icon: '🎭', description: 'College clubs & organizations' },
   { id: 'alumni', label: 'Alumni', icon: '🎓', description: 'Alumni network & connections' },
 ];
 
