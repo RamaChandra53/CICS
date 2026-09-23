@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
             setTempEmail(user.email || '');
             setStep('newPassword');
           }
-        } catch (err) {
+        } catch {
           setError('Invalid or expired reset link. Please try again.');
         }
       };

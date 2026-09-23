@@ -5,15 +5,6 @@ type ParsedRoll = {
   section: string;
 };
 
-// Dynamic year calculation - no more hardcoded year mapping
-
-const YEAR_LABEL_MAP: Record<ParsedRoll['yearNumber'], string> = {
-  '1': '1st',
-  '2': '2nd',
-  '3': '3rd',
-  '4': '4th',
-};
-
 const BRANCH_MAP: Record<string, string> = {
   '01': 'CIVIL',
   '02': 'EEE',
@@ -97,7 +88,6 @@ export function parseRollNumber(roll: string): ParsedRoll | null {
   const match = normalized.match(/^([0-9]{2})(261)A([0-9]{2})([0-9A-Z]{2})$/);
   if (!match) return null;
 
-  const intakeYear = match[1];
   const branchCode = match[3];
   const studentCode = match[4];
 

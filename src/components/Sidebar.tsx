@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Community } from '@/types';
 import { createClient } from '@/lib/supabase';
+import { isClubCommunity } from '@/lib/services/communities';
 
 async function ensureMembership(
   supabase: ReturnType<typeof createClient>,
@@ -25,6 +26,28 @@ export default function Sidebar() {
   const [joinedCommunities, setJoinedCommunities] = useState<Community[]>([]);
   const [exploreCommunities, setExploreCommunities] = useState<Community[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+
+  const getAccessibleCommunitySlugs = (profile: {
+    year: string | null;
+    branch: string | null;
+    section: string | null;
+  } | null) => {
+    const slugs = ['campus', 'confessions', 'placements'];
+
+    if (!profile?.year) {
+      slugs.push('alumni');
+      return slugs;
+    }
+
+    const yearNumber = profile.year.replace(/\D/g, '');
+    if (yearNumber) slugs.push(`year-${yearNumber}`);
+    if (profile.branch) slugs.push(profile.branch.toLowerCase());
+    if (profile.branch && profile.section) {
+      slugs.push(`${profile.branch.toLowerCase()}-${profile.section.toLowerCase()}`);
+    }
+
+    return slugs;
+  };
 
   const renderCommunityLink = (community: Community) => {
     const href = `/room/${community.slug}`;
@@ -100,12 +123,7 @@ export default function Sidebar() {
     // Existing users may not have been backfilled into community_members.
     // Bootstrap them into the 5 core subreddits so the sidebar is never empty.
     if (communities.length === 0) {
-      const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs'];
-      
-      // Add alumni if user is alumni (no year)
-      if (!profile?.year) {
-        coreSubreddits.push('alumni');
-      }
+      const coreSubreddits = getAccessibleCommunitySlugs(profile ?? null);
       
       const { data: existingCommunities } = await supabase
         .from('communities')
@@ -146,26 +164,20 @@ export default function Sidebar() {
       ? communities.filter(c => ['campus', 'confessions'].includes(c.slug))
       : communities;
 
-    // Define the 5 core subreddits
-    const coreSubreddits = ['campus', 'confessions', 'placements', 'clubs', 'alumni'];
-    
-    // For alumni, include alumni community, for students include placements/clubs
-    const userCoreSubreddits = !profile?.year 
-      ? ['campus', 'confessions', 'placements', 'clubs', 'alumni']
-      : ['campus', 'confessions', 'placements', 'clubs'];
+    const userCoreSubreddits = getAccessibleCommunitySlugs(profile ?? null);
 
     const mine = allJoined
-      .filter(c => userCoreSubreddits.includes(c.slug))
+      .filter(c => userCoreSubreddits.includes(c.slug) && !isClubCommunity(c))
       .sort((a, b) => b.member_count - a.member_count);
     const joined = allJoined
-      .filter(c => !userCoreSubreddits.includes(c.slug))
+      .filter(c => !userCoreSubreddits.includes(c.slug) && !isClubCommunity(c))
       .sort((a, b) => b.member_count - a.member_count);
 
-    // Only show core subreddits that user hasn't joined yet
+    // Only show accessible non-club communities that user hasn't joined yet
     const { data: coreCommunities } = await supabase
       .from('communities')
       .select('id,name,slug,description,icon,type,member_count,created_at')
-      .in('slug', coreSubreddits)
+      .in('slug', userCoreSubreddits)
       .order('member_count', { ascending: false });
 
     const joinedSlugSet = new Set(allJoined.map((community) => community.slug));
@@ -208,20 +220,31 @@ export default function Sidebar() {
 
       {/* Reddit-style Subreddits */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-200px)]">
-        {/* Search link */}
         <Link
-          href="/search"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors mb-2 ${
-            pathname === '/search'
+          href="/communities"
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+            pathname === '/communities'
               ? 'bg-indigo-600/20 text-indigo-400 font-medium'
               : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
           }`}
         >
-          <span className="text-base">🔍</span>
-          <span>Search</span>
+          <span className="text-base">🏘️</span>
+          <span>Communities</span>
         </Link>
 
-        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">Core Subreddits</p>
+        <Link
+          href="/clubs"
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+            pathname === '/clubs'
+              ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+          }`}
+        >
+          <span className="text-base">🏆</span>
+          <span>Clubs</span>
+        </Link>
+
+        <p className="text-gray-600 text-[10px] uppercase tracking-widest px-3 py-2">My Communities</p>
         {myCommunities.map(renderCommunityLink)}
 
         {joinedCommunities.length > 0 && (

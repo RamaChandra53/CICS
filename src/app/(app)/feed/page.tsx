@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Community } from '@/types';
+import type { CommunitySummary } from '@/types/domain';
 import PostCard from '@/components/PostCard';
 import EnhancedCreatePostForm from '@/components/EnhancedCreatePostForm';
 import { useSearchParams } from 'next/navigation';
@@ -13,13 +13,13 @@ import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import SkeletonFeed from '@/components/ui/SkeletonFeed';
 import useFeedPosts from '@/hooks/useFeedPosts';
+import { fetchUserCommunities, isClubCommunity } from '@/lib/services/communities';
 
 const FALLBACK_COMMUNITY_CHIPS = [
   { id: 'all', label: 'All' },
   { id: 'campus', label: 'Campus' },
   { id: 'confessions', label: 'Confessions' },
   { id: 'placements', label: 'Placements' },
-  { id: 'clubs', label: 'Clubs' },
   { id: 'alumni', label: 'Alumni' },
 ];
 
@@ -33,11 +33,14 @@ export default function FeedPage() {
     profileLoading,
   } = useAuth();
 
-  const [communities, setCommunities] = useState<Community[]>([]);
+  const [communities, setCommunities] = useState<CommunitySummary[]>([]);
   const [authReady, setAuthReady] = useState(false);
 
   const [selectedCommunity, setSelectedCommunity] = useState('all');
   const [composeSignal, setComposeSignal] = useState(0);
+  const [pullDistance, setPullDistance] = useState(0);
+  const pullStartY = useRef<number | null>(null);
+  const isPulling = useRef(false);
 
   const {
     posts,
@@ -79,25 +82,46 @@ export default function FeedPage() {
     return () => window.removeEventListener('open-create-post', handleOpen);
   }, [openComposer]);
 
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (window.scrollY > 0 || isRefreshing || isInitialLoading) return;
+    pullStartY.current = event.touches[0]?.clientY ?? null;
+    isPulling.current = true;
+  }, [isInitialLoading, isRefreshing]);
+
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!isPulling.current || pullStartY.current === null) return;
+    if (window.scrollY > 0) {
+      isPulling.current = false;
+      setPullDistance(0);
+      return;
+    }
+
+    const currentY = event.touches[0]?.clientY ?? pullStartY.current;
+    const distance = Math.max(0, currentY - pullStartY.current);
+    setPullDistance(Math.min(96, distance * 0.55));
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    const shouldRefresh = pullDistance >= 56 && !isRefreshing && !isInitialLoading;
+    pullStartY.current = null;
+    isPulling.current = false;
+    setPullDistance(0);
+
+    if (shouldRefresh) {
+      void refresh();
+    }
+  }, [isInitialLoading, isRefreshing, pullDistance, refresh]);
+
   // Fetch communities list (for chip label enrichment)
   const fetchCommunities = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('communities')
-        .select('id, name, slug, description, icon, type, member_count, created_at')
-        .order('member_count', { ascending: false })
-        .limit(30);
-
-      if (error) {
-        console.error('Error fetching communities:', error);
-        return;
-      }
-
-      setCommunities(data || []);
+      if (!user?.id) return;
+      const memberships = await fetchUserCommunities(supabase, user.id);
+      setCommunities(memberships.filter((community) => !isClubCommunity(community)).slice(0, 30));
     } catch (error) {
       console.error('Unexpected error fetching communities:', error);
     }
-  }, [supabase]);
+  }, [supabase, user?.id]);
 
   // Initialize: auth check + fetch communities
   useEffect(() => {
@@ -119,31 +143,28 @@ export default function FeedPage() {
 
   return (
     <ErrorBoundary>
-      <div className="w-full max-w-2xl mx-auto px-3 md:px-6 py-5 md:py-8 overflow-x-hidden">
-        <section className="mb-5 rounded-3xl border border-white/8 bg-gradient-to-br from-indigo-500/15 via-[#151b2b] to-[#111722] px-5 py-5 shadow-xl shadow-black/10 md:px-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-indigo-300">Your campus space</p>
-              <h1 className="text-xl font-bold tracking-tight text-white md:text-2xl">Good to see you{authProfile?.username ? `, ${authProfile.username}` : ''}.</h1>
-              <p className="mt-1.5 max-w-md text-sm leading-6 text-slate-400">Catch up on campus conversations or start one of your own.</p>
-            </div>
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={isRefreshing}
-              aria-label="Refresh feed"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-indigo-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <svg className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2M20 20h-5" />
-              </svg>
-            </button>
+      <div
+        className="w-full max-w-2xl mx-auto px-3 md:px-6 py-4 md:py-6 overflow-x-hidden"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
+        <div
+          className="flex items-center justify-center overflow-hidden text-xs text-slate-500 transition-[height,opacity] duration-150"
+          style={{ height: isRefreshing ? 34 : pullDistance, opacity: isRefreshing || pullDistance > 8 ? 1 : 0 }}
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className={`h-3.5 w-3.5 rounded-full border-2 border-indigo-500 border-t-transparent ${
+                isRefreshing ? 'animate-spin' : ''
+              }`}
+              style={!isRefreshing ? { transform: `rotate(${pullDistance * 4}deg)` } : undefined}
+            />
+            <span>{isRefreshing ? 'Refreshing...' : pullDistance >= 56 ? 'Release to refresh' : 'Pull to refresh'}</span>
           </div>
-          <button type="button" onClick={openComposer} className="mt-5 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-left text-sm text-slate-500 transition hover:border-indigo-400/30 hover:bg-white/5 hover:text-slate-300">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-400/15 text-lg leading-none text-indigo-200">+</span>
-            Share something with your campus…
-          </button>
-        </section>
+        </div>
 
         {/* Community Chips */}
         <div className="mb-5 overflow-x-auto scrollbar-hide -mx-3 px-3">
@@ -167,14 +188,6 @@ export default function FeedPage() {
             })}
           </div>
         </div>
-
-        {/* Refreshing indicator */}
-        {isRefreshing && (
-          <div className="mb-3 flex items-center justify-center gap-2 py-1.5">
-            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-            <span className="text-xs text-slate-400">Refreshing...</span>
-          </div>
-        )}
 
         {/* Create Post Box */}
         {authProfile && (

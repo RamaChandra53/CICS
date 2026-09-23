@@ -4,10 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, ReactN
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
-import { ensureUniquePseudoUsername } from '@/lib/usernameGenerator';
-
-const PROFILE_SELECT =
-  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, college_email, is_email_verified, real_display_name, pseudo_username, pending_pseudo_username, pseudo_username_status, pseudo_username_requested_at, pseudo_username_rejection_reason, pseudo_username_last_changed_at, show_roll_number_publicly';
+import { delay, fetchProfileById, isAuthLockError, isTimeoutError, withTimeout } from '@/lib/services/profile';
 
 interface AuthContextType {
   user: { id: string } | null;
@@ -24,45 +21,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * If the profile has no pseudo_username, generate one and persist it.
- * This handles existing users who were created before the identity v4 migration.
- */
-async function backfillPseudoUsername(
-  supabase: ReturnType<typeof createClient>,
-  profile: Profile
-): Promise<Profile> {
-  if (profile.pseudo_username) {
-    return profile;
-  }
-
-  try {
-    const pseudoUsername = await ensureUniquePseudoUsername(supabase);
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        pseudo_username: pseudoUsername,
-        pseudo_username_status: 'approved',
-      })
-      .eq('id', profile.id);
-
-    if (error) {
-      console.error('Failed to backfill pseudo_username:', error);
-      return profile;
-    }
-
-    return {
-      ...profile,
-      pseudo_username: pseudoUsername,
-      pseudo_username_status: 'approved' as const,
-    };
-  } catch (err) {
-    console.error('Error during pseudo_username backfill:', err);
-    return profile;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<{ id: string } | null>(null);
@@ -76,29 +34,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isInitializingRef = useRef(true);
   const authRequestInFlightRef = useRef<Promise<void> | null>(null);
 
-  const withTimeout = async <T,>(promise: Promise<T>, ms: number, message: string): Promise<T> => {
-    let timeoutId: number | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = window.setTimeout(() => reject(new Error(message)), ms);
-    });
-
-    try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-      }
-    }
-  };
-
-  const isAuthLockError = (value: unknown) => {
-    if (!value) return false;
-    const message = value instanceof Error ? value.message : String((value as { message?: unknown }).message ?? value);
-    return message.includes('lock:') || message.includes('NavigatorLockAcquireTimeoutError');
-  };
-
-  const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-
   const fetchProfile = async (userId: string, options?: { background?: boolean }): Promise<Profile | null> => {
     if (!options?.background) {
       setProfileLoading(true);
@@ -106,54 +41,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setErrorScope(null);
     }
     try {
-      let profileResult:
-        | { data: Profile | null; error: { message?: string } | null }
-        | null = null;
-
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          profileResult = await withTimeout<{
-            data: Profile | null;
-            error: { message?: string } | null;
-          }>(
-            supabase
-              .from('profiles')
-              .select(PROFILE_SELECT)
-              .eq('id', userId)
-              .single() as Promise<{ data: Profile | null; error: { message?: string } | null }>,
-            15000,
-            'Profile request timed out'
-          );
-          break;
-        } catch (fetchError) {
-          if (!isAuthLockError(fetchError) && attempt === 2) {
-            throw fetchError;
-          }
-          if (attempt < 2) {
-            await delay(400 * (attempt + 1));
-          }
-        }
-      }
-
-      if (!profileResult) {
-        throw new Error('Profile request failed');
-      }
-
-      const { data: profileData, error: profileError } = profileResult;
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      if (!profileData) return null;
-
-      // Backfill pseudo_username if missing
-      const finalProfile = await backfillPseudoUsername(supabase, profileData as Profile);
-      return finalProfile;
+      return await fetchProfileById(supabase, userId);
     } catch (fetchError) {
-      console.error('Profile fetch error:', fetchError);
+      if (isTimeoutError(fetchError)) {
+        console.warn('Profile fetch timed out. Keeping the app shell available for retry.');
+      } else {
+        console.error('Profile fetch error:', fetchError);
+      }
       if (!options?.background) {
-        setError('Unable to load your profile. Please try again.');
+        setError(
+          isTimeoutError(fetchError)
+            ? 'Profile took too long to load. Check your connection and retry.'
+            : 'Unable to load your profile. Please try again.'
+        );
         setErrorScope('profile');
       }
       return null;

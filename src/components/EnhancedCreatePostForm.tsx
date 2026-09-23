@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Profile, Community, ROOMS, DisplayMode } from '@/types';
+import { Profile, DisplayMode } from '@/types';
+import type { CommunitySummary } from '@/types/domain';
 import TrustUnlockModal from './TrustUnlockModal';
 
 import PostTypeSelector, { PostType as PostTypeEnum } from './PostTypeSelector';
@@ -14,6 +15,8 @@ import PollPostForm from './PollPostForm';
 
 
 import CommunitySelector from './CommunitySelector';
+import { createPost } from '@/lib/services/posts';
+import { fetchUserCommunities } from '@/lib/services/communities';
 import {
   type IdentityMode,
   getIdentityModeAccess,
@@ -67,7 +70,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
     getEffectiveDefaultMode(defaultCommunity, profile)
   );
   const [showTrustModal, setShowTrustModal] = useState(false);
-  const [localCommunities, setLocalCommunities] = useState<Community[]>([]);
+  const [localCommunities, setLocalCommunities] = useState<CommunitySummary[]>([]);
   const lastOpenSignal = useRef<number | null>(null);
 
   useEffect(() => {
@@ -83,35 +86,16 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   }, [openSignal]);
 
   useEffect(() => {
-    const fetchCommunities = async () => {
+    const loadCommunities = async () => {
       try {
-        const { data, error } = await supabase
-          .from('communities')
-          .select('id, name, slug, description, icon, type, member_count, created_at')
-          .order('member_count', { ascending: false });
-
-        if (error || !data || data.length === 0) {
-          // Fallback to ROOMS if database returns empty or error
-          const fallbackCommunities: Community[] = ROOMS.map((room) => ({
-            id: room.id,
-            name: room.label,
-            slug: room.id,
-            description: room.description,
-            icon: room.icon,
-            type: 'open',
-            member_count: 0,
-            created_at: new Date().toISOString()
-          }));
-          setLocalCommunities(fallbackCommunities);
-        } else {
-          setLocalCommunities(data);
-        }
+        const memberships = await fetchUserCommunities(supabase, profile.id);
+        setLocalCommunities(memberships);
       } catch (err) {
         console.error('Failed to fetch communities for form:', err);
       }
     };
-    fetchCommunities();
-  }, [supabase]);
+    loadCommunities();
+  }, [profile.id, supabase]);
 
   const [formData, setFormData] = useState<PostFormData>({
     postType: 'text',
@@ -316,8 +300,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         downvotes: 0,
       };
 
-      const { error: insertError } = await supabase.from('posts').insert(postData);
-      if (insertError) throw new Error(insertError.message || 'Failed to create post');
+      await createPost(supabase, postData);
 
       resetForm();
       setExpanded(false);
@@ -402,30 +385,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   };
 
   if (!expanded) {
-    return (
-      <div
-        onClick={() => {
-          setExpanded(true);
-          setError('');
-        }}
-        className={`flex items-center gap-3 rounded-2xl border border-[#252a31] bg-[#15181c] px-3 py-3 cursor-pointer transition-colors hover:border-indigo-500/40 ${className}`}
-      >
-        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#252a31] bg-[#0f1318] text-indigo-300">
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m7-7H5" />
-          </svg>
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-slate-200">Share something with campus...</p>
-          <p className="text-xs text-slate-500">Confessions, rants, placements, questions</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const formContent = (
@@ -437,7 +397,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-white">Create post</h2>
-            <p className="text-xs text-slate-400">Share your ideas with the community</p>
+            <p className="text-xs text-slate-400">Start simple. A text post, question, or confession is enough for the alpha.</p>
           </div>
           <button
             type="button"

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMGITEmail } from '@/lib/emailValidation';
+import { parseRollNumber } from '@/lib/parseRoll';
 
 /**
  * POST /api/auth/signup
@@ -14,7 +15,7 @@ import { validateMGITEmail } from '@/lib/emailValidation';
 
 export async function POST(request: NextRequest) {
   try {
-    const { rollNumber, collegeEmail, password, year, branch, section } = await request.json();
+    const { rollNumber, collegeEmail, password } = await request.json();
 
     if (!rollNumber || typeof rollNumber !== 'string') {
       return NextResponse.json(
@@ -24,7 +25,15 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedRoll = rollNumber.trim().toUpperCase();
+    const parsedRoll = parseRollNumber(normalizedRoll);
     const email = typeof collegeEmail === 'string' ? collegeEmail.trim().toLowerCase() : '';
+
+    if (!parsedRoll) {
+      return NextResponse.json(
+        { error: 'Invalid roll number format. Please check your roll number.' },
+        { status: 400 }
+      );
+    }
 
     if (!validateMGITEmail(email)) {
       return NextResponse.json(
@@ -95,9 +104,9 @@ export async function POST(request: NextRequest) {
         data: {
           roll_number: normalizedRoll,
           is_first_login: false,
-          year: year === 'Alumni' ? null : year,
-          branch,
-          section,
+          year: parsedRoll.year === 'Alumni' ? null : parsedRoll.year,
+          branch: parsedRoll.branch,
+          section: parsedRoll.section,
         },
       },
     });

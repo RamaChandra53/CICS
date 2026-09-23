@@ -1,15 +1,14 @@
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-bg-primary gradient-bg">
-      <div className="mx-auto max-w-[740px] px-4 py-6">
-        <div className="space-y-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-36 rounded-xl border border-border-primary bg-bg-secondary/40 animate-pulse"
-            />
-          ))}
-        </div>
+    <div className="mx-auto w-full max-w-2xl px-3 py-5 md:px-6 md:py-8">
+      <div className="mb-5 h-32 animate-pulse rounded-3xl border border-[#252a31] bg-[#15181c]" />
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-36 animate-pulse rounded-2xl border border-[#252a31] bg-[#15181c]"
+          />
+        ))}
       </div>
     </div>
   );
