@@ -19,7 +19,7 @@ export default function LinkPreview({ url }: { url: string }) {
       target="_blank"
       rel="noopener noreferrer"
       onClick={(event) => event.stopPropagation()}
-      className="mt-3 block overflow-hidden rounded-2xl border border-[#252a31] hover:border-[#353a41] transition-colors"
+      className="mt-3 block overflow-hidden rounded-xl border border-border-primary bg-bg-secondary transition-colors hover:border-border-secondary"
     >
       {metadata?.image && (
         <div className="max-h-48 overflow-hidden">
@@ -27,21 +27,21 @@ export default function LinkPreview({ url }: { url: string }) {
         </div>
       )}
       <div className="p-3">
-        <p className="text-xs text-indigo-400 mb-1 truncate">{domain}</p>
+        <p className="mb-1 truncate text-xs text-text-accent">{domain}</p>
         {metadata?.title && (
-          <p className="text-sm font-medium text-slate-200 line-clamp-2">{metadata.title}</p>
+          <p className="line-clamp-2 text-sm font-medium text-text-primary">{metadata.title}</p>
         )}
         {metadata?.description && (
-          <p className="text-xs text-slate-400 mt-1 line-clamp-2">{metadata.description}</p>
+          <p className="mt-1 line-clamp-2 text-xs text-text-secondary">{metadata.description}</p>
         )}
         {!metadata?.title && !loaded && (
           <div className="animate-pulse">
-            <div className="h-3 bg-[#1f2329] rounded w-2/3 mb-1" />
-            <div className="h-3 bg-[#1f2329] rounded w-full" />
+            <div className="mb-1 h-3 w-2/3 rounded bg-bg-tertiary" />
+            <div className="h-3 w-full rounded bg-bg-tertiary" />
           </div>
         )}
         {!metadata?.title && loaded && (
-          <p className="text-sm text-slate-300 truncate">{url}</p>
+          <p className="truncate text-sm text-text-primary">{url}</p>
         )}
       </div>
     </a>

@@ -4,20 +4,19 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Post, Comment, Profile, ROOMS, DisplayMode } from '@/types';
+import { Post, Comment, Profile, ROOMS, type PublishingIdentity } from '@/types';
 import type { CommentWithAuthor } from '@/types/domain';
 import { formatTimeAgo } from '@/lib/utils';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import HorizontalVoteButtons from '@/components/HorizontalVoteButtons';
 import CommentHorizontalVotes from '@/components/CommentHorizontalVotes';
-import TrustUnlockModal from '@/components/TrustUnlockModal';
+import IdentityPicker from '@/components/IdentityPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getPostIdentityDisplay,
-  type IdentityMode,
-  getIdentityModeAccess,
-  getIdentityModeLabel,
+  getDefaultPublishingIdentity,
+  getPublicProfileHref,
 } from '@/lib/identityDisplay';
 import {
   buildCommentTree,
@@ -37,7 +36,7 @@ function CommentItem({
   profile,
 }: {
   comment: CommentWithAuthor;
-  onReply: (commentId: string, content: string, displayMode: IdentityMode) => Promise<void>;
+  onReply: (commentId: string, content: string, displayMode: PublishingIdentity) => Promise<void>;
   depth?: number;
   profile: Profile | null;
 }) {
@@ -46,14 +45,17 @@ function CommentItem({
 
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyContent, setReplyContent] = useState('');
-  const [replyMode, setReplyMode] = useState<IdentityMode>('pseudo');
+  const [replyMode, setReplyMode] = useState<PublishingIdentity>(() => getDefaultPublishingIdentity(profile));
   const [submitting, setSubmitting] = useState(false);
 
-  const displayInfo = getPostIdentityDisplay(
+  const computedDisplayInfo = getPostIdentityDisplay(
     author,
-    comment.display_mode as IdentityMode,
+    comment.display_mode,
     comment.is_anon_comment
   );
+  const displayInfo = comment.author_name_snapshot && displayMode !== 'anonymous'
+    ? { ...computedDisplayInfo, displayName: comment.author_name_snapshot }
+    : computedDisplayInfo;
 
   const handleReply = async () => {
     if (!replyContent.trim()) return;
@@ -80,17 +82,11 @@ function CommentItem({
               <span className="text-sm font-semibold text-white">{displayInfo.displayName}</span>
             ) : (
               <Link
-                href={`/user/${comment.author_id}`}
+                href={getPublicProfileHref(author) ?? `/user/${comment.author_id}`}
                 className="text-sm font-semibold text-white hover:text-indigo-300 transition-colors"
               >
                 {displayInfo.displayName}
               </Link>
-            )}
-
-            {displayInfo.showVerified && (
-              <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                ✓
-              </span>
             )}
 
             <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
@@ -120,33 +116,8 @@ function CommentItem({
                 className="w-full resize-none rounded-xl border border-[#252a31] bg-[#0f1318] px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
               />
 
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-500 mr-1">Reply as:</span>
-                {(['pseudo', 'anonymous', 'partial', 'full'] as IdentityMode[]).map((mode) => {
-                  const access = getIdentityModeAccess(profile);
-                  const isLocked = access[mode].requiresVerification && !access[mode].available;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => !isLocked && setReplyMode(mode)}
-                      className={`rounded-lg px-2 py-1.5 text-xs transition-colors ${
-                        replyMode === mode
-                          ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                          : isLocked
-                          ? 'text-slate-600 cursor-not-allowed opacity-50'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                      title={isLocked ? 'Requires Student Verification' : ''}
-                    >
-                      <span className="flex items-center gap-1">
-                        {isLocked && <span className="text-[10px]">🔒</span>}
-                        {getIdentityModeLabel(mode, profile)}
-                      </span>
-                    </button>
-                  );
-                })}
-
+              <div className="mt-2 space-y-2">
+                <IdentityPicker value={replyMode} onChange={setReplyMode} profile={profile ?? {}} label="Reply as" />
                 <button
                   onClick={handleReply}
                   disabled={submitting || !replyContent.trim()}
@@ -193,9 +164,8 @@ export default function PostPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(!cachedPost);
   const [newComment, setNewComment] = useState('');
-  const [commentDisplayMode, setCommentDisplayMode] = useState<DisplayMode>('pseudo');
+  const [commentDisplayMode, setCommentDisplayMode] = useState<PublishingIdentity>('pseudo');
   const initializedPostRef = useRef<string | null>(null);
-  const [showTrustModal, setShowTrustModal] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsError, setCommentsError] = useState('');
   const [error, setError] = useState('');
@@ -209,6 +179,10 @@ export default function PostPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (profile) setCommentDisplayMode(getDefaultPublishingIdentity(profile));
+  }, [profile]);
 
   const isOwnPost = post?.author_id === user?.id;
 
@@ -245,6 +219,27 @@ export default function PostPage() {
     }
   };
 
+  const fetchPost = useCallback(async () => {
+    let { data: postData, error: postError } = await supabase
+      .from('posts_public')
+      .select(
+        'id, author_id, room, content, image_url, video_url, link_url, post_type, poll_options, poll_expires_at, is_anon_post, display_mode, author_name_snapshot, created_at, upvotes, downvotes, profiles'
+      )
+      .eq('id', postId)
+      .single();
+
+    if (postError && ['42P01', 'PGRST205', '42703'].includes(postError.code ?? '')) {
+      const legacy = await supabase.from('posts').select(
+        'id, author_id, room, content, image_url, video_url, link_url, post_type, poll_options, poll_expires_at, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, year, branch, pseudo_username, real_display_name)'
+      ).eq('id', postId).single();
+      postData = legacy.data;
+      postError = legacy.error;
+    }
+
+    if (postError) throw postError;
+    return postData as Post;
+  }, [postId, supabase]);
+
   const fetchComments = useCallback(
     async (pageToLoad = 0, options?: { reset?: boolean }) => {
       setCommentsLoading(true);
@@ -275,20 +270,6 @@ export default function PostPage() {
     [supabase, postId]
   );
 
-  const handleCommentDisplayModeChange = (mode: IdentityMode) => {
-    const access = getIdentityModeAccess(profile);
-    if (access[mode].requiresVerification && !access[mode].available) {
-      setShowTrustModal(true);
-      return;
-    }
-    setCommentDisplayMode(mode);
-  };
-
-  const handleVerificationSuccess = () => {
-    setProfile((prev) => (prev ? { ...prev, is_email_verified: true } : null));
-    setShowTrustModal(false);
-  };
-
   useEffect(() => {
     let cancelled = false;
 
@@ -312,22 +293,12 @@ export default function PostPage() {
       setLoading(!cachedPost);
 
       try {
-        const { data: postData, error: postError } = await supabase
-          .from('posts')
-          .select(
-            'id, author_id, room, content, image_url, video_url, link_url, post_type, poll_options, poll_expires_at, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
-          )
-          .eq('id', postId)
-          .single();
-
-        if (postError) {
-          throw postError;
-        }
+        const postData = await fetchPost();
 
         if (cancelled) return;
 
-        setPost(postData as Post);
-        cachePostPreview(postData as Post);
+        setPost(postData);
+        cachePostPreview(postData);
         setCommentPage(0);
         setHasMoreComments(true);
         setFlatComments([]);
@@ -349,12 +320,12 @@ export default function PostPage() {
     return () => {
       cancelled = true;
     };
-  }, [supabase, router, postId, fetchComments, authLoading, user, authProfile, cachedPost]);
+  }, [router, postId, fetchComments, fetchPost, authLoading, user, authProfile, cachedPost]);
 
   const handleAddComment = async (
     parentId?: string,
     content?: string,
-    replyDisplayMode?: IdentityMode
+    replyDisplayMode?: PublishingIdentity
   ) => {
     if (!profile) return;
 
@@ -384,7 +355,7 @@ export default function PostPage() {
     try {
       const insertedComment = await createComment(supabase, {
         postId,
-        authorId: profile.id,
+        author: profile,
         parentId,
         content: commentContent,
         displayMode,
@@ -454,7 +425,10 @@ export default function PostPage() {
   const author = post.profiles;
   const postDisplayMode = post.display_mode || (post.is_anon_post ? 'anonymous' : 'full');
 
-  const postDisplayInfo = getPostIdentityDisplay(author, postDisplayMode, post.is_anon_post);
+  const computedPostDisplayInfo = getPostIdentityDisplay(author, postDisplayMode, post.is_anon_post);
+  const postDisplayInfo = post.author_name_snapshot && postDisplayMode !== 'anonymous'
+    ? { ...computedPostDisplayInfo, displayName: post.author_name_snapshot }
+    : computedPostDisplayInfo;
 
   const room = ROOMS.find((r) => r.id === post.room);
   const postContent = post.content ?? '';
@@ -486,14 +460,11 @@ export default function PostPage() {
               <span className="text-slate-300">{postDisplayInfo.displayName}</span>
             ) : (
               <Link
-                href={`/user/${post.author_id}`}
+                href={getPublicProfileHref(author) ?? `/user/${post.author_id}`}
                 className="text-slate-300 hover:text-indigo-300 transition-colors"
               >
                 {postDisplayInfo.displayName}
               </Link>
-            )}
-            {postDisplayInfo.showVerified && postDisplayMode !== 'anonymous' && (
-              <span className="text-[10px] font-semibold text-indigo-300">✓</span>
             )}
             <span className="text-slate-600">•</span>
             <span>{formatTimeAgo(post.created_at)}</span>
@@ -670,33 +641,7 @@ export default function PostPage() {
 
           {isExpanded && (
             <div className="mt-3 flex flex-col gap-3 border-t border-[#252a31] pt-3 animate-in fade-in slide-in-from-top-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-xs text-slate-400">Post as:</span>
-
-                {(['pseudo', 'anonymous', 'partial', 'full'] as IdentityMode[]).map((mode) => {
-                  const access = getIdentityModeAccess(profile);
-                  const isLocked = access[mode].requiresVerification && !access[mode].available;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => handleCommentDisplayModeChange(mode)}
-                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all duration-200 ${
-                        commentDisplayMode === mode
-                          ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
-                          : isLocked
-                          ? 'border-[#252a31] text-slate-500'
-                          : 'border-[#252a31] text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <span className="flex items-center gap-1">
-                        {isLocked && <span className="text-[10px]">🔒</span>}
-                        {getIdentityModeLabel(mode, profile)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <IdentityPicker value={commentDisplayMode} onChange={setCommentDisplayMode} profile={profile} label="Comment as" />
 
               <div className="flex gap-2">
                 <button
@@ -764,12 +709,6 @@ export default function PostPage() {
         )}
       </div>
 
-      <TrustUnlockModal
-        isOpen={showTrustModal}
-        onClose={() => setShowTrustModal(false)}
-        onVerified={handleVerificationSuccess}
-        userRollNumber={profile?.roll_number || ''}
-      />
     </div>
   );
 }

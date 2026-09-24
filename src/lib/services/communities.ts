@@ -1,4 +1,4 @@
-import { ROOMS, type Community } from '@/types';
+import { ROOMS, type Community, type Profile } from '@/types';
 import { normalizeCommunityRows, type CommunitySummary } from '@/types/domain';
 import type { SupabaseClientLike } from './supabase-types';
 
@@ -190,6 +190,58 @@ export function getCommunityLabel(slug: string | null | undefined, communities: 
   if (!slug) return 'general';
   const knownCommunities = [...communities, ...OFFICIAL_CLUBS];
   return knownCommunities.find((community) => community.slug === slug || community.id === slug)?.name ?? slug;
+}
+
+function compactNumber(value: string | null | undefined): string | null {
+  const match = value?.match(/\d+/);
+  return match?.[0] ?? null;
+}
+
+function communityAcronym(value: string): string {
+  return value
+    .replace(/&/g, ' and ')
+    .split(/[^a-zA-Z0-9]+/)
+    .filter((word) => word && word.toLowerCase() !== 'and')
+    .map((word) => word[0])
+    .join('')
+    .toLowerCase();
+}
+
+/** Returns a compact, user-facing label without changing community identity or routing. */
+export function formatCommunityChipLabel(
+  community: Pick<CommunitySummary, 'id' | 'slug' | 'name'>,
+  profile: Pick<Profile, 'branch' | 'year' | 'section'> | null
+): string {
+  const slug = community.slug.toLowerCase();
+  const branch = profile?.branch?.trim().toUpperCase() || null;
+  const year = compactNumber(profile?.year);
+  const section = profile?.section?.trim() || null;
+  const branchSlug = branch?.toLowerCase();
+  const communityAcronyms = [community.name, community.slug, community.id]
+    .map(communityAcronym)
+    .filter(Boolean);
+
+  if (slug === 'all' || community.id === 'all') return 'All';
+
+  const isYearCommunity = year && (slug === `year-${year}` || slug === `year${year}`);
+  if (isYearCommunity) return `Year ${year}`;
+
+  const isSectionCommunity = branch && section && (
+    slug === `${branchSlug}-${section}` ||
+    slug === `${branchSlug}-section-${section}` ||
+    slug.endsWith(`-${branchSlug}-${section}`)
+  );
+  if (isSectionCommunity) return `${branch} Section ${section}`;
+
+  const isBranchCommunity = branch && branchSlug && (
+    slug === branchSlug ||
+    slug.endsWith(`-${branchSlug}`) ||
+    slug.includes(`-${branchSlug}-`) ||
+    communityAcronyms.some((acronym) => acronym.includes(branchSlug))
+  );
+  if (isBranchCommunity) return branch;
+
+  return community.name;
 }
 
 export async function fetchCommunities(supabase: SupabaseClientLike): Promise<CommunitySummary[]> {

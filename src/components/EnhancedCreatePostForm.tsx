@@ -2,9 +2,9 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Profile, DisplayMode } from '@/types';
+import { Profile, type PublishingIdentity } from '@/types';
 import type { CommunitySummary } from '@/types/domain';
-import TrustUnlockModal from './TrustUnlockModal';
+import IdentityPicker from './IdentityPicker';
 
 import PostTypeSelector, { PostType as PostTypeEnum } from './PostTypeSelector';
 import TextPostForm from './TextPostForm';
@@ -17,16 +17,7 @@ import PollPostForm from './PollPostForm';
 import CommunitySelector from './CommunitySelector';
 import { createPost } from '@/lib/services/posts';
 import { fetchUserCommunities } from '@/lib/services/communities';
-import {
-  type IdentityMode,
-  getIdentityModeAccess,
-  getIdentityModeLabel,
-  getIdentityModeHelper,
-  getEffectiveDefaultMode,
-} from '@/lib/identityDisplay';
-
-/** Identity mode order in the selector UI */
-const IDENTITY_MODES: IdentityMode[] = ['pseudo', 'anonymous', 'partial', 'full'];
+import { getDefaultPublishingIdentity, getPostIdentityDisplay } from '@/lib/identityDisplay';
 
 interface EnhancedCreatePostFormProps {
   profile: Profile;
@@ -34,6 +25,8 @@ interface EnhancedCreatePostFormProps {
   onPostCreated?: () => void;
   className?: string;
   openSignal?: number;
+  presentation?: 'overlay' | 'page';
+  initialExpanded?: boolean;
 }
 
 interface PostFormData {
@@ -60,16 +53,17 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   onPostCreated,
   className = '',
   openSignal,
+  presentation = 'overlay',
+  initialExpanded = false,
 }) => {
   const supabase = createClient();
 
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initialExpanded);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(() =>
-    getEffectiveDefaultMode(defaultCommunity, profile)
+  const [displayMode, setDisplayMode] = useState<PublishingIdentity>(() =>
+    getDefaultPublishingIdentity(profile)
   );
-  const [showTrustModal, setShowTrustModal] = useState(false);
   const [localCommunities, setLocalCommunities] = useState<CommunitySummary[]>([]);
   const lastOpenSignal = useRef<number | null>(null);
 
@@ -120,27 +114,11 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
 
   const handleCommunityChange = (community: string) => {
     updateFormData({ community });
-
-    const nextMode = getEffectiveDefaultMode(community, profile);
-    setDisplayMode(nextMode);
-    updateFormData({ isAnonymous: nextMode === 'anonymous' });
   };
 
-  const handleDisplayModeChange = (mode: IdentityMode) => {
-    const access = getIdentityModeAccess(profile);
-
-    // If mode requires verification and user isn't verified, show trust modal
-    if (access[mode].requiresVerification && !access[mode].available) {
-      setShowTrustModal(true);
-      return;
-    }
-
+  const handleDisplayModeChange = (mode: PublishingIdentity) => {
     setDisplayMode(mode);
     updateFormData({ isAnonymous: mode === 'anonymous' });
-  };
-
-  const handleVerificationSuccess = () => {
-    window.location.reload();
   };
 
   const validateForm = (): string | null => {
@@ -189,7 +167,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
       pollExpiresAt: null,
     });
 
-    setDisplayMode(getEffectiveDefaultMode(defaultCommunity, profile));
+    setDisplayMode(getDefaultPublishingIdentity(profile));
   };
 
   const handleSubmit = async (
@@ -293,6 +271,9 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         poll_expires_at: formData.postType === 'poll' ? formData.pollExpiresAt : null,
         is_anon_post: formData.isAnonymous || false,
         display_mode: displayMode,
+        author_name_snapshot: displayMode === 'anonymous'
+          ? null
+          : getPostIdentityDisplay(profile, displayMode).displayName,
         year_tag: profile.year || null,
         branch_tag: profile.branch || null,
         section_tag: profile.section || null,
@@ -391,13 +372,13 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
   const formContent = (
     <form
       onSubmit={(e) => handleSubmit(e)}
-      className={`rounded-2xl border border-[#252a31] bg-[#15181c] ${className}`}
+      className={`overflow-hidden rounded-xl border border-border-primary bg-bg-card ${className}`}
     >
       <div className="p-4">
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-white">Create post</h2>
-            <p className="text-xs text-slate-400">Start simple. A text post, question, or confession is enough for the alpha.</p>
+            <h2 className="text-lg font-semibold text-text-primary">Create post</h2>
+            <p className="text-xs text-text-muted">Choose a community and share what is on your mind.</p>
           </div>
           <button
             type="button"
@@ -405,7 +386,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
               setExpanded(false);
               setError('');
             }}
-            className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border border-[#252a31] text-slate-400 hover:text-white"
+            className={`${presentation === 'page' ? 'hidden' : 'flex'} md:hidden h-8 w-8 items-center justify-center text-text-muted hover:text-text-primary`}
             aria-label="Close"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -414,14 +395,14 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
           </button>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-5">
           <PostTypeSelector
             selectedType={formData.postType}
             onTypeChange={(type) => updateFormData({ postType: type })}
           />
         </div>
 
-        <div className="mb-6">
+        <div className="mb-5">
           <CommunitySelector
             communities={localCommunities}
             selectedCommunity={formData.community}
@@ -432,39 +413,11 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         {renderPostTypeForm()}
 
         <div className="mb-6">
-          <label className="block text-sm font-medium text-slate-300 mb-3">Post identity</label>
-          <div className="flex flex-wrap items-center gap-2">
-            {IDENTITY_MODES.map((mode) => {
-              const access = getIdentityModeAccess(profile);
-              const isLocked = access[mode].requiresVerification && !access[mode].available;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => handleDisplayModeChange(mode)}
-                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                    displayMode === mode
-                      ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
-                      : isLocked
-                      ? 'border-[#252a31] text-slate-500'
-                      : 'border-[#252a31] text-slate-300 hover:text-slate-100'
-                  }`}
-                >
-                  <span className="flex items-center gap-1">
-                    {isLocked && <span className="text-[10px]">🔒</span>}
-                    {getIdentityModeLabel(mode, profile)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-xs text-slate-500 mt-2">
-            {getIdentityModeHelper(displayMode)}
-          </p>
+          <IdentityPicker value={displayMode} onChange={handleDisplayModeChange} profile={profile} />
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-900/20 border border-red-800/40 rounded-xl backdrop-blur-sm">
+          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4">
             <div className="flex items-center gap-3">
               <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -475,24 +428,26 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         )}
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-[#252a31] px-4 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 border-t border-border-primary bg-bg-tertiary px-4 py-4 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <button
-            type="button"
-            onClick={() => {
-              setExpanded(false);
-              setError('');
-            }}
-            className="hidden md:block h-10 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white"
-          >
-            Cancel
-          </button>
+          {presentation !== 'page' && (
+            <button
+              type="button"
+              onClick={() => {
+                setExpanded(false);
+                setError('');
+              }}
+              className="hidden h-10 rounded-lg border border-border-primary bg-bg-secondary px-4 text-sm text-text-secondary hover:text-text-primary md:block"
+            >
+              Cancel
+            </button>
+          )}
 
           <button
             type="button"
             onClick={() => handleSubmit(undefined, true)}
             disabled={loading}
-            className="h-11 rounded-lg border border-[#252a31] px-4 text-sm text-slate-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed md:h-10"
+            className="h-11 rounded-lg border border-border-primary bg-bg-secondary px-4 text-sm text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 md:h-10"
           >
             {loading ? 'Saving...' : 'Save Draft'}
           </button>
@@ -501,7 +456,7 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
         <button
           type="submit"
           disabled={loading}
-          className="h-11 w-full rounded-xl bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 disabled:shadow-none md:w-auto md:px-8"
+          className="h-11 w-full rounded-lg bg-accent-primary text-sm font-semibold text-white transition-colors hover:bg-accent-secondary disabled:opacity-50 md:w-auto md:px-8"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
@@ -519,6 +474,10 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
     </form>
   );
 
+  if (presentation === 'page') {
+    return <div>{formContent}</div>;
+  }
+
   return (
     <>
       {/* Mobile: bottom sheet overlay */}
@@ -532,10 +491,10 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
           }}
         />
         {/* Sheet */}
-        <div className="relative mt-auto max-h-[92vh] overflow-y-auto rounded-t-2xl bg-[#0b0f12] border-t border-[#252a31]">
+        <div className="relative mt-auto max-h-[92vh] overflow-y-auto rounded-t-2xl border-t border-border-primary bg-bg-primary">
           {/* Drag indicator */}
-          <div className="sticky top-0 z-10 flex justify-center py-2 bg-[#0b0f12] rounded-t-2xl">
-            <div className="h-1 w-10 rounded-full bg-slate-600" />
+          <div className="sticky top-0 z-10 flex justify-center rounded-t-2xl bg-bg-primary py-2">
+            <div className="h-1 w-10 rounded-full bg-border-secondary" />
           </div>
           {formContent}
         </div>
@@ -545,13 +504,6 @@ const EnhancedCreatePostForm: React.FC<EnhancedCreatePostFormProps> = ({
       <div className="hidden md:block">
         {formContent}
       </div>
-
-      <TrustUnlockModal
-        isOpen={showTrustModal}
-        onClose={() => setShowTrustModal(false)}
-        onVerified={handleVerificationSuccess}
-        userRollNumber={profile.roll_number || ''}
-      />
     </>
   );
 

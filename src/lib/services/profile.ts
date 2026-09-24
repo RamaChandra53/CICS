@@ -3,7 +3,18 @@ import { ensureUniquePseudoUsername } from '@/lib/usernameGenerator';
 import type { SupabaseClientLike } from './supabase-types';
 
 export const PROFILE_SELECT =
+  'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, college_email, is_email_verified, real_display_name, pseudo_username, pending_pseudo_username, pseudo_username_status, pseudo_username_requested_at, pseudo_username_rejection_reason, pseudo_username_last_changed_at, show_roll_number_publicly, bio, default_identity';
+
+const LEGACY_PROFILE_SELECT =
   'id, username, full_name, roll_number, year, branch, section, is_first_login, is_verified, is_anonymous, id_card_url, email, college_email, is_email_verified, real_display_name, pseudo_username, pending_pseudo_username, pseudo_username_status, pseudo_username_requested_at, pseudo_username_rejection_reason, pseudo_username_last_changed_at, show_roll_number_publicly';
+
+function withProfileDefaults(profile: Profile): Profile {
+  return {
+    ...profile,
+    bio: profile.bio ?? null,
+    default_identity: profile.default_identity === 'full' ? 'full' : 'pseudo',
+  };
+}
 
 export function isAuthLockError(value: unknown): boolean {
   if (!value) return false;
@@ -90,7 +101,7 @@ export async function fetchProfileById(supabase: SupabaseClientLike, userId: str
       }>(
         supabase
           .from('profiles')
-          .select(PROFILE_SELECT)
+          .select(LEGACY_PROFILE_SELECT)
           .eq('id', userId)
           .single() as unknown as Promise<{ data: Profile | null; error: { message?: string } | null }>,
         8000,
@@ -111,9 +122,38 @@ export async function fetchProfileById(supabase: SupabaseClientLike, userId: str
     throw new Error('Profile request failed');
   }
 
-  const { data, error } = profileResult;
+  let { data } = profileResult;
+  const { error } = profileResult;
   if (error) throw error;
   if (!data) return null;
 
-  return backfillPseudoUsername(supabase, data);
+  // These fields are introduced by migration 013. Keep them out of the
+  // blocking auth query so deployments on the previous schema still load.
+  try {
+    const enhancements = await withTimeout<{
+      data: Pick<Profile, 'bio' | 'default_identity'> | null;
+      error: { code?: string; message?: string } | null;
+    }>(
+      supabase
+        .from('profiles')
+        .select('bio, default_identity')
+        .eq('id', userId)
+        .single() as unknown as Promise<{
+          data: Pick<Profile, 'bio' | 'default_identity'> | null;
+          error: { code?: string; message?: string } | null;
+        }>,
+      2000,
+      'Profile enhancement request timed out'
+    );
+
+    if (!enhancements.error && enhancements.data) {
+      data = { ...data, ...enhancements.data };
+    }
+  } catch (enhancementError) {
+    if (!isTimeoutError(enhancementError)) {
+      console.warn('Optional profile fields are unavailable:', enhancementError);
+    }
+  }
+
+  return backfillPseudoUsername(supabase, withProfileDefaults(data));
 }

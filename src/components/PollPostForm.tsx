@@ -105,18 +105,18 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
           type="text"
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
-          placeholder="Enter a compelling headline..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-lg font-medium"
+          placeholder="Post title"
+          className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-lg font-semibold text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={300}
         />
-        <div className="mt-1 text-xs text-gray-500 text-right">
+        <div className="mt-1 text-right text-xs text-text-muted">
           {headline.length}/300 characters
         </div>
       </div>
 
       {/* Poll Question */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Poll Question
         </label>
         <input
@@ -124,10 +124,10 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
           value={question}
           onChange={(e) => onQuestionChange(e.target.value)}
           placeholder="What would you like to ask?"
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+          className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={200}
         />
-        <div className="mt-1 text-xs text-gray-500 text-right">
+        <div className="mt-1 text-right text-xs text-text-muted">
           {question.length}/200 characters
         </div>
       </div>
@@ -135,14 +135,14 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
       {/* Poll Options */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-gray-400">
+          <label className="text-sm font-semibold text-text-primary">
             Poll Options ({options.length}/6)
           </label>
           {options.length < 6 && (
             <button
               type="button"
               onClick={addOption}
-              className="text-xs px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="rounded-lg border border-accent-primary px-3 py-1 text-xs font-semibold text-accent-primary transition-colors hover:bg-bg-tertiary"
             >
               + Add Option
             </button>
@@ -152,7 +152,7 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
         <div className="space-y-2">
           {options.map((option, index) => (
             <div key={index} className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-[#343536] rounded-lg flex items-center justify-center text-sm font-medium text-gray-400">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-tertiary text-sm font-medium text-text-secondary">
                 {String.fromCharCode(65 + index)} {/* A, B, C, D, E, F */}
               </div>
               <input
@@ -160,7 +160,7 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
                 value={option}
                 onChange={(e) => updateOption(index, e.target.value)}
                 placeholder={`Option ${String.fromCharCode(65 + index)}`}
-                className="flex-1 px-3 py-2 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                className="min-w-0 flex-1 rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
                 maxLength={100}
               />
               {options.length > 2 && (
@@ -187,7 +187,7 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
 
       {/* Poll Expiry */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Poll Duration
         </label>
         <div className="grid grid-cols-3 gap-2">
@@ -198,8 +198,8 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
               onClick={() => handleExpiryDurationChange(duration)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 expiryDuration === duration
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                  : 'bg-[#343536] text-gray-400 hover:text-gray-200'
+                  ? 'bg-accent-primary text-white'
+                  : 'border border-border-primary bg-bg-secondary text-text-secondary hover:text-text-primary'
               }`}
             >
               {getExpiryLabel(duration)}
@@ -208,7 +208,7 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
         </div>
         
         {expiresAt && expiryDuration !== 'never' && (
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-text-secondary">
             Poll ends: {new Date(expiresAt).toLocaleString()}
           </p>
         )}
@@ -216,18 +216,18 @@ const PollPostForm: React.FC<PollPostFormProps> = ({
 
       {/* Description Input */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Additional Context (optional)
         </label>
         <textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Add context or explain why this poll matters..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-sm min-h-[120px] resize-y"
+          className="min-h-[130px] w-full resize-y rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={5000}
         />
         {description && (
-          <div className="mt-1 text-xs text-gray-500 text-right">
+          <div className="mt-1 text-right text-xs text-text-muted">
             {description.length}/5000 characters
           </div>
         )}

@@ -18,7 +18,10 @@ export type CreatePostInput = Omit<
 >;
 
 export const POST_WITH_AUTHOR_SELECT =
-  'id, author_id, room, content, post_type, headline, description, tags, community_slug, is_draft, image_url, video_url, link_url, poll_options, poll_expires_at, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, updated_at, upvotes, downvotes, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)';
+  'id, author_id, room, content, post_type, headline, description, tags, community_slug, is_draft, image_url, video_url, link_url, poll_options, poll_expires_at, is_anon_post, display_mode, author_name_snapshot, year_tag, branch_tag, section_tag, created_at, updated_at, upvotes, downvotes, profiles, comment_count';
+
+const LEGACY_POST_WITH_AUTHOR_SELECT =
+  'id, author_id, room, content, post_type, headline, description, tags, community_slug, is_draft, image_url, video_url, link_url, poll_options, poll_expires_at, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, updated_at, upvotes, downvotes, profiles (id, year, branch, pseudo_username, real_display_name), comment_count:comments(count)';
 
 const COMMUNITY_ROOM_MAP: Record<string, string[] | null> = {
   all: null,
@@ -65,21 +68,21 @@ export async function fetchFeedPostsPage(
 ): Promise<PostWithAuthor[]> {
   const roomFilters = getRoomFilters(community);
 
-  let query = supabase
-    .from('posts')
-    .select(POST_WITH_AUTHOR_SELECT)
-    .eq('is_draft', false)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .range(page * pageSize, page * pageSize + pageSize - 1);
+  const runQuery = async (table: string, select: string) => {
+    let query = supabase.from(table).select(select).eq('is_draft', false)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+    if (roomFilters?.length) query = roomFilters.length === 1 ? query.eq('room', roomFilters[0]) : query.in('room', roomFilters);
+    applyAbortSignal(query, signal);
+    return query;
+  };
 
-  if (roomFilters && roomFilters.length > 0) {
-    query = roomFilters.length === 1 ? query.eq('room', roomFilters[0]) : query.in('room', roomFilters);
+  let { data, error } = await runQuery('posts_public', POST_WITH_AUTHOR_SELECT);
+  if (error && ['42P01', 'PGRST205', '42703'].includes((error as { code?: string }).code ?? '')) {
+    const legacyResult = await runQuery('posts', LEGACY_POST_WITH_AUTHOR_SELECT);
+    data = legacyResult.data;
+    error = legacyResult.error;
   }
-
-  applyAbortSignal(query, signal);
-
-  const { data, error } = await query;
   if (error) throw error;
 
   const posts = normalizePostRows(data as unknown as Post[]);
@@ -116,7 +119,13 @@ export async function fetchFeedPostsPage(
 }
 
 export async function createPost(supabase: SupabaseClientLike, post: CreatePostInput): Promise<void> {
-  const { error } = await supabase.from('posts').insert(post);
+  let { error } = await supabase.from('posts').insert(post);
+  if (error && (error as { code?: string }).code === 'PGRST204' && 'author_name_snapshot' in post) {
+    const { author_name_snapshot: _snapshot, ...legacyPost } = post;
+    void _snapshot;
+    const legacyResult = await supabase.from('posts').insert(legacyPost);
+    error = legacyResult.error;
+  }
   if (error) throw error;
 }
 

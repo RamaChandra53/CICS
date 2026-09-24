@@ -13,7 +13,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
 import SkeletonFeed from '@/components/ui/SkeletonFeed';
 import useFeedPosts from '@/hooks/useFeedPosts';
-import { fetchUserCommunities, isClubCommunity } from '@/lib/services/communities';
+import { fetchUserCommunities, formatCommunityChipLabel, isClubCommunity } from '@/lib/services/communities';
 
 const FALLBACK_COMMUNITY_CHIPS = [
   { id: 'all', label: 'All' },
@@ -59,9 +59,12 @@ export default function FeedPage() {
     if (communities.length === 0) return FALLBACK_COMMUNITY_CHIPS;
     return [
       { id: 'all', label: 'All' },
-      ...communities.map((c) => ({ id: c.slug, label: c.name })),
+      ...communities.map((community) => ({
+        id: community.slug,
+        label: formatCommunityChipLabel(community, authProfile),
+      })),
     ];
-  }, [communities]);
+  }, [authProfile, communities]);
 
   const composeParam = searchParams.get('compose');
 
@@ -151,13 +154,13 @@ export default function FeedPage() {
         onTouchCancel={handleTouchEnd}
       >
         <div
-          className="flex items-center justify-center overflow-hidden text-xs text-slate-500 transition-[height,opacity] duration-150"
+          className="flex items-center justify-center overflow-hidden text-xs text-text-secondary transition-[height,opacity] duration-150"
           style={{ height: isRefreshing ? 34 : pullDistance, opacity: isRefreshing || pullDistance > 8 ? 1 : 0 }}
           aria-live="polite"
         >
           <div className="flex items-center gap-2">
             <div
-              className={`h-3.5 w-3.5 rounded-full border-2 border-indigo-500 border-t-transparent ${
+              className={`h-3.5 w-3.5 rounded-full border-2 border-accent-primary border-t-transparent ${
                 isRefreshing ? 'animate-spin' : ''
               }`}
               style={!isRefreshing ? { transform: `rotate(${pullDistance * 4}deg)` } : undefined}
@@ -167,8 +170,8 @@ export default function FeedPage() {
         </div>
 
         {/* Community Chips */}
-        <div className="mb-5 overflow-x-auto scrollbar-hide -mx-3 px-3">
-          <div className="flex gap-2 pb-1">
+        <div className="mb-5 min-w-0 max-w-full overflow-x-auto px-0 scrollbar-hide">
+          <div className="flex w-max min-w-full flex-nowrap gap-2 pb-1">
             {communityChips.map((chip) => {
               const isActive = selectedCommunity === chip.id;
               return (
@@ -177,9 +180,9 @@ export default function FeedPage() {
                   type="button"
                   onClick={() => setSelectedCommunity(chip.id)}
                   aria-pressed={isActive}
-                  className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-semibold transition-all ${isActive
-                      ? 'border-indigo-400/30 bg-indigo-400/15 text-indigo-100 shadow-sm shadow-indigo-950/30'
-                      : 'border-white/8 bg-white/[0.03] text-slate-400 hover:border-white/15 hover:text-slate-200'
+                  className={`min-w-max shrink-0 truncate rounded-full border px-4 py-2 text-center text-xs font-semibold transition-all ${isActive
+                      ? 'border-accent-primary bg-bg-tertiary text-text-primary'
+                      : 'border-border-primary bg-bg-secondary text-text-secondary hover:border-border-secondary hover:text-text-primary'
                     }`}
                 >
                   {chip.label}
@@ -239,8 +242,8 @@ export default function FeedPage() {
             {isLoadingMore && (
               <div className="flex justify-center py-4">
                 <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-                  <span className="text-sm text-slate-400">Loading more...</span>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent-primary border-t-transparent" />
+                  <span className="text-sm text-text-secondary">Loading more...</span>
                 </div>
               </div>
             )}
@@ -250,7 +253,7 @@ export default function FeedPage() {
               <div className="flex justify-center py-4">
                 <button
                   onClick={loadMore}
-                  className="h-11 rounded-full border border-indigo-500/30 px-6 text-sm font-medium text-indigo-300 transition-colors hover:border-indigo-400/60 hover:text-indigo-200"
+                  className="h-11 rounded-full border border-border-primary bg-bg-secondary px-6 text-sm font-medium text-text-primary transition-colors hover:border-accent-primary"
                 >
                   Load More Posts
                 </button>

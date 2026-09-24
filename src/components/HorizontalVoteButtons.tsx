@@ -220,13 +220,13 @@ export default function HorizontalVoteButtons({
   const score = upvotes - downvotes;
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-      <div className="flex shrink-0 h-9 items-center gap-1 rounded-full border border-[#252a31] bg-[#0f1318] px-2">
+    <div className={`grid w-full min-w-0 gap-1 sm:gap-2 ${showActions ? 'grid-cols-4' : 'grid-cols-1'}`}>
+      <div className="flex min-w-0 items-center justify-center gap-0.5 rounded-full border border-border-primary bg-bg-secondary px-1 sm:gap-1 sm:px-2">
         <button
           onClick={(e) => handleVote(e, 'up')}
           disabled={voting || !currentUserId}
-          className={`flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors ${
-            userVote === 'up' ? 'text-indigo-300' : 'hover:text-indigo-200'
+          className={`flex h-8 w-7 shrink-0 items-center justify-center rounded-full text-text-primary transition-colors ${
+            userVote === 'up' ? 'text-accent-primary' : 'hover:text-text-accent'
           } ${!currentUserId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Upvote"
         >
@@ -236,10 +236,10 @@ export default function HorizontalVoteButtons({
         <span
           className={`text-xs font-semibold ${
             userVote === 'up'
-              ? 'text-indigo-300'
+              ? 'text-accent-primary'
               : userVote === 'down'
               ? 'text-red-300'
-              : 'text-slate-200'
+              : 'text-text-primary'
           }`}
         >
           {score}
@@ -248,8 +248,8 @@ export default function HorizontalVoteButtons({
         <button
           onClick={(e) => handleVote(e, 'down')}
           disabled={voting || !currentUserId}
-          className={`flex h-7 w-7 items-center justify-center rounded-full text-white transition-colors ${
-            userVote === 'down' ? 'text-red-300' : 'hover:text-slate-200'
+          className={`flex h-8 w-7 shrink-0 items-center justify-center rounded-full text-text-primary transition-colors ${
+            userVote === 'down' ? 'text-red-500' : 'hover:text-text-primary'
           } ${!currentUserId ? 'cursor-not-allowed opacity-50' : ''}`}
           aria-label="Downvote"
         >
@@ -261,7 +261,8 @@ export default function HorizontalVoteButtons({
         <>
           <button
             aria-label="View comments"
-            className="flex shrink-0 h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
+            title="View comments"
+            className="flex min-w-0 items-center justify-center gap-1 rounded-full border border-border-primary bg-bg-secondary px-1 text-xs text-text-primary hover:text-text-accent sm:gap-2 sm:px-3"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h7m-9 8 3.5-3H19a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3z" />
@@ -271,22 +272,24 @@ export default function HorizontalVoteButtons({
           <button
             onClick={handleShare}
             aria-label="Share post"
-            className="flex shrink-0 h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-indigo-200"
+            title="Share post"
+            className="flex min-w-0 items-center justify-center gap-1 rounded-full border border-border-primary bg-bg-secondary px-1 text-xs text-text-primary hover:text-text-accent sm:gap-2 sm:px-3"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17 17 7m0 0H9m8 0v8" />
             </svg>
-            Share
+            <span className="hidden truncate sm:inline">Share</span>
           </button>
           <button
             onClick={() => setShowReportModal(true)}
             aria-label="Report post"
-            className="flex shrink-0 h-9 items-center gap-2 rounded-full border border-[#252a31] px-3 text-xs text-slate-200 hover:text-red-300"
+            title="Report post"
+            className="flex min-w-0 items-center justify-center gap-1 rounded-full border border-border-primary bg-bg-secondary px-1 text-xs text-text-primary hover:text-red-500 sm:gap-2 sm:px-3"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v18m0-12h12l-2 3 2 3H5" />
             </svg>
-            Report
+            <span className="hidden truncate sm:inline">Report</span>
           </button>
         </>
       )}

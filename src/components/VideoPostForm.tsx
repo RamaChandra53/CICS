@@ -99,42 +99,44 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
           type="text"
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
-          placeholder="Enter a compelling headline..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-lg font-medium"
+          placeholder="Post title"
+          className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-lg font-semibold text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={300}
         />
-        <div className="mt-1 text-xs text-gray-500 text-right">
+        <div className="mt-1 text-right text-xs text-text-muted">
           {headline.length}/300 characters
         </div>
       </div>
 
       {/* Video Input Mode Selector */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Video Source
         </label>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setInputMode('url')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
               inputMode === 'url'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                : 'bg-[#343536] text-gray-400 hover:text-gray-200'
+                ? 'border-accent-primary bg-accent-primary text-white'
+                : 'border-border-primary bg-bg-secondary text-text-secondary hover:text-text-primary'
             }`}
           >
-            📎 Video URL
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1 1" /><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1-1" /></svg>
+            Video URL
           </button>
           <button
             type="button"
             onClick={() => setInputMode('upload')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
               inputMode === 'upload'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                : 'bg-[#343536] text-gray-400 hover:text-gray-200'
+                ? 'border-accent-primary bg-accent-primary text-white'
+                : 'border-border-primary bg-bg-secondary text-text-secondary hover:text-text-primary'
             }`}
           >
-            📤 Upload Video
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 16V4m0 0L7 9m5-5 5 5" /><path d="M5 20h14" /></svg>
+            Upload
           </button>
         </div>
       </div>
@@ -148,13 +150,13 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
               value={videoUrl}
               onChange={(e) => onVideoUrlChange(e.target.value)}
               placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..."
-              className="w-full px-4 py-3 pr-10 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 pr-10 text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
             />
             {videoUrl && (
               <button
                 type="button"
                 onClick={clearVideoUrl}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -165,7 +167,7 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
           {videoUrl && !isValidUrl(videoUrl) && (
             <p className="mt-1 text-xs text-red-400">Please enter a valid URL</p>
           )}
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-text-secondary">
             Supports YouTube, Vimeo, and other video platforms
           </p>
         </div>
@@ -178,8 +180,8 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
             className={`
               border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
               ${dragActive 
-                ? 'border-indigo-500 bg-indigo-500/10' 
-                : 'border-[#343536] hover:border-gray-500 bg-[#1a1a1b]'
+                ? 'border-accent-primary bg-bg-tertiary'
+                : 'border-border-secondary bg-bg-secondary hover:border-accent-primary'
               }
             `}
             onDragEnter={handleDrag}
@@ -188,13 +190,13 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
           >
-            <svg className="w-12 h-12 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="mx-auto mb-3 h-9 w-9 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
-            <p className="text-gray-400 mb-2">
+            <p className="mb-1 text-sm font-medium text-text-primary">
               {dragActive ? 'Drop video here' : 'Drag & drop video here or click to browse'}
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-text-secondary">
               Supports: MP4, WebM, MOV (Max 100MB)
             </p>
             <input
@@ -208,17 +210,17 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
 
           {/* Video File Preview */}
           {videoFile && (
-            <div className="mt-4 p-3 bg-[#343536] rounded-lg">
+            <div className="mt-4 rounded-lg border border-border-primary bg-bg-tertiary p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-primary">
                     <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                   </div>
                   <div>
-                    <p className="text-white text-sm font-medium">{videoFile.name}</p>
-                    <p className="text-gray-400 text-xs">{formatFileSize(videoFile.size)}</p>
+                    <p className="text-sm font-medium text-text-primary">{videoFile.name}</p>
+                    <p className="text-xs text-text-secondary">{formatFileSize(videoFile.size)}</p>
                   </div>
                 </div>
                 <button
@@ -238,18 +240,18 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
 
       {/* Description Input */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Description (optional)
         </label>
         <textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Write a detailed description of your video..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-sm min-h-[120px] resize-y"
+          className="min-h-[130px] w-full resize-y rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={5000}
         />
         {description && (
-          <div className="mt-1 text-xs text-gray-500 text-right">
+          <div className="mt-1 text-right text-xs text-text-muted">
             {description.length}/5000 characters
           </div>
         )}
@@ -259,4 +261,3 @@ const VideoPostForm: React.FC<VideoPostFormProps> = ({
 };
 
 export default VideoPostForm;
-

@@ -1,49 +1,37 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 const navItems = [
   { id: 'home', href: '/feed', label: 'Home' },
-  { id: 'post', href: '/feed?compose=1', label: 'Post' },
+  { id: 'post', href: '/post', label: 'Post' },
   { id: 'profile', href: '/profile', label: 'Profile' },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const router = useRouter();
-
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-[#252a31] bg-[#0b0f12] pb-[env(safe-area-inset-bottom)]">
-      <div className="flex h-16 items-center justify-around px-2">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border-primary bg-bg-secondary pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto flex h-16 w-full max-w-[480px] items-center justify-around px-1 sm:px-2">
         {navItems.map((item) => {
           const isActive =
             item.id === 'post'
-              ? false
+              ? pathname === '/post'
               : item.id === 'home'
               ? pathname === '/feed'
               : item.id === 'profile'
               ? pathname.startsWith('/profile')
               : false;
 
-          const iconClassName = `h-5 w-5 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`;
+          const iconClassName = `h-5 w-5 ${isActive ? 'text-accent-primary' : 'text-text-muted'}`;
 
           return (
             <Link
               key={item.id}
               href={item.href}
-              onClick={(event) => {
-                if (item.id !== 'post') return;
-                event.preventDefault();
-                window.dispatchEvent(new Event('cics-route-start'));
-                if (pathname !== '/feed') {
-                  router.push('/feed?compose=1');
-                  return;
-                }
-                window.dispatchEvent(new Event('open-create-post'));
-              }}
-              className={`flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-medium transition-colors ${
-                isActive ? 'text-indigo-400' : 'text-slate-400'
+              className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 text-xs font-medium transition-colors ${
+                isActive ? 'text-accent-primary' : 'text-text-muted hover:text-text-primary'
               }`}
             >
               {item.id === 'home' && (
@@ -60,7 +48,7 @@ export default function BottomNav() {
               {item.id === 'profile' && (
                 <svg className={iconClassName} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="8" r="4" />
-                  <path d="M6 20a6 6 0 0 1 12 0" />
+                  <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
                 </svg>
               )}
               <span>{item.label}</span>

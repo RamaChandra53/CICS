@@ -7,11 +7,12 @@
  * RULE: Roll numbers are NEVER shown publicly.
  */
 
-import { Profile } from '@/types';
+import { Profile, type PublishingIdentity } from '@/types';
 
 // ── Types ───────────────────────────────────────────────────
 
 export type IdentityMode = 'pseudo' | 'full' | 'partial' | 'anonymous';
+export const PUBLISHING_IDENTITIES: PublishingIdentity[] = ['pseudo', 'full', 'anonymous'];
 
 export interface IdentityDisplay {
   displayName: string;
@@ -114,8 +115,6 @@ export function getPostIdentityDisplay(
     case 'partial': {
       const branch = profile?.branch || '';
       const year = profile?.year || '';
-      const isVerified = profile?.is_email_verified || profile?.is_verified || false;
-
       let name = '';
       if (branch && year) {
         name = `${branch} · ${year} Year`;
@@ -124,14 +123,14 @@ export function getPostIdentityDisplay(
       } else if (year) {
         name = `${year} Year`;
       } else {
-        name = 'Verified Student';
+        name = profile?.pseudo_username || 'Campus Member';
       }
 
       return {
         displayName: name,
-        avatar: branch?.[0]?.toUpperCase() || '✓',
+        avatar: branch?.[0]?.toUpperCase() || 'C',
         avatarBg: 'bg-purple-600/30 text-purple-400',
-        showVerified: isVerified,
+        showVerified: false,
       };
     }
 
@@ -144,13 +143,11 @@ export function getPostIdentityDisplay(
         profile?.pseudo_username ||
         'Campus Member';
 
-      const isVerified = profile?.is_email_verified || profile?.is_verified || false;
-
       return {
         displayName: fullName,
         avatar: fullName[0]?.toUpperCase() || '?',
         avatarBg: 'bg-indigo-600/30 text-indigo-400',
-        showVerified: isVerified,
+        showVerified: false,
       };
     }
 
@@ -181,7 +178,7 @@ export function getIdentityModeLabel(
     case 'pseudo':
       return profile?.pseudo_username || 'Campus Nickname';
     case 'anonymous':
-      return '👻 Anonymous';
+      return 'Anonymous';
     case 'partial': {
       const branch = profile?.branch || '';
       const year = profile?.year || '';
@@ -202,6 +199,19 @@ export function getIdentityModeLabel(
     default:
       return 'Unknown';
   }
+}
+
+export function getDefaultPublishingIdentity(
+  profile: Pick<Profile, 'default_identity'> | null | undefined
+): PublishingIdentity {
+  return profile?.default_identity === 'full' ? 'full' : 'pseudo';
+}
+
+export function getPublicProfileHref(
+  profile: Pick<Profile, 'pseudo_username'> | null | undefined
+): string | null {
+  const slug = profile?.pseudo_username?.trim();
+  return slug ? `/user/${encodeURIComponent(slug)}` : null;
 }
 
 /**

@@ -26,32 +26,32 @@ const TextPostForm: React.FC<TextPostFormProps> = ({
           type="text"
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
-          placeholder="Enter a compelling headline..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-lg font-medium"
+          placeholder="Post title"
+          className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-lg font-semibold text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={300}
         />
-        <div className="mt-1 text-xs text-gray-500 text-right">
+        <div className="mt-1 text-right text-xs text-text-muted">
           {headline.length}/300 characters
         </div>
       </div>
 
       {/* Rich Text Description */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Description (optional)
         </label>
         <textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Share your thoughts..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-sm min-h-[120px] resize-y"
+          className="min-h-[150px] w-full resize-y rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={5000}
         />
       </div>
 
       {/* Character count for description */}
       {description && (
-        <div className="text-xs text-gray-500 text-right">
+        <div className="text-right text-xs text-text-muted">
           {description.length}/5000 characters
         </div>
       )}

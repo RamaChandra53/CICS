@@ -77,18 +77,18 @@ const ImagePostForm: React.FC<ImagePostFormProps> = ({
           type="text"
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
-          placeholder="Enter a compelling headline..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-lg font-medium"
+          placeholder="Post title"
+          className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-lg font-semibold text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={300}
         />
-        <div className="mt-1 text-xs text-gray-500 text-right">
+        <div className="mt-1 text-right text-xs text-text-muted">
           {headline.length}/300 characters
         </div>
       </div>
 
       {/* Image Upload Area */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Images {images.length > 0 && `(${images.length}/10)`}
         </label>
         
@@ -96,8 +96,8 @@ const ImagePostForm: React.FC<ImagePostFormProps> = ({
           className={`
             border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
             ${dragActive 
-              ? 'border-indigo-500 bg-indigo-500/10' 
-              : 'border-[#343536] hover:border-gray-500 bg-[#1a1a1b]'
+              ? 'border-accent-primary bg-bg-tertiary'
+              : 'border-border-secondary bg-bg-secondary hover:border-accent-primary'
             }
           `}
           onDragEnter={handleDrag}
@@ -106,13 +106,13 @@ const ImagePostForm: React.FC<ImagePostFormProps> = ({
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          <svg className="w-12 h-12 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mx-auto mb-3 h-9 w-9 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>
-          <p className="text-gray-400 mb-2">
+          <p className="mb-1 text-sm font-medium text-text-primary">
             {dragActive ? 'Drop images here' : 'Drag & drop images here or click to browse'}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-secondary">
             Supports: JPG, PNG, GIF, WebP (Max 10MB each)
           </p>
           <input
@@ -133,7 +133,7 @@ const ImagePostForm: React.FC<ImagePostFormProps> = ({
                 <img
                   src={URL.createObjectURL(file)}
                   alt={`Preview ${index + 1}`}
-                  className="w-full h-32 object-cover rounded-lg border border-[#343536]"
+                  className="h-32 w-full rounded-lg border border-border-primary object-cover"
                 />
                 <button
                   type="button"
@@ -155,21 +155,21 @@ const ImagePostForm: React.FC<ImagePostFormProps> = ({
 
       {/* Rich Text Description */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Description (optional)
         </label>
         <textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Add a description to your images..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-sm min-h-[120px] resize-y"
+          className="min-h-[130px] w-full resize-y rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={5000}
         />
       </div>
 
       {/* Character count for description */}
       {description && (
-        <div className="text-xs text-gray-500 text-right">
+        <div className="text-right text-xs text-text-muted">
           {description.length}/5000 characters
         </div>
       )}

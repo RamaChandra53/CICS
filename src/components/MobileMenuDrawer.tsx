@@ -58,34 +58,34 @@ function TreeSection({
   onClose: () => void;
 }) {
   return (
-    <section className="rounded-2xl border border-[#252a31] bg-[#0c1014] p-3">
+    <section className="border-b border-border-primary bg-bg-secondary p-3">
       <div className="flex items-center gap-3 px-1 py-1.5">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1a1f27] text-indigo-200">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary text-accent-primary">
           {icon}
         </span>
         <span className="min-w-0">
-          <span className="block text-base font-bold text-white">{title}</span>
-          <span className="block truncate text-xs text-slate-500">{description}</span>
+          <span className="block text-base font-bold text-text-primary">{title}</span>
+          <span className="block truncate text-xs text-text-secondary">{description}</span>
         </span>
       </div>
 
-      <div className="relative ml-5 mt-2 space-y-1 border-l border-[#2a3038] pl-4">
+      <div className="relative ml-5 mt-2 space-y-1 border-l border-border-primary pl-4">
         {items.map((child) => {
           const active = child.href ? pathname === child.href || pathname.startsWith(`${child.href}/`) : false;
           const rowClassName = `group relative flex min-h-10 items-center rounded-xl px-3 py-2 transition-colors ${
             child.disabled
-              ? 'cursor-default text-slate-600'
+              ? 'cursor-default text-text-muted opacity-70'
               : active
-              ? 'bg-indigo-500/15 text-indigo-200'
-              : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              ? 'bg-bg-tertiary text-text-accent'
+              : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
           }`;
           const content = (
             <>
-              <span className={`absolute -left-4 top-1/2 h-px w-4 ${active ? 'bg-indigo-400/70' : 'bg-[#2a3038]'}`} />
+              <span className={`absolute -left-4 top-1/2 h-px w-4 ${active ? 'bg-accent-primary' : 'bg-border-primary'}`} />
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">{child.label}</span>
                 {child.detail && (
-                  <span className={`block truncate text-[11px] ${child.disabled ? 'text-slate-700' : 'text-slate-600 group-hover:text-slate-500'}`}>
+                  <span className="block truncate text-[11px] text-text-muted">
                     {child.detail}
                   </span>
                 )}
@@ -165,17 +165,17 @@ export default function MobileMenuDrawer({ open, onClose }: MobileMenuDrawerProp
         className={`absolute inset-0 bg-black/55 transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}
       />
       <aside
-        className={`absolute left-0 top-0 flex h-dvh w-[82vw] max-w-[320px] flex-col border-r border-[#252a31] bg-[#101418] shadow-2xl shadow-black/40 transition-transform duration-200 ${
+        className={`absolute left-0 top-0 flex h-dvh w-[82vw] max-w-[320px] flex-col border-r border-border-primary bg-bg-secondary transition-transform duration-200 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#252a31] px-4">
-          <p className="text-sm font-semibold text-white">Menu</p>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border-primary px-4">
+          <p className="text-sm font-semibold text-text-primary">Menu</p>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close menu"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-white/5 hover:text-white"
+            className="inline-flex h-9 w-9 items-center justify-center text-text-secondary hover:bg-bg-hover hover:text-text-primary"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
               <path d="M6 6l12 12M18 6L6 18" />

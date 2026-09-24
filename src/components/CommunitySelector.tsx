@@ -11,67 +11,40 @@ interface CommunitySelectorProps {
   disabled?: boolean;
 }
 
-const CommunitySelector: React.FC<CommunitySelectorProps> = ({
+export default function CommunitySelector({
   communities,
   selectedCommunity,
   onCommunityChange,
   className = '',
-  disabled = false
-}) => {
-  const selectedCommunityData = communities.find(c => c.slug === selectedCommunity);
+  disabled = false,
+}: CommunitySelectorProps) {
+  const selected = communities.find((community) => community.slug === selectedCommunity);
 
   return (
-    <div className={`community-selector ${className}`}>
-      <label className="block text-xs font-medium text-slate-400 mb-2">
-        Community
-      </label>
-      
+    <div className={className}>
+      <label htmlFor="post-community" className="mb-2 block text-sm font-semibold text-text-primary">Community</label>
       <div className="relative">
         <select
+          id="post-community"
           value={selectedCommunity}
-          onChange={(e) => onCommunityChange(e.target.value)}
+          onChange={(event) => onCommunityChange(event.target.value)}
           disabled={disabled}
-          className={`
-            w-full rounded-xl border border-[#252a31] bg-[#0f1318] px-3 py-2.5 pr-10 text-sm text-white
-            focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors appearance-none cursor-pointer
-            ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-500'}
-          `}
+          className={`h-12 w-full appearance-none rounded-lg border border-border-primary bg-bg-secondary px-4 pr-11 text-sm font-medium text-text-primary outline-none transition-colors focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:border-border-secondary'}`}
         >
-          <option value="">Select a community...</option>
-          {communities.map((community) => (
-            <option key={community.slug} value={community.slug}>
-              {community.icon} {community.name}
-            </option>
-          ))}
+          <option value="">Select a community</option>
+          {communities.map((community) => <option key={community.slug} value={community.slug}>{community.name}</option>)}
         </select>
-        
-        {/* Custom dropdown arrow */}
-        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
+        <svg className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 9 6 6 6-6" /></svg>
       </div>
-
-      {/* Community info */}
-      {selectedCommunityData && (
-        <div className="mt-2 rounded-xl border border-[#252a31] bg-[#0f1318] p-3">
-          <div className="flex items-center gap-3">
-            <div className="text-2xl">{selectedCommunityData.icon}</div>
-            <div className="flex-1">
-              <h3 className="text-white font-medium text-sm">{selectedCommunityData.name}</h3>
-              <p className="text-slate-500 text-xs">{selectedCommunityData.description}</p>
-            </div>
+      {selected && (
+        <div className="mt-2 flex items-center gap-3 border-l-2 border-accent-primary px-3 py-2">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-sm font-bold text-text-primary">{selected.name[0]?.toUpperCase()}</span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-text-primary">{selected.name}</p>
+            {selected.description && <p className="truncate text-xs text-text-secondary">{selected.description}</p>}
           </div>
         </div>
       )}
-
-      {/* Help text */}
-      <div className="mt-1 text-xs text-slate-500">
-        Choose the community where you want to post
-      </div>
     </div>
   );
-};
-
-export default CommunitySelector;
+}

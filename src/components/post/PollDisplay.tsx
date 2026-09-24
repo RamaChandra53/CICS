@@ -42,22 +42,22 @@ export default function PollDisplay({ postId, options, expiresAt, currentUserId 
             disabled={showResults || voting}
             className={`w-full relative overflow-hidden rounded-xl border px-4 py-2.5 text-left text-sm transition-all ${
               isUserVote
-                ? 'border-indigo-500/60 bg-indigo-500/10 text-indigo-200'
+                ? 'border-accent-primary bg-bg-tertiary text-text-primary'
                 : showResults
-                  ? 'border-[#252a31] text-slate-300'
-                  : 'border-[#252a31] text-slate-300 hover:border-indigo-500/30 hover:bg-indigo-500/5 cursor-pointer'
+                  ? 'border-border-primary bg-bg-secondary text-text-primary'
+                  : 'border-border-primary bg-bg-secondary text-text-primary hover:border-accent-primary hover:bg-bg-hover cursor-pointer'
             }`}
           >
             {showResults && (
               <div
-                className={`absolute inset-y-0 left-0 ${isUserVote ? 'bg-indigo-500/15' : 'bg-[#1f2329]'}`}
+                className={`absolute inset-y-0 left-0 ${isUserVote ? 'bg-accent-primary/15' : 'bg-bg-tertiary'}`}
                 style={{ width: `${percentage}%` }}
               />
             )}
             <div className="relative flex items-center justify-between">
               <span className="font-medium">{option}</span>
               {showResults && (
-                <span className={`text-xs ${isUserVote ? 'text-indigo-300' : 'text-slate-500'}`}>
+                <span className={`text-xs ${isUserVote ? 'text-text-accent' : 'text-text-secondary'}`}>
                   {percentage}%
                 </span>
               )}
@@ -65,7 +65,7 @@ export default function PollDisplay({ postId, options, expiresAt, currentUserId 
           </button>
         );
       })}
-      <p className="text-xs text-slate-500 px-1">
+      <p className="px-1 text-xs text-text-secondary">
         {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
         {expiresAt && <span> · Ends {formatTimeAgo(expiresAt)}</span>}
       </p>

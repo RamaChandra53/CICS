@@ -1,620 +1,170 @@
 'use client';
 
-
-
-import { useEffect, useMemo, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase';
-import { Post } from '@/types';
-import PostCard from '@/components/PostCard';
-import TrustUnlockModal from '@/components/TrustUnlockModal';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { useAuth } from '@/contexts/AuthContext';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import EmptyState from '@/components/ui/EmptyState';
 import PostLoadingSkeleton from '@/components/ui/PostLoadingSkeleton';
-import { validatePseudoUsername } from '@/lib/usernameGenerator';
+import PostCard from '@/components/PostCard';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { getDefaultPublishingIdentity, getPostIdentityDisplay } from '@/lib/identityDisplay';
+import { createClient } from '@/lib/supabase';
+import type { Comment, Post, PublishingIdentity } from '@/types';
 
 const PAGE_SIZE = 10;
+type ProfileTab = 'posts' | 'comments';
+type ProfileComment = Comment & { posts?: { headline: string | null; content: string; room: string } | null };
 
-type VoteType = 'up' | 'down';
+function MenuIcon() {
+  return <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value));
+}
 
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
-  const {
-    user,
-    profile: authProfile,
-    loading: authLoading,
-    profileLoading,
-    signOut,
-    refreshProfile,
-    reloadAuth,
-  } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const { user, profile, loading: authLoading, profileLoading, signOut, reloadAuth, refreshProfile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showTrustModal, setShowTrustModal] = useState(false);
-  const [postsError, setPostsError] = useState('');
+  const [comments, setComments] = useState<ProfileComment[]>([]);
+  const [postCount, setPostCount] = useState(0);
+  const [commentCount, setCommentCount] = useState(0);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [postsError, setPostsError] = useState('');
+  const [commentsError, setCommentsError] = useState('');
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
+  const [defaultIdentity, setDefaultIdentity] = useState<'pseudo' | 'full'>('pseudo');
 
-  // Username edit state
-  const [isEditingUsername, setIsEditingUsername] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [usernameError, setUsernameError] = useState('');
-  const [usernameSubmitting, setUsernameSubmitting] = useState(false);
-  const [usernameSuccess, setUsernameSuccess] = useState('');
-
-  // Display name edit state
-  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
-  const [newDisplayName, setNewDisplayName] = useState('');
-  const [displayNameError, setDisplayNameError] = useState('');
-  const [displayNameSubmitting, setDisplayNameSubmitting] = useState(false);
-
-  const fetchUserPosts = useCallback(
-    async (userId: string, pageToLoad = 0, options?: { reset?: boolean }) => {
-      try {
-        setPostsLoading(true);
-        setPostsError('');
-
-        const targetPage = options?.reset ? 0 : pageToLoad;
-        const { data, error } = await supabase
-          .from('posts')
-          .select(
-            'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
-          )
-          .eq('author_id', userId)
-          .order('created_at', { ascending: false })
-          .range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
-
-        if (error) {
-          console.error('Error fetching user posts:', error);
-          setPostsError(error.message || 'Failed to fetch your posts');
-          return;
-        }
-
-        const postsData =
-          (data as Array<Post & { comment_count: { count: number }[] }>) ?? [];
-        const postIds = postsData.map((post) => post.id);
-        let voteMap = new Map<string, VoteType>();
-
-        if (userId && postIds.length > 0) {
-          const { data: votes, error: votesError } = await supabase
-            .from('post_votes')
-            .select('post_id, vote_type')
-            .eq('user_id', userId)
-            .in('post_id', postIds);
-
-          if (votesError) {
-            console.error('Error fetching post votes:', votesError);
-          } else {
-            const votesData = (votes as Array<{ post_id: string; vote_type: VoteType }>) ?? [];
-            voteMap = new Map(
-              votesData.map((vote) => [vote.post_id, vote.vote_type])
-            );
-          }
-        }
-
-        const normalized = postsData.map((p) => ({
-          ...p,
-          comment_count: p.comment_count?.[0]?.count ?? 0,
-          user_vote: voteMap.get(p.id) ?? null,
-        }));
-
-        if (options?.reset || targetPage === 0) {
-          setPosts(normalized);
-        } else {
-          setPosts((prev) => [...prev, ...normalized]);
-        }
-
-        setHasMore(normalized.length === PAGE_SIZE);
-      } catch (error) {
-        console.error('Unexpected error fetching user posts:', error);
-        setPostsError(
-          error instanceof Error ? error.message : 'Something went wrong while fetching your posts'
-        );
-      } finally {
-        setPostsLoading(false);
+  const fetchPosts = useCallback(async (userId: string, pageToLoad = 0, reset = false) => {
+    setPostsLoading(true); setPostsError('');
+    try {
+      const targetPage = reset ? 0 : pageToLoad;
+      let { data, error } = await supabase.from('posts_public')
+        .select('id, author_id, room, content, post_type, headline, description, tags, community_slug, is_draft, image_url, video_url, link_url, link_metadata, poll_options, poll_expires_at, is_anon_post, display_mode, author_name_snapshot, year_tag, branch_tag, section_tag, created_at, updated_at, upvotes, downvotes, profiles, comment_count')
+        .eq('author_id', userId).eq('is_draft', false).eq('is_anon_post', false).neq('display_mode', 'anonymous')
+        .order('created_at', { ascending: false }).range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
+      if (error && ['42P01', 'PGRST205', '42703'].includes((error as { code?: string }).code ?? '')) {
+        const legacy = await supabase.from('posts')
+          .select('id, author_id, room, content, post_type, headline, description, tags, community_slug, is_draft, image_url, video_url, link_url, link_metadata, poll_options, poll_expires_at, is_anon_post, display_mode, year_tag, branch_tag, section_tag, created_at, updated_at, upvotes, downvotes, profiles (id, year, branch, pseudo_username, real_display_name), comment_count:comments(count)')
+          .eq('author_id', userId).eq('is_draft', false).eq('is_anon_post', false).neq('display_mode', 'anonymous')
+          .order('created_at', { ascending: false }).range(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE - 1);
+        data = legacy.data; error = legacy.error;
       }
-    },
-    [supabase]
-  );
+      if (error) throw error;
+      const normalized = ((data as unknown as Array<Post & { comment_count?: number | { count: number }[] }>) ?? []).map((post) => ({ ...post, comment_count: Array.isArray(post.comment_count) ? post.comment_count[0]?.count ?? 0 : post.comment_count ?? 0 }));
+      setPosts((current) => reset || targetPage === 0 ? normalized : [...current, ...normalized]);
+      setHasMore(normalized.length === PAGE_SIZE);
+    } catch (error) { setPostsError(error instanceof Error ? error.message : 'Failed to load your posts'); }
+    finally { setPostsLoading(false); }
+  }, [supabase]);
+
+  const fetchComments = useCallback(async (userId: string) => {
+    setCommentsLoading(true); setCommentsError('');
+    try {
+      let { data, error } = await supabase.from('comments_public')
+        .select('id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, author_name_snapshot, upvotes, downvotes, created_at, posts')
+        .eq('author_id', userId).eq('is_anon_comment', false).neq('display_mode', 'anonymous')
+        .order('created_at', { ascending: false }).limit(30);
+      if (error && ['42P01', 'PGRST205', '42703'].includes((error as { code?: string }).code ?? '')) {
+        const legacy = await supabase.from('comments')
+          .select('id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, upvotes, downvotes, created_at, posts(headline, content, room)')
+          .eq('author_id', userId).eq('is_anon_comment', false).neq('display_mode', 'anonymous')
+          .order('created_at', { ascending: false }).limit(30);
+        data = legacy.data; error = legacy.error;
+      }
+      if (error) throw error;
+      setComments((data as unknown as ProfileComment[]) ?? []);
+    } catch (error) { setCommentsError(error instanceof Error ? error.message : 'Failed to load your comments'); }
+    finally { setCommentsLoading(false); }
+  }, [supabase]);
+
+  const fetchCounts = useCallback(async (userId: string) => {
+    let [postResult, commentResult] = await Promise.all([
+      supabase.from('posts_public').select('id', { count: 'exact', head: true }).eq('author_id', userId).eq('is_draft', false).eq('is_anon_post', false).neq('display_mode', 'anonymous'),
+      supabase.from('comments_public').select('id', { count: 'exact', head: true }).eq('author_id', userId).eq('is_anon_comment', false).neq('display_mode', 'anonymous'),
+    ]);
+    if (postResult.error || commentResult.error) {
+      [postResult, commentResult] = await Promise.all([
+        supabase.from('posts').select('id', { count: 'exact', head: true }).eq('author_id', userId).eq('is_draft', false).eq('is_anon_post', false).neq('display_mode', 'anonymous'),
+        supabase.from('comments').select('id', { count: 'exact', head: true }).eq('author_id', userId).eq('is_anon_comment', false).neq('display_mode', 'anonymous'),
+      ]);
+    }
+    setPostCount(postResult.count ?? 0); setCommentCount(commentResult.count ?? 0);
+  }, [supabase]);
 
   useEffect(() => {
-    const init = async () => {
-      if (authLoading || profileLoading) return;
-      
-      if (!user) {
-        router.push('/');
-        return;
-      }
+    if (authLoading || profileLoading || !user || !profile) return;
+    setDisplayName(profile.real_display_name ?? ''); setBio(profile.bio ?? '');
+    setDefaultIdentity(getDefaultPublishingIdentity(profile) === 'full' ? 'full' : 'pseudo');
+    setPage(0); setHasMore(true);
+    void Promise.all([fetchPosts(user.id, 0, true), fetchComments(user.id), fetchCounts(user.id)]);
+  }, [authLoading, fetchComments, fetchCounts, fetchPosts, profile, profileLoading, user]);
 
-      if (!authProfile) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(false);
-        setPage(0);
-        setHasMore(true);
-        await fetchUserPosts(user.id, 0, { reset: true });
-      } catch (error) {
-        console.error('Profile initialization error:', error);
-        setPostsError('An unexpected error occurred while loading your posts.');
-        setPostsLoading(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
-  }, [router, authLoading, profileLoading, user, authProfile, fetchUserPosts]);
-
-  const loadMore = useCallback(() => {
-    if (!postsLoading && hasMore && user) {
-      const nextPage = page + 1;
-      setPage(nextPage);
-      fetchUserPosts(user.id, nextPage);
+  const saveProfile = async () => {
+    if (!user || bio.length > 160) return;
+    setSaving(true); setEditError('');
+    let compatibilityWarning = '';
+    let { error } = await supabase.from('profiles').update({ real_display_name: displayName.trim() || null, bio: bio.trim() || null, default_identity: defaultIdentity }).eq('id', user.id);
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const legacy = await supabase.from('profiles').update({ real_display_name: displayName.trim() || null }).eq('id', user.id);
+      error = legacy.error;
+      if (!error && (bio.trim() || defaultIdentity !== 'pseudo')) compatibilityWarning = 'Display name saved. Apply migration 013 to enable bio and default identity.';
     }
-  }, [postsLoading, hasMore, user, page, fetchUserPosts]);
-
-  const handleVerificationSuccess = () => {
-    // Refresh the profile in AuthContext to get updated verification status
-    refreshProfile();
+    if (error) setEditError(error.message);
+    else if (compatibilityWarning) setEditError(compatibilityWarning);
+    else { await refreshProfile(); setEditing(false); }
+    setSaving(false);
   };
 
-  const handleEditNicknameClick = () => {
-    const isVerified = authProfile?.is_email_verified || authProfile?.is_verified;
-    if (!isVerified) {
-      setShowTrustModal(true);
-      return;
-    }
-    // Don't allow editing if a change is already pending
-    if (authProfile?.pseudo_username_status === 'pending') return;
-
-    // Enforce 30-day cooldown
-    if (authProfile?.pseudo_username_last_changed_at) {
-      const lastChanged = new Date(authProfile.pseudo_username_last_changed_at);
-      const cooldownEnd = new Date(lastChanged.getTime() + 30 * 24 * 60 * 60 * 1000);
-      if (new Date() < cooldownEnd) {
-        const nextDate = cooldownEnd.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-        setUsernameError(`You can request a new nickname after ${nextDate} (30-day cooldown).`);
-        return;
-      }
-    }
-
-    setNewUsername('');
-    setUsernameError('');
-    setUsernameSuccess('');
-    setIsEditingUsername(true);
+  const loadMore = () => {
+    if (!user || postsLoading || !hasMore) return;
+    const next = page + 1; setPage(next); void fetchPosts(user.id, next);
   };
 
-  const handleUsernameSubmit = async () => {
-    if (!authProfile) return;
+  if (authLoading || profileLoading) return <div className="mx-auto max-w-2xl px-4 py-8"><PostLoadingSkeleton count={2} /></div>;
+  if (!profile) return <div className="mx-auto max-w-2xl px-4 py-12"><ErrorMessage message="Your profile could not be loaded." onRetry={() => reloadAuth()} /></div>;
 
-    const trimmed = newUsername.trim();
-    const validationError = validatePseudoUsername(trimmed);
-    if (validationError) {
-      setUsernameError(validationError);
-      return;
-    }
-
-    // Don't allow submitting the same username
-    if (trimmed === authProfile.pseudo_username) {
-      setUsernameError('This is already your current nickname.');
-      return;
-    }
-
-    setUsernameSubmitting(true);
-    setUsernameError('');
-
-    try {
-      // Check uniqueness
-      const { data: existing } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('pseudo_username', trimmed)
-        .neq('id', authProfile.id)
-        .maybeSingle();
-
-      if (existing) {
-        setUsernameError('This nickname is already taken. Try another.');
-        return;
-      }
-
-      // Submit as pending change request
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          pending_pseudo_username: trimmed,
-          pseudo_username_status: 'pending',
-          pseudo_username_requested_at: new Date().toISOString(),
-          pseudo_username_rejection_reason: null,
-        })
-        .eq('id', authProfile.id);
-
-      if (updateError) throw updateError;
-
-      setIsEditingUsername(false);
-      setUsernameSuccess('Nickname change request submitted for review!');
-      setTimeout(() => setUsernameSuccess(''), 5000);
-      refreshProfile();
-    } catch (err) {
-      console.error('Username change error:', err);
-      setUsernameError('Failed to submit change request. Please try again.');
-    } finally {
-      setUsernameSubmitting(false);
-    }
-  };
-
-  const handleDisplayNameSubmit = async () => {
-    if (!authProfile) return;
-
-    const trimmed = newDisplayName.trim();
-    if (trimmed.length < 2 || trimmed.length > 50) {
-      setDisplayNameError('Display name must be between 2 and 50 characters.');
-      return;
-    }
-
-    // Basic validation: letters, spaces, hyphens, apostrophes
-    if (!/^[a-zA-Z\s\-'\.]+$/.test(trimmed)) {
-      setDisplayNameError('Display name can only contain letters, spaces, hyphens, and apostrophes.');
-      return;
-    }
-
-    setDisplayNameSubmitting(true);
-    setDisplayNameError('');
-
-    try {
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ real_display_name: trimmed })
-        .eq('id', authProfile.id);
-
-      if (updateError) throw updateError;
-
-      setIsEditingDisplayName(false);
-      refreshProfile();
-    } catch (err) {
-      console.error('Display name update error:', err);
-      setDisplayNameError('Failed to update display name. Please try again.');
-    } finally {
-      setDisplayNameSubmitting(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
-  };
-
-  if (authLoading || profileLoading || loading) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="bg-[#1a1a1a] border border-gray-800/60 rounded-2xl p-6">
-          <PostLoadingSkeleton count={1} />
-        </div>
-      </div>
-    );
-  }
-
-  if (!authProfile) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <ErrorMessage
-          title="Profile not found"
-          message="Your session is active, but your profile did not load yet."
-          onRetry={() => reloadAuth()}
-          retryText="Retry"
-        />
-      </div>
-    );
-  }
+  const publicMode: PublishingIdentity = getDefaultPublishingIdentity(profile);
+  const identity = getPostIdentityDisplay(profile, publicMode);
+  const academic = [profile.branch, profile.year ? `${profile.year} Year` : null].filter(Boolean).join(' · ');
 
   return (
     <ErrorBoundary>
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* Profile card */}
-        {/* Profile card — pseudo username focused */}
-        <div className="bg-[#15181c] border border-[#252a31] rounded-2xl p-6 mb-6">
+      <div className="mx-auto min-h-screen max-w-2xl bg-bg-primary text-text-primary">
+        <header className="border-b border-border-primary bg-bg-secondary px-4 py-5 md:mt-6 md:rounded-t-md md:border">
           <div className="flex items-start gap-4">
-            {/* Avatar */}
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl shrink-0 bg-emerald-600/30">
-              {authProfile.pseudo_username?.[0]?.toUpperCase() || '?'}
-            </div>
-
-            {/* Info */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-white font-bold text-xl">{authProfile.pseudo_username || 'CampusUser'}</h1>
-                {(authProfile.is_email_verified || authProfile.is_verified) && (
-                  <span className="bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full font-semibold">
-                    ✓ verified
-                  </span>
-                )}
-                {authProfile.pseudo_username_status !== 'pending' && (
-                  <button
-                    onClick={handleEditNicknameClick}
-                    className="text-slate-500 hover:text-indigo-400 transition-colors ml-1"
-                    aria-label="Edit nickname"
-                    title={authProfile.is_email_verified || authProfile.is_verified ? 'Edit nickname' : 'Verify to edit nickname'}
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-
-              <p className="text-slate-400 text-xs mb-3">Campus nickname — people recognize you without knowing who you are</p>
-
-              {/* Username edit form */}
-              {isEditingUsername && (
-                <div className="mb-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3">
-                  <label className="text-xs text-slate-400 mb-1.5 block">New nickname</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newUsername}
-                      onChange={(e) => {
-                        setNewUsername(e.target.value);
-                        if (usernameError) setUsernameError('');
-                      }}
-                      placeholder="e.g. CosmicFox"
-                      maxLength={18}
-                      autoFocus
-                      className="flex-1 h-9 rounded-lg border border-[#252a31] bg-[#0b0f12] px-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/60"
-                    />
-                    <button
-                      onClick={handleUsernameSubmit}
-                      disabled={usernameSubmitting || !newUsername.trim()}
-                      className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 shrink-0"
-                    >
-                      {usernameSubmitting ? 'Saving…' : 'Request'}
-                    </button>
-                    <button
-                      onClick={() => setIsEditingUsername(false)}
-                      className="h-9 rounded-lg border border-[#252a31] px-3 text-xs text-slate-400 hover:text-white transition-colors shrink-0"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  {usernameError && (
-                    <p className="mt-1.5 text-xs text-red-400">{usernameError}</p>
-                  )}
-                  <p className="mt-1.5 text-[11px] text-slate-500">
-                    3–18 chars, letters & numbers only. Changes require admin approval.
-                  </p>
-                </div>
-              )}
-
-              {/* Username error outside edit form (e.g. cooldown message) */}
-              {!isEditingUsername && usernameError && (
-                <div className="mb-3 rounded-lg border border-yellow-800/40 bg-yellow-900/20 p-2">
-                  <p className="text-yellow-400 text-xs">{usernameError}</p>
-                </div>
-              )}
-
-              {/* Username change success message */}
-              {usernameSuccess && (
-                <div className="mb-3 rounded-lg border border-emerald-800/40 bg-emerald-900/20 p-2">
-                  <p className="text-emerald-400 text-xs">✓ {usernameSuccess}</p>
-                </div>
-              )}
-
-              {/* Real display name (for full identity mode) */}
-              <div className="mb-3">
-                {isEditingDisplayName ? (
-                  <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3">
-                    <label className="text-xs text-slate-400 mb-1.5 block">Display Name (shown in &quot;Full Identity&quot; mode)</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newDisplayName}
-                        onChange={(e) => {
-                          setNewDisplayName(e.target.value);
-                          if (displayNameError) setDisplayNameError('');
-                        }}
-                        placeholder="e.g. John Doe"
-                        maxLength={50}
-                        autoFocus
-                        className="flex-1 h-9 rounded-lg border border-[#252a31] bg-[#0b0f12] px-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/60"
-                      />
-                      <button
-                        onClick={handleDisplayNameSubmit}
-                        disabled={displayNameSubmitting || !newDisplayName.trim()}
-                        className="h-9 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50 shrink-0"
-                      >
-                        {displayNameSubmitting ? 'Saving…' : 'Save'}
-                      </button>
-                      <button
-                        onClick={() => setIsEditingDisplayName(false)}
-                        className="h-9 rounded-lg border border-[#252a31] px-3 text-xs text-slate-400 hover:text-white transition-colors shrink-0"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    {displayNameError && (
-                      <p className="mt-1.5 text-xs text-red-400">{displayNameError}</p>
-                    )}
-                    <p className="mt-1.5 text-[11px] text-slate-500">
-                      This name will be shown when you post with &quot;Full Identity&quot; mode. 2–50 characters.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    {authProfile.real_display_name ? (
-                      <p className="text-slate-300 text-sm">{authProfile.real_display_name}</p>
-                    ) : (
-                      <p className="text-slate-500 text-xs italic">No display name set</p>
-                    )}
-                    <button
-                      onClick={() => {
-                        setNewDisplayName(authProfile.real_display_name || '');
-                        setDisplayNameError('');
-                        setIsEditingDisplayName(true);
-                      }}
-                      className="text-slate-500 hover:text-indigo-400 transition-colors"
-                      aria-label="Edit display name"
-                      title="Edit display name (for full identity mode)"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Pseudo username status */}
-              {authProfile.pseudo_username_status === 'pending' && (
-                <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-2 mb-3">
-                  <p className="text-yellow-400 text-xs">
-                    ⏳ Username change to &quot;{authProfile.pending_pseudo_username}&quot; is pending review
-                  </p>
-                </div>
-              )}
-              {authProfile.pseudo_username_status === 'rejected' && authProfile.pseudo_username_rejection_reason && (
-                <div className="bg-red-900/20 border border-red-800/40 rounded-lg p-2 mb-3">
-                  <p className="text-red-400 text-xs">
-                    Username change rejected: {authProfile.pseudo_username_rejection_reason}
-                  </p>
-                </div>
-              )}
-
-              {/* Trust status */}
-              <div className="mt-2 mb-3">
-                {authProfile.is_email_verified ? (
-                  <div className="bg-emerald-900/20 border border-emerald-800/40 rounded-lg p-2">
-                    <p className="text-emerald-400 text-xs flex items-center gap-1">
-                      ✅ Student verified — anonymous posting, partial identity, and nickname editing unlocked
-                    </p>
-                  </div>
-                ) : (
-                  <div className="bg-[#1f2329] border border-[#252a31] rounded-lg p-2">
-                    <p className="text-slate-400 text-xs mb-2">
-                      🔒 Verify your MGIT email to unlock anonymous posting, partial identity, and custom nickname
-                    </p>
-                    <button
-                      onClick={() => setShowTrustModal(true)}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      Verify Student Account
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {!authProfile.is_anonymous && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {authProfile.year ? (
-                    <span className="bg-[#1f2329] text-slate-400 text-xs px-2.5 py-1 rounded-full">
-                      📅 {authProfile.year} Year
-                    </span>
-                  ) : (
-                    <span className="bg-purple-800/30 text-purple-400 text-xs px-2.5 py-1 rounded-full border border-purple-700/50">
-                      🎓 Alumni
-                    </span>
-                  )}
-                  {authProfile.branch && (
-                    <span className="bg-[#1f2329] text-slate-400 text-xs px-2.5 py-1 rounded-full">
-                      💻 {authProfile.branch}
-                    </span>
-                  )}
-                  {authProfile.section && authProfile.year && (
-                    <span className="bg-[#1f2329] text-slate-400 text-xs px-2.5 py-1 rounded-full">
-                      👥 Section {authProfile.section}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+            <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-bold ${identity.avatarBg}`}>{identity.avatar}</div>
+            <div className="min-w-0 flex-1"><h1 className="break-words text-xl font-bold leading-tight">{identity.displayName}</h1>{academic && <p className="mt-1 text-sm text-text-secondary">{academic}</p>}{profile.bio ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{profile.bio}</p> : <button type="button" onClick={() => setEditing(true)} className="mt-2 text-sm text-text-accent">Add a bio</button>}<p className="mt-3 text-xs text-text-muted">{postCount} Posts · {commentCount} Comments</p></div>
+            <button type="button" onClick={() => setMenuOpen(true)} aria-label="Open profile menu" className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-text-secondary hover:text-text-primary"><MenuIcon /></button>
           </div>
+          <button type="button" onClick={() => setEditing(true)} className="mt-4 min-h-10 rounded-md border border-border-primary bg-bg-card px-4 text-sm font-semibold">Edit profile</button>
+        </header>
 
-          {/* Account Details — roll number only here */}
-          {authProfile.roll_number && (
-            <details className="mt-4 pt-4 border-t border-[#252a31]">
-              <summary className="text-slate-500 text-xs cursor-pointer hover:text-slate-300 transition-colors">
-                Account Details
-              </summary>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="bg-[#1f2329] text-slate-500 text-xs px-2.5 py-1 rounded-full">
-                  🪪 {authProfile.roll_number}
-                </span>
-                {authProfile.email && (
-                  <span className="bg-[#1f2329] text-slate-500 text-xs px-2.5 py-1 rounded-full">
-                    📧 {authProfile.email}
-                  </span>
-                )}
-              </div>
-            </details>
-          )}
+        <div role="tablist" aria-label="Profile activity" className="grid grid-cols-2 border-b border-border-primary bg-bg-secondary">{(['posts', 'comments'] as ProfileTab[]).map((tab) => <button key={tab} role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)} className={`relative min-h-14 text-sm font-semibold ${activeTab === tab ? 'text-text-primary' : 'text-text-muted'}`}>{tab === 'posts' ? 'Posts' : 'Comments'}{activeTab === tab && <span className="absolute inset-x-8 bottom-0 h-0.5 bg-accent-primary" />}</button>)}</div>
 
-          <div className="mt-4 pt-4 border-t border-[#252a31] flex items-center justify-between">
-            <span className="text-slate-500 text-sm">
-              {posts.length} post{posts.length !== 1 ? 's' : ''}
-            </span>
-            <button
-              onClick={handleSignOut}
-              className="text-red-400 hover:text-red-300 text-sm transition-colors flex items-center gap-1.5"
-            >
-              🚪 Sign Out
-            </button>
-          </div>
-        </div>
+        <main className="px-3 py-4 sm:px-4">
+          {activeTab === 'posts' && (postsError ? <ErrorMessage message={postsError} onRetry={() => user && fetchPosts(user.id, 0, true)} /> : postsLoading && !posts.length ? <PostLoadingSkeleton count={2} /> : !posts.length ? <EmptyState title="No posts yet" description="Your public posts will appear here." /> : <div className="space-y-3">{posts.map((post) => <PostCard key={post.id} post={post} showRoom currentUserId={user?.id ?? null} initialUserVote={post.user_vote ?? null} />)}{hasMore && !postsLoading && <button onClick={loadMore} className="mx-auto block min-h-10 rounded-md border border-border-primary px-5 text-sm font-semibold">Load more</button>}</div>)}
+          {activeTab === 'comments' && (commentsError ? <ErrorMessage message={commentsError} onRetry={() => user && fetchComments(user.id)} /> : commentsLoading ? <PostLoadingSkeleton count={2} /> : !comments.length ? <EmptyState title="No comments yet" description="Your public comments will appear here." /> : <div className="space-y-3">{comments.map((comment) => <article key={comment.id} className="rounded-md border border-border-primary bg-bg-card p-4"><Link href={`/post/${comment.post_id}`} className="block truncate text-xs font-semibold text-text-secondary hover:text-text-accent">{comment.posts?.room ?? 'Campus'} · {comment.posts?.headline || comment.posts?.content?.split('\n')[0] || 'View post'}</Link><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{comment.content}</p><p className="mt-2 text-xs text-text-muted">{formatDate(comment.created_at)}</p></article>)}</div>)}
+        </main>
 
-        {/* Posts */}
-        <h2 className="text-slate-400 text-sm font-medium mb-3">Your Posts</h2>
-        {postsError ? (
-          <ErrorMessage
-            message={postsError}
-            onRetry={() => user && fetchUserPosts(user.id, 0, { reset: true })}
-          />
-        ) : postsLoading && posts.length === 0 ? (
-          <PostLoadingSkeleton count={2} />
-        ) : posts.length === 0 ? (
-          <EmptyState
-            title="No posts yet"
-            description="You haven't posted anything yet. Share your thoughts with the campus!"
-            icon={<div className="text-3xl">✏️</div>}
-          />
-        ) : (
-          <div className="space-y-3">
-            {posts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                showRoom
-                currentUserId={user?.id ?? null}
-                initialUserVote={post.user_vote ?? null}
-              />
-            ))}
+        {editing && <div className="fixed inset-0 z-50 flex items-end bg-black/55 sm:items-center sm:justify-center" onClick={() => setEditing(false)}><section role="dialog" aria-modal="true" aria-labelledby="edit-profile-title" className="max-h-[90vh] w-full overflow-y-auto rounded-t-md border border-border-primary bg-bg-secondary p-5 sm:max-w-md sm:rounded-md" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><h2 id="edit-profile-title" className="text-lg font-bold">Edit profile</h2><button type="button" onClick={() => setEditing(false)} aria-label="Close edit profile" className="h-10 w-10 text-text-muted">×</button></div><label className="mt-5 block text-sm font-semibold" htmlFor="display-name">Display name</label><input id="display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={60} className="mt-2 min-h-11 w-full rounded-md border border-border-primary bg-bg-primary px-3 outline-none focus:border-accent-primary" /><label className="mt-4 block text-sm font-semibold" htmlFor="profile-bio">Bio</label><textarea id="profile-bio" value={bio} onChange={(event) => setBio(event.target.value)} maxLength={160} rows={4} className="mt-2 w-full resize-none rounded-md border border-border-primary bg-bg-primary p-3 outline-none focus:border-accent-primary" /><p className="mt-1 text-right text-xs text-text-muted">{bio.length}/160</p><fieldset className="mt-4"><legend className="text-sm font-semibold">Default identity</legend><div className="mt-2 grid grid-cols-2 gap-2">{(['pseudo', 'full'] as const).map((mode) => <button key={mode} type="button" aria-pressed={defaultIdentity === mode} onClick={() => setDefaultIdentity(mode)} className={`min-h-11 rounded-md border text-sm font-semibold ${defaultIdentity === mode ? 'border-accent-primary bg-bg-tertiary' : 'border-border-primary'}`}>{mode === 'pseudo' ? profile.pseudo_username || 'Pseudo' : profile.real_display_name || profile.full_name || 'Full name'}</button>)}</div></fieldset>{academic && <p className="mt-4 text-xs text-text-muted">Academic details: {academic}</p>}{editError && <p className="mt-4 text-sm text-red-500">{editError}</p>}<button type="button" onClick={saveProfile} disabled={saving || bio.length > 160} className="mt-6 min-h-11 w-full rounded-md bg-accent-primary text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save changes'}</button></section></div>}
 
-            {postsLoading && posts.length > 0 && (
-              <div className="py-4 text-center text-xs text-slate-400">Loading more posts...</div>
-            )}
-
-            {hasMore && !postsLoading && (
-              <div className="flex justify-center py-4">
-                <button
-                  onClick={loadMore}
-                  className="rounded-lg border border-[#252a31] px-4 py-2 text-xs text-slate-300 transition-colors hover:border-indigo-400/60 hover:text-white"
-                >
-                  Load more posts
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Trust Unlock Modal */}
-        <TrustUnlockModal
-          isOpen={showTrustModal}
-          onClose={() => setShowTrustModal(false)}
-          onVerified={handleVerificationSuccess}
-          userRollNumber={authProfile.roll_number || ''}
-        />
+        {menuOpen && <div className="fixed inset-0 z-50 bg-black/55" onClick={() => setMenuOpen(false)}><aside className="ml-auto flex h-full w-[86%] max-w-sm flex-col border-l border-border-primary bg-bg-secondary" onClick={(event) => event.stopPropagation()}><div className="flex h-16 items-center justify-between border-b border-border-primary px-5"><h2 className="font-bold">Profile menu</h2><button type="button" onClick={() => setMenuOpen(false)} className="h-10 w-10 text-text-muted" aria-label="Close menu">×</button></div><div className="flex flex-1 flex-col p-5"><button type="button" onClick={() => { setEditing(true); setMenuOpen(false); }} className="min-h-11 border-b border-border-primary text-left text-sm font-semibold">Edit profile</button><details className="border-b border-border-primary py-5" open><summary className="cursor-pointer text-sm font-semibold">App Settings</summary><div className="mt-5 flex items-center justify-between"><div><p className="text-sm font-medium">Dark mode</p><p className="text-xs text-text-muted">Saved on this device</p></div><button type="button" role="switch" aria-label="Dark mode" aria-checked={theme === 'dark'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`relative h-7 w-12 rounded-full ${theme === 'dark' ? 'bg-accent-primary' : 'bg-border-secondary'}`}><span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition-transform ${theme === 'dark' ? 'translate-x-5' : ''}`} /></button></div></details><button type="button" onClick={async () => { await signOut(); router.replace('/'); }} className="mt-auto min-h-11 w-full rounded-md border border-red-500 px-4 text-left text-sm font-semibold text-red-500">Logout</button></div></aside></div>}
       </div>
     </ErrorBoundary>
   );

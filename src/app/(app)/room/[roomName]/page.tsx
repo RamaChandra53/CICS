@@ -106,9 +106,9 @@ export default function RoomPage() {
         setPostsError('');
 
         let query = supabase
-          .from('posts')
+          .from('posts_public')
           .select(
-            'id, author_id, room, content, image_url, video_url, link_url, poll_options, poll_expires_at, post_type, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
+            'id, author_id, room, content, image_url, video_url, link_url, poll_options, poll_expires_at, post_type, is_anon_post, display_mode, author_name_snapshot, created_at, upvotes, downvotes, tags, profiles, comment_count'
           )
           .order('created_at', { ascending: false })
           .range(pageToLoad * PAGE_SIZE, pageToLoad * PAGE_SIZE + PAGE_SIZE - 1);
@@ -124,7 +124,16 @@ export default function RoomPage() {
           query = query.or(tagFilters);
         }
 
-        const { data, error } = await query;
+        let { data, error } = await query;
+        if (error && ['42P01', 'PGRST205', '42703'].includes(error.code ?? '')) {
+          let legacyQuery = supabase.from('posts').select(
+            'id, author_id, room, content, image_url, video_url, link_url, poll_options, poll_expires_at, post_type, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
+          ).order('created_at', { ascending: false }).range(pageToLoad * PAGE_SIZE, pageToLoad * PAGE_SIZE + PAGE_SIZE - 1);
+          legacyQuery = roomFilters.length > 1 ? legacyQuery.in('room', roomFilters) : legacyQuery.eq('room', roomFilters[0]);
+          if (selectedTags.length > 0) legacyQuery = legacyQuery.or(selectedTags.map((tag) => `tags.ilike.%${tag}%`).join(','));
+          const legacy = await legacyQuery;
+          data = legacy.data; error = legacy.error;
+        }
 
         if (error) {
           console.error('Error fetching posts:', error);
@@ -193,9 +202,9 @@ export default function RoomPage() {
       if (!postCache.current[cacheKey]) {
         try {
           let query = supabase
-            .from('posts')
+            .from('posts_public')
             .select(
-              'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)'
+              'id, author_id, room, content, image_url, is_anon_post, display_mode, author_name_snapshot, created_at, upvotes, downvotes, tags, profiles'
             )
             .order('created_at', { ascending: false })
             .range(0, PAGE_SIZE - 1);
@@ -206,7 +215,15 @@ export default function RoomPage() {
             query = query.eq('room', roomFilters[0]);
           }
 
-          const { data } = await query;
+          let { data, error } = await query;
+          if (error && ['42P01', 'PGRST205', '42703'].includes(error.code ?? '')) {
+            let legacyQuery = supabase.from('posts').select(
+              'id, author_id, room, content, image_url, is_anon_post, display_mode, created_at, upvotes, downvotes, tags, profiles (id, year, branch, pseudo_username, real_display_name), comment_count:comments(count)'
+            ).order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
+            legacyQuery = roomFilters.length > 1 ? legacyQuery.in('room', roomFilters) : legacyQuery.eq('room', roomFilters[0]);
+            const legacy = await legacyQuery;
+            data = legacy.data; error = legacy.error;
+          }
 
           if (data) {
             const normalized = data.map((p: Post) => ({

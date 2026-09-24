@@ -156,12 +156,12 @@ function ReportsPageContent() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+      <div className="mb-5 flex min-w-0 flex-wrap gap-2 pb-1">
         {['pending', 'reviewed', 'actioned', 'dismissed', 'all'].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-medium capitalize transition-colors ${
+            className={`min-w-0 flex-1 rounded-full border px-3 py-1.5 text-xs font-medium capitalize transition-colors sm:flex-none sm:px-4 ${
               filter === f
                 ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                 : 'border-[#252a31] text-slate-400 hover:text-slate-200'

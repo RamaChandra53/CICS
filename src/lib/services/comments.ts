@@ -1,9 +1,13 @@
 import type { Comment, DisplayMode, Profile } from '@/types';
+import { getPostIdentityDisplay } from '@/lib/identityDisplay';
 import type { CommentWithAuthor } from '@/types/domain';
 import type { SupabaseClientLike } from './supabase-types';
 
 export const COMMENT_WITH_AUTHOR_SELECT =
-  'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, upvotes, downvotes, created_at, profiles (id, username, is_verified, is_anonymous, is_email_verified, year, branch, pseudo_username, real_display_name)';
+  'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, author_name_snapshot, upvotes, downvotes, created_at, profiles';
+
+const LEGACY_COMMENT_WITH_AUTHOR_SELECT =
+  'id, post_id, author_id, parent_comment_id, content, is_anon_comment, display_mode, upvotes, downvotes, created_at, profiles (id, year, branch, pseudo_username, real_display_name)';
 
 export function buildCommentTree(items: Comment[]): CommentWithAuthor[] {
   const map: Record<string, CommentWithAuthor> = {};
@@ -51,12 +55,23 @@ export async function fetchCommentsPage(
   page: number,
   pageSize: number
 ): Promise<Comment[]> {
-  const { data, error } = await supabase
-    .from('comments')
+  let { data, error } = await supabase
+    .from('comments_public')
     .select(COMMENT_WITH_AUTHOR_SELECT)
     .eq('post_id', postId)
     .order('created_at', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1);
+
+  if (error && ['42P01', 'PGRST205', '42703'].includes((error as { code?: string }).code ?? '')) {
+    const legacyResult = await supabase
+      .from('comments')
+      .select(LEGACY_COMMENT_WITH_AUTHOR_SELECT)
+      .eq('post_id', postId)
+      .order('created_at', { ascending: false })
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    data = legacyResult.data;
+    error = legacyResult.error;
+  }
 
   if (error) throw error;
 
@@ -78,6 +93,9 @@ export function createOptimisticComment(input: {
     content: input.content,
     is_anon_comment: input.displayMode === 'anonymous',
     display_mode: input.displayMode,
+    author_name_snapshot: input.displayMode === 'anonymous'
+      ? null
+      : getPostIdentityDisplay(input.author, input.displayMode).displayName,
     created_at: new Date().toISOString(),
     upvotes: 0,
     downvotes: 0,
@@ -89,24 +107,40 @@ export async function createComment(
   supabase: SupabaseClientLike,
   input: {
     postId: string;
-    authorId: string;
+    author: Profile;
     content: string;
     parentId?: string;
     displayMode: DisplayMode;
   }
 ): Promise<Pick<Comment, 'id' | 'created_at'>> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('comments')
     .insert({
       post_id: input.postId,
-      author_id: input.authorId,
+      author_id: input.author.id,
       parent_comment_id: input.parentId ?? null,
       content: input.content,
       is_anon_comment: input.displayMode === 'anonymous',
       display_mode: input.displayMode,
+      author_name_snapshot: input.displayMode === 'anonymous'
+        ? null
+        : getPostIdentityDisplay(input.author, input.displayMode).displayName,
     })
     .select('id, created_at')
     .single();
+
+  if (error && (error as { code?: string }).code === 'PGRST204') {
+    const legacyResult = await supabase.from('comments').insert({
+      post_id: input.postId,
+      author_id: input.author.id,
+      parent_comment_id: input.parentId ?? null,
+      content: input.content,
+      is_anon_comment: input.displayMode === 'anonymous',
+      display_mode: input.displayMode,
+    }).select('id, created_at').single();
+    data = legacyResult.data;
+    error = legacyResult.error;
+  }
 
   if (error) throw error;
 

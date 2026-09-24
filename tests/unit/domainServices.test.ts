@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { buildCommentTree } from '../../src/lib/services/comments';
-import { getCommunityLabel } from '../../src/lib/services/communities';
+import { formatCommunityChipLabel, getCommunityLabel } from '../../src/lib/services/communities';
 import { mergePosts } from '../../src/lib/services/posts';
 import { summarizePollVotes } from '../../src/lib/services/polls';
 import { normalizePostRow } from '../../src/types/domain';
@@ -95,5 +95,25 @@ test.describe('domain service helpers', () => {
   test('falls back to slug when a community label is unknown', () => {
     expect(getCommunityLabel('placements')).toBe('Placements');
     expect(getCommunityLabel('new-room', [])).toBe('new-room');
+  });
+
+  test('formats academic community chips from the signed-up profile', () => {
+    const profile = { branch: 'CSB', year: '2nd', section: '1' };
+
+    expect(formatCommunityChipLabel({ id: 'all', slug: 'all', name: 'Everything' }, profile)).toBe('All');
+    expect(formatCommunityChipLabel({ id: 'csb', slug: 'csb', name: 'Computer Science and Business Systems' }, profile)).toBe('CSB');
+    expect(formatCommunityChipLabel({ id: 'computer-science-business', slug: 'computer-science-business', name: 'Computer Science Business' }, profile)).toBe('CSB');
+    expect(formatCommunityChipLabel({ id: 'branch-computer-science-business', slug: 'academic-branch', name: 'Branch Computer Science Business' }, profile)).toBe('CSB');
+    expect(formatCommunityChipLabel({ id: 'year-2', slug: 'year-2', name: 'Second Year' }, profile)).toBe('Year 2');
+    expect(formatCommunityChipLabel({ id: 'csb-1', slug: 'csb-1', name: 'Computer Science Business Systems Section 1' }, profile)).toBe('CSB Section 1');
+  });
+
+  test('uses the stored branch code for supported branches and falls back safely', () => {
+    const branches = ['CSB', 'CSE', 'MME', 'ECE', 'IT', 'MECH', 'CIVIL', 'EEE', 'MCT', 'CSM', 'CSD'];
+    for (const branch of branches) {
+      expect(formatCommunityChipLabel({ id: branch.toLowerCase(), slug: branch.toLowerCase(), name: 'Long branch name' }, { branch, year: null, section: null })).toBe(branch);
+    }
+
+    expect(formatCommunityChipLabel({ id: 'other', slug: 'other', name: 'Campus' }, null)).toBe('Campus');
   });
 });

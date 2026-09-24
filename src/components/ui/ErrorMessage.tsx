@@ -20,10 +20,10 @@ export default function ErrorMessage({
   icon
 }: ErrorMessageProps) {
   return (
-    <div className={`bg-red-900/20 border border-red-800/40 rounded-lg p-4 text-center ${className}`}>
+    <div className={`rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-center ${className}`}>
       {icon || <div className="text-2xl mb-2">⚠️</div>}
-      <h3 className="text-red-400 font-semibold mb-2">{title}</h3>
-      <p className="text-red-300 text-sm mb-4">{message}</p>
+      <h3 className="mb-2 font-semibold text-red-600 dark:text-red-400">{title}</h3>
+      <p className="mb-4 text-sm text-red-700 dark:text-red-300">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}

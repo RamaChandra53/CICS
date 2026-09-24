@@ -110,18 +110,18 @@ const LinkPostForm: React.FC<LinkPostFormProps> = ({
           type="text"
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
-          placeholder="Enter a compelling headline..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-lg font-medium"
+          placeholder="Post title"
+          className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-lg font-semibold text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={300}
         />
-        <div className="mt-1 text-xs text-gray-500 text-right">
+        <div className="mt-1 text-right text-xs text-text-muted">
           {headline.length}/300 characters
         </div>
       </div>
 
       {/* Link URL Input */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Link URL
         </label>
         <div className="relative">
@@ -130,13 +130,13 @@ const LinkPostForm: React.FC<LinkPostFormProps> = ({
             value={linkUrl}
             onChange={(e) => onLinkUrlChange(e.target.value)}
             placeholder="https://example.com/article..."
-            className="w-full px-4 py-3 pr-10 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+            className="w-full rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 pr-10 text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           />
           {linkUrl && (
             <button
               type="button"
               onClick={clearLinkUrl}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-300"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -150,13 +150,13 @@ const LinkPostForm: React.FC<LinkPostFormProps> = ({
         )}
         
         {linkUrl && isValidUrl(linkUrl) && (
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-text-secondary">
             Domain: {getDomainFromUrl(linkUrl)}
           </p>
         )}
 
         {isLoading && (
-          <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+          <div className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
             <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -172,10 +172,10 @@ const LinkPostForm: React.FC<LinkPostFormProps> = ({
       {/* Link Preview */}
       {metadata && (
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-400 mb-2">
+          <label className="mb-2 block text-sm font-semibold text-text-primary">
             Link Preview
           </label>
-          <div className="bg-[#343536] border border-[#4a4a4b] rounded-lg p-4 hover:border-[#5a5a5b] transition-colors">
+          <div className="rounded-lg border border-border-primary bg-bg-tertiary p-4 transition-colors hover:border-border-secondary">
             <div className="flex gap-4">
               {metadata.image && (
                 <div className="flex-shrink-0">
@@ -191,19 +191,19 @@ const LinkPostForm: React.FC<LinkPostFormProps> = ({
               )}
               <div className="flex-1 min-w-0">
                 {metadata.siteName && (
-                  <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">
+                  <div className="mb-1 text-xs uppercase text-text-secondary">
                     {metadata.siteName}
                   </div>
                 )}
-                <h3 className="text-white font-medium text-sm mb-1 line-clamp-2">
+                <h3 className="mb-1 line-clamp-2 text-sm font-medium text-text-primary">
                   {metadata.title || 'No title available'}
                 </h3>
                 {metadata.description && (
-                  <p className="text-gray-400 text-xs line-clamp-3">
+                  <p className="line-clamp-3 text-xs text-text-secondary">
                     {metadata.description}
                   </p>
                 )}
-                <div className="text-xs text-indigo-400 mt-2 truncate">
+                <div className="mt-2 truncate text-xs text-text-accent">
                   {getDomainFromUrl(linkUrl)}
                 </div>
               </div>
@@ -214,18 +214,18 @@ const LinkPostForm: React.FC<LinkPostFormProps> = ({
 
       {/* Description Input */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-400 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-text-primary">
           Description (optional)
         </label>
         <textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Share your thoughts about this link..."
-          className="w-full px-4 py-3 bg-[#1a1a1b] border border-[#343536] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors text-sm min-h-[120px] resize-y"
+          className="min-h-[130px] w-full resize-y rounded-lg border border-border-primary bg-bg-secondary px-4 py-3 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/15"
           maxLength={5000}
         />
         {description && (
-          <div className="mt-1 text-xs text-gray-500 text-right">
+          <div className="mt-1 text-right text-xs text-text-muted">
             {description.length}/5000 characters
           </div>
         )}

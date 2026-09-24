@@ -23,11 +23,14 @@ export type Profile = {
   pseudo_username_rejection_reason: string | null;
   pseudo_username_last_changed_at: string | null;
   show_roll_number_publicly: boolean;
+  bio: string | null;
+  default_identity: 'pseudo' | 'full';
 };
 
 export type PostType = 'text' | 'image' | 'video' | 'poll' | 'link';
 
 export type DisplayMode = 'full' | 'partial' | 'anonymous' | 'pseudo';
+export type PublishingIdentity = 'pseudo' | 'full' | 'anonymous';
 
 export type Post = {
   id: string;
@@ -48,6 +51,7 @@ export type Post = {
   poll_expires_at: string | null;
   is_anon_post: boolean;
   display_mode: DisplayMode;
+  author_name_snapshot?: string | null;
   year_tag: string | null;
   branch_tag: string | null;
   section_tag: string | null;
@@ -68,6 +72,7 @@ export type Comment = {
   content: string;
   is_anon_comment: boolean;
   display_mode: DisplayMode;
+  author_name_snapshot?: string | null;
   upvotes: number;
   downvotes: number;
   created_at: string;
