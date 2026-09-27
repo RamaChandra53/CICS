@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMGITEmail } from '@/lib/emailValidation';
-import { parseRollNumber } from '@/lib/parseRoll';
+import { parseRollNumber, getCurrentYear } from '@/lib/parseRoll';
 
 /**
  * POST /api/auth/signup
@@ -104,9 +104,9 @@ export async function POST(request: NextRequest) {
         data: {
           roll_number: normalizedRoll,
           is_first_login: false,
-          year: parsedRoll.year === 'Alumni' ? null : parsedRoll.year,
+          year: getCurrentYear(normalizedRoll),
           branch: parsedRoll.branch,
-          section: parsedRoll.section,
+          section: null,
         },
       },
     });
