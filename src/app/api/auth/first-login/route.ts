@@ -153,9 +153,9 @@ export async function POST(request: NextRequest) {
       user_metadata: {
         roll_number: normalizedRoll,
         is_first_login: false,
-        year: isAlumni ? null : parsedRoll.year,
+        year: isAlumni ? null : getCurrentYear(normalizedRoll),
         branch: parsedRoll.branch,
-        section: parsedRoll.section,
+        section: null,
       },
     });
 

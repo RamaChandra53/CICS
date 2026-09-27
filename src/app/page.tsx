@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
-import { INVALID_ROLL_MESSAGE, parseRollNumber } from '@/lib/parseRoll';
+import { INVALID_ROLL_MESSAGE, parseRollNumber, getCurrentYear } from '@/lib/parseRoll';
 import { validateMGITEmail } from '@/lib/emailValidation';
 
 function getReadableErrorMessage(error: unknown) {
@@ -76,7 +76,7 @@ export default function LoginPage() {
     setError('');
     try {
       const normalizedEmail = collegeEmail.trim().toLowerCase();
-      if (!validateMGITEmail(normalizedEmail)) {
+      if (mode === 'register' && !validateMGITEmail(normalizedEmail)) {
         throw new Error('Use your MGIT college email address (name@mgit.ac.in).');
       }
       if (!parsedRoll) throw new Error(INVALID_ROLL_MESSAGE);
@@ -107,11 +107,11 @@ export default function LoginPage() {
 
     try {
       const normalizedEmail = collegeEmail.trim().toLowerCase();
-      if (!validateMGITEmail(normalizedEmail)) {
-        throw new Error('Use your MGIT college email address (name@mgit.ac.in).');
-      }
 
       if (mode === 'register') {
+        if (!validateMGITEmail(normalizedEmail)) {
+          throw new Error('Use your MGIT college email address (name@mgit.ac.in).');
+        }
         if (!parsedRoll) throw new Error(INVALID_ROLL_MESSAGE);
         if (password.length < 6) throw new Error('Password must be at least 6 characters long.');
         if (password !== confirmPassword) throw new Error('Passwords do not match.');
@@ -135,11 +135,9 @@ export default function LoginPage() {
           throw new Error('Account created, but sign-in failed. Please log in with your new password.');
         }
       } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password,
-        });
-        if (signInError || !data.user) throw new Error('Invalid college email or password.');
+        const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rollNumber, password }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Invalid roll number or password.');
       }
 
       router.replace('/feed');
@@ -210,13 +208,13 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* ── Registration Step 1: Form fields ── */}
-          {mode === 'register' && regStep === 'form' && (
+          {(mode === 'login' || (mode === 'register' && regStep === 'form')) && (
             <>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-300">Roll number</label>
-                <input type="text" value={rollNumber} onChange={(event) => { setRollNumber(event.target.value.toUpperCase()); clearError(); }} placeholder="e.g. 25261A0512" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required maxLength={10} />
+                <input type="text" value={rollNumber} onChange={(event) => { setRollNumber(event.target.value.toUpperCase()); clearError(); }} placeholder="e.g. 25261A0512" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required maxLength={10} autoComplete="username" />
                 {rollNumber && !parsedRoll && <p className="mt-1.5 text-xs text-rose-300">{INVALID_ROLL_MESSAGE}</p>}
-                {parsedRoll && <p className="mt-1.5 text-xs text-emerald-300">Looks right · {parsedRoll.year} year · {parsedRoll.branch} · Section {parsedRoll.section}</p>}
+                {parsedRoll && <p className="mt-1.5 text-xs text-emerald-300">{parsedRoll.branch} · {getCurrentYear(rollNumber)} year</p>}
               </div>
             </>
           )}
@@ -242,11 +240,11 @@ export default function LoginPage() {
           {/* ── Shared fields: email + password (hide during OTP step) ── */}
           {!(mode === 'register' && regStep === 'otp') && (
             <>
-              <div>
+              {mode === 'register' && <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-300">MGIT college email</label>
                 <input type="email" value={collegeEmail} onChange={(event) => { setCollegeEmail(event.target.value); clearError(); }} placeholder="yourname@mgit.ac.in" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10" required autoComplete="email" />
-                {mode === 'register' && <p className="mt-1.5 text-xs text-slate-500">One account per MGIT email. We never show your email publicly.</p>}
-              </div>
+                <p className="mt-1.5 text-xs text-slate-500">One account per MGIT email. We never show your email publicly.</p>
+              </div>}
 
               <div>
                 <div className="mb-1.5 flex items-center justify-between"><label className="text-xs font-medium text-slate-300">Password</label>{mode === 'login' && <button type="button" onClick={() => router.push('/forgot-password')} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">Forgot password?</button>}</div>

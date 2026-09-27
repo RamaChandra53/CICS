@@ -13,6 +13,7 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [devMode, setDevMode] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -35,7 +36,7 @@ export default function ForgotPasswordPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: normalizedEmail, type: 'password_reset' }),
       });
-      const result = (await response.json().catch(() => ({}))) as { error?: string };
+      const result = (await response.json().catch(() => ({}))) as { error?: string; devMode?: boolean };
 
       if (!response.ok) {
         setError(
@@ -47,6 +48,7 @@ export default function ForgotPasswordPage() {
       }
 
       window.sessionStorage.setItem('cics_password_reset_email', normalizedEmail);
+      setDevMode(result.devMode === true);
       setSent(true);
     } catch (requestError) {
       console.error('Password recovery request failed:', requestError);
@@ -74,6 +76,11 @@ export default function ForgotPasswordPage() {
               <p className="text-sm font-semibold text-emerald-200">Check your email</p>
               <p className="mt-1 text-sm leading-6 text-emerald-100/80">{GENERIC_SUCCESS_MESSAGE}</p>
             </div>
+            {devMode && (
+              <p className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
+                Development email mode is active. The OTP was printed in the server terminal; configure SMTP or Resend before using this in production.
+              </p>
+            )}
             <button type="button" onClick={() => router.push('/reset-password')} className="mt-5 w-full rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-indigo-400 hover:to-violet-500 focus:outline-none focus:ring-4 focus:ring-indigo-400/30">
               Enter reset code
             </button>
