@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   allowedDevOrigins: ['192.168.1.2'],
+  turbopack: {
+    root: process.cwd(),
+  },
   // Exclude auth routes from prerendering
   trailingSlash: false,
   // Ensure dynamic routes are handled properly

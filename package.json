@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "node .next/standalone/server.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test": "playwright test --project=unit"
